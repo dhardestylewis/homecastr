@@ -1,0 +1,71 @@
+{
+  "id": "8a2a1072b59ffff",
+  "locationLabel": "Austin, TX - Downtown",
+  "opportunity": {
+    "value": 8.5,
+    "unit": "% CAGR",
+    "trend": "up"
+  },
+  "reliability": {
+    "value": 0.78,
+    "components": {
+      "accuracy_term": 0.85,
+      "confidence_term": 0.72,
+      "stability_term": 0.8,
+      "robustness_term": 0.75,
+      "support_term": 0.78
+    }
+  },
+  "metrics": {
+    "n_accts": 245,
+    "med_n_years": 6.5,
+    "med_mean_ape_pct": 4.2,
+    "med_mean_pred_cv_pct": 8.7
+  },
+  "proforma": {
+    "predicted_value": 285000,
+    "noi": 14250,
+    "monthly_rent": 1696,
+    "dscr": 1.42,
+    "breakeven_occ": 0.78,
+    "cap_rate": 0.05,
+    "liquidity_rank": 72.5
+  },
+  "riskScoring": {
+    "R": -0.45,
+    "tail_gap_z": -0.12,
+    "medAE_z": -0.28,
+    "inv_dscr_z": -0.15,
+    "alert_triggered": false,
+    "score": 7.85
+  },
+  "stressTests": {
+    "horizon_degradation": {
+      "value": 0.12,
+      "threshold": 0.25,
+      "status": "pass"
+    },
+    "fold_dispersion": {
+      "value": 0.18,
+      "threshold": 0.3,
+      "status": "pass"
+    },
+    "drift_score": {
+      "value": 0.28,
+      "threshold": 0.25,
+      "status": "warn"
+    },
+    "ablation_impact": {
+      "value": 0.08,
+      "threshold": 0.2,
+      "status": "pass"
+    }
+  },
+  "fanChart": {
+    "years": [2020, 2021, 2022, 2023, 2024, 2025, 2026, 2027, 2028],
+    "p10": [228000, 234840, 243086, 250698, 259723, 269273, 279407, 290189, 301697],
+    "p50": [285000, 307800, 333054, 360414, 389247, 420386, 454017, 490339, 529566],
+    "p90": [342000, 393300, 452295, 520139, 598160, 687884, 791067, 909727, 1046186],
+    "y_med": [285000, 302100, 320226, 339440, 359806, 381394, 404277, 428534, 454246]
+  }
+}

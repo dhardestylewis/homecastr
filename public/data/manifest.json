@@ -1,0 +1,62 @@
+{
+  "tileSources": [
+    {
+      "resolution": 6,
+      "url": "/data/tiles/h3-res6/{z}/{x}/{y}.pbf",
+      "minZoom": 0,
+      "maxZoom": 9,
+      "type": "h3"
+    },
+    {
+      "resolution": 7,
+      "url": "/data/tiles/h3-res7/{z}/{x}/{y}.pbf",
+      "minZoom": 10,
+      "maxZoom": 11,
+      "type": "h3"
+    },
+    {
+      "resolution": 8,
+      "url": "/data/tiles/h3-res8/{z}/{x}/{y}.pbf",
+      "minZoom": 12,
+      "maxZoom": 13,
+      "type": "h3"
+    },
+    {
+      "resolution": 9,
+      "url": "/data/tiles/h3-res9/{z}/{x}/{y}.pbf",
+      "minZoom": 14,
+      "maxZoom": 22,
+      "type": "h3"
+    }
+  ],
+  "parcelSource": {
+    "resolution": 0,
+    "url": "/data/tiles/parcels/{z}/{x}/{y}.pbf",
+    "minZoom": 14,
+    "maxZoom": 22,
+    "type": "parcel"
+  },
+  "fields": {
+    "opportunity": {
+      "field": "O",
+      "label": "Opportunity",
+      "unit": "% CAGR",
+      "format": "percent"
+    },
+    "reliability": {
+      "field": "R",
+      "label": "Reliability",
+      "min": 0,
+      "max": 1
+    }
+  },
+  "thresholds": {
+    "stabilityWarning": 0.3,
+    "robustnessWarning": 0.3,
+    "minSupport": 5,
+    "reliabilityBins": [0.2, 0.4, 0.6, 0.8, 1.0]
+  },
+  "fanChartAvailable": true,
+  "defaultCenter": [-98.5795, 39.8283],
+  "defaultZoom": 4
+}
