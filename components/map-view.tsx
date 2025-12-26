@@ -167,6 +167,9 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, cl
     filterHash: "",
   })
 
+  const dataUpdateTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const isInteractingRef = useRef(false)
+
   const [transform, setTransform] = useState<TransformState>({ offsetX: 0, offsetY: 0, scale: 5000 })
   const [isDragging, setIsDragging] = useState(false)
   const [lastMouse, setLastMouse] = useState({ x: 0, y: 0 })
@@ -174,6 +177,12 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, cl
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 })
   const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 })
   const [basemapCenter] = useState(HARRIS_COUNTY_CENTER)
+
+  const [frozenHexData, setFrozenHexData] = useState<{
+    hexagons: Array<{ id: string; centerLng: number; centerLat: number; properties: FeatureProperties }>
+    hexPixelRadius: number
+    h3Resolution: number
+  } | null>(null)
 
   const basemapZoom = useMemo(() => {
     return getContinuousBasemapZoom(transform.scale)
@@ -184,8 +193,42 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, cl
     hexPixelRadius,
     h3Resolution,
   } = useMemo(() => {
-    return generateHexGrid(transform.scale, canvasSize.width, canvasSize.height, 0, 0)
-  }, [transform.scale, canvasSize.width, canvasSize.height])
+    // If we're interacting and have frozen data, return it
+    if (isInteractingRef.current && frozenHexData) {
+      return frozenHexData
+    }
+
+    // Otherwise generate new data
+    const newData = generateHexGrid(transform.scale, canvasSize.width, canvasSize.height, 0, 0)
+    return newData
+  }, [transform.scale, canvasSize.width, canvasSize.height, frozenHexData])
+
+  useEffect(() => {
+    // Clear existing timer
+    if (dataUpdateTimerRef.current) {
+      clearTimeout(dataUpdateTimerRef.current)
+    }
+
+    // Set flag that we're interacting
+    isInteractingRef.current = true
+
+    // Freeze current data if not already frozen
+    if (!frozenHexData) {
+      setFrozenHexData(generateHexGrid(transform.scale, canvasSize.width, canvasSize.height, 0, 0))
+    }
+
+    // Set timer to recompute after 300ms of no changes
+    dataUpdateTimerRef.current = setTimeout(() => {
+      isInteractingRef.current = false
+      setFrozenHexData(null) // Unfreeze to trigger recomputation
+    }, 300)
+
+    return () => {
+      if (dataUpdateTimerRef.current) {
+        clearTimeout(dataUpdateTimerRef.current)
+      }
+    }
+  }, [transform.scale])
 
   const filteredHexes = useMemo(() => {
     return hexGrid.filter((hex) => {
@@ -206,55 +249,6 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, cl
       return true
     })
   }, [hexGrid, filters])
-
-  const geoToCanvas = useCallback(
-    (lng: number, lat: number) => {
-      return {
-        x: lng + transform.offsetX,
-        y: lat + transform.offsetY,
-      }
-    },
-    [transform],
-  )
-
-  const canvasToGeo = useCallback(
-    (x: number, y: number) => {
-      const lng = x - transform.offsetX
-      const lat = y - transform.offsetY
-      return { lng, lat }
-    },
-    [transform],
-  )
-
-  const pointInPolygon = useCallback((x: number, y: number, polygon: [number, number][]) => {
-    let inside = false
-    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-      const xi = polygon[i][0],
-        yi = polygon[i][1]
-      const xj = polygon[j][0],
-        yj = polygon[j][1]
-
-      if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) {
-        inside = !inside
-      }
-    }
-    return inside
-  }, [])
-
-  const findFeatureAt = useCallback(
-    (canvasX: number, canvasY: number) => {
-      for (const hex of filteredHexes) {
-        const { x, y } = geoToCanvas(hex.centerLng, hex.centerLat)
-        const vertices = getHexVertices(x, y, hexPixelRadius)
-
-        if (pointInPolygon(canvasX, canvasY, vertices as [number, number][])) {
-          return hex.properties
-        }
-      }
-      return null
-    },
-    [filteredHexes, geoToCanvas, pointInPolygon, hexPixelRadius],
-  )
 
   useEffect(() => {
     const container = containerRef.current
@@ -362,30 +356,27 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, cl
     const hexCanvas = hexCanvasRef.current
     if (!hexCanvas || !canvasSize) return
 
-    // Create filter hash to detect changes
     const filterHash = `${filters.reliabilityMin}-${filters.nAcctsMin}-${filters.showUnderperformers}`
 
-    // Skip render if nothing changed
     if (
       lastRenderRef.current.scale === transform.scale &&
       lastRenderRef.current.h3Res === h3Resolution &&
       lastRenderRef.current.filterHash === filterHash &&
       !mapState.selectedId &&
-      !hoveredFeature
+      !hoveredFeature &&
+      !isDragging
     ) {
       return
     }
 
     lastRenderRef.current = { scale: transform.scale, h3Res: h3Resolution, filterHash }
 
-    // Cancel any pending animation frame
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current)
     }
 
-    // Schedule render using RAF for smooth performance
     animationFrameRef.current = requestAnimationFrame(() => {
-      const ctx = hexCanvas.getContext("2d", { alpha: true })
+      const ctx = hexCanvas.getContext("2d", { alpha: true, desynchronized: true })
       if (!ctx) return
 
       const dpr = window.devicePixelRatio || 1
@@ -445,12 +436,61 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, cl
     transform,
     mapState.selectedId,
     hoveredFeature,
-    geoToCanvas,
     canvasSize,
     hexPixelRadius,
     h3Resolution,
     filters,
+    isDragging,
   ])
+
+  const geoToCanvas = useCallback(
+    (lng: number, lat: number) => {
+      return {
+        x: lng + transform.offsetX,
+        y: lat + transform.offsetY,
+      }
+    },
+    [transform],
+  )
+
+  const canvasToGeo = useCallback(
+    (x: number, y: number) => {
+      const lng = x - transform.offsetX
+      const lat = y - transform.offsetY
+      return { lng, lat }
+    },
+    [transform],
+  )
+
+  const pointInPolygon = useCallback((x: number, y: number, polygon: [number, number][]) => {
+    let inside = false
+    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+      const xi = polygon[i][0],
+        yi = polygon[i][1]
+      const xj = polygon[j][0],
+        yj = polygon[j][1]
+
+      if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) {
+        inside = !inside
+      }
+    }
+    return inside
+  }, [])
+
+  const findFeatureAt = useCallback(
+    (canvasX: number, canvasY: number) => {
+      for (const hex of filteredHexes) {
+        const { x, y } = geoToCanvas(hex.centerLng, hex.centerLat)
+        const vertices = getHexVertices(x, y, hexPixelRadius)
+
+        if (pointInPolygon(canvasX, canvasY, vertices as [number, number][])) {
+          return hex.properties
+        }
+      }
+      return null
+    },
+    [filteredHexes, geoToCanvas, pointInPolygon, hexPixelRadius],
+  )
 
   const handleMouseDown = (e: React.MouseEvent) => {
     setIsDragging(true)
