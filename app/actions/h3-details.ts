@@ -69,12 +69,11 @@ export async function getH3CellDetails(h3Id: string, forecastYear = 2026): Promi
       inv_dscr_z: 0.5,
     },
     fanChart: {
-      dates: Array.from({ length: 10 }, (_, i) => `${2026 + i}`),
-      median: Array.from({ length: 10 }, (_, i) => 300000 * (1 + hexData.opportunity) ** i),
+      years: Array.from({ length: 10 }, (_, i) => 2026 + i),
       p10: Array.from({ length: 10 }, (_, i) => 280000 * (1 + hexData.opportunity * 0.8) ** i),
-      p25: Array.from({ length: 10 }, (_, i) => 290000 * (1 + hexData.opportunity * 0.9) ** i),
-      p75: Array.from({ length: 10 }, (_, i) => 310000 * (1 + hexData.opportunity * 1.1) ** i),
+      p50: Array.from({ length: 10 }, (_, i) => 300000 * (1 + hexData.opportunity) ** i),
       p90: Array.from({ length: 10 }, (_, i) => 320000 * (1 + hexData.opportunity * 1.2) ** i),
+      y_med: Array.from({ length: 10 }, (_, i) => 290000 * (1 + hexData.opportunity * 0.95) ** i),
     },
     stressTests: {
       recession: {
