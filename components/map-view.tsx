@@ -1,13 +1,33 @@
 "use client"
 
 import type React from "react"
-import { getDataForResolution } from "@/lib/hierarchical-data"
-import { getHexDataForResolution, convertPrecomputedHexes } from "@/lib/supabase/hex-data"
-
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react"
 import { cn } from "@/lib/utils"
 import { formatOpportunity, formatReliability } from "@/lib/utils/colors"
-import type { FilterState, FeatureProperties, MapState } from "@/lib/types"
+import type { FilterState, MapState } from "@/lib/types"
+import { getH3DataForResolution } from "@/app/actions/h3-data"
+
+interface H3Hexagon {
+  h3_id: string
+  lat: number
+  lng: number
+  opportunity: number
+  reliability: number
+  property_count: number
+  alert_pct: number
+}
+
+interface MappedFeature {
+  id: string
+  lat: number
+  lng: number
+  O: number // Opportunity
+  R: number // Reliability
+  n_accts: number // property_count
+  alert_pct: number
+  stability_flag: boolean
+  robustness_flag: boolean
+}
 
 interface MapViewProps {
   filters: FilterState
@@ -17,36 +37,32 @@ interface MapViewProps {
   className?: string
 }
 
-const HARRIS_COUNTY_CENTER = { lng: -95.3698, lat: 29.7604 } // Houston coordinates
+const HARRIS_COUNTY_CENTER = { lng: -95.3698, lat: 29.7604 }
+const HARRIS_COUNTY_BOUNDS = {
+  minLng: -95.8,
+  maxLng: -95.0,
+  minLat: 29.5,
+  maxLat: 30.1,
+}
 
 // Color helper based on Opportunity value
 function getOpportunityColor(o: number): string {
   if (o < 0) return "rgb(200, 80, 80)"
-  if (o < 3) return "rgb(220, 180, 80)"
-  if (o < 6) return "rgb(180, 200, 80)"
-  if (o < 10) return "rgb(80, 180, 120)"
+  if (o < 0.03) return "rgb(220, 180, 80)"
+  if (o < 0.06) return "rgb(180, 200, 80)"
+  if (o < 0.1) return "rgb(80, 180, 120)"
   return "rgb(60, 160, 160)"
 }
 
-// Opacity helper based on Reliability value
-function getReliabilityOpacity(r: number): number {
-  if (r < 0.2) return 0.25
-  if (r < 0.4) return 0.45
-  if (r < 0.6) return 0.65
-  if (r < 0.8) return 0.85
-  return 1
+function getReliabilityStrokeWidth(r: number): number {
+  if (r < 0.2) return 1
+  if (r < 0.4) return 1.5
+  if (r < 0.6) return 2
+  if (r < 0.8) return 2.5
+  return 3
 }
 
-// Parse RGB string to components
-function parseRgb(color: string): { r: number; g: number; b: number } {
-  const match = color.match(/rgb$$(\d+),\s*(\d+),\s*(\d+)$$/)
-  if (match) {
-    return { r: Number.parseInt(match[1]), g: Number.parseInt(match[2]), b: Number.parseInt(match[3]) }
-  }
-  return { r: 100, g: 100, b: 100 }
-}
-
-// Web Mercator projection for basemap tiles
+// Web Mercator projection
 function latLngToMercator(lng: number, lat: number) {
   const x = (lng + 180) / 360
   const latRad = (lat * Math.PI) / 180
@@ -54,26 +70,20 @@ function latLngToMercator(lng: number, lat: number) {
   return { x, y }
 }
 
-// Tile URL helper
 function getTileUrl(x: number, y: number, z: number): string {
   return `https://tile.openstreetmap.org/${z}/${x}/${y}.png`
 }
 
 function getContinuousBasemapZoom(scale: number): number {
-  // Scale ranges from 1000 (zoomed out) to 50000 (zoomed in)
-  // Map to zoom levels 9-18 continuously
   const minScale = 1000
   const maxScale = 50000
   const minZoom = 9
   const maxZoom = 18
-
-  // Logarithmic interpolation for smoother zoom
   const t = Math.log(scale / minScale) / Math.log(maxScale / minScale)
   return minZoom + t * (maxZoom - minZoom)
 }
 
 function getH3ResolutionFromScale(scale: number): number {
-  // Switch resolutions only at specific thresholds
   if (scale < 2500) return 5
   if (scale < 5000) return 6
   if (scale < 10000) return 7
@@ -82,23 +92,24 @@ function getH3ResolutionFromScale(scale: number): number {
   return 10
 }
 
-function getHexSizeFromScale(scale: number): number {
-  // Hex size scales smoothly from 30px to 50px
-  const minScale = 1000
-  const maxScale = 50000
-  const minSize = 30
-  const maxSize = 50
-
-  const t = (scale - minScale) / (maxScale - minScale)
-  return minSize + t * (maxSize - minSize)
+function getHexSizeForResolution(h3Res: number): number {
+  // Approximate pixel sizes for each H3 resolution at county scale
+  const sizes: Record<number, number> = {
+    5: 80,
+    6: 50,
+    7: 35,
+    8: 25,
+    9: 18,
+    10: 12,
+  }
+  return sizes[h3Res] ?? 30
 }
 
-// Generate regular hexagon vertices relative to center (flat-top orientation)
+// Generate hexagon vertices (flat-top orientation)
 function getHexVertices(centerX: number, centerY: number, radius: number): Array<[number, number]> {
   const vertices: Array<[number, number]> = []
-  // Flat-top hexagon: start at 0° (right), go counter-clockwise
   for (let i = 0; i < 6; i++) {
-    const angle = (Math.PI / 3) * i - Math.PI / 6 // offset by 30° for flat-top
+    const angle = (Math.PI / 3) * i - Math.PI / 6
     vertices.push([centerX + radius * Math.cos(angle), centerY + radius * Math.sin(angle)])
   }
   return vertices
@@ -110,63 +121,18 @@ interface TransformState {
   scale: number
 }
 
-function getReliabilityStrokeWidth(r: number): number {
-  if (r < 0.2) return 1
-  if (r < 0.4) return 1.5
-  if (r < 0.6) return 2
-  if (r < 0.8) return 2.5
-  return 3
-}
-
-async function generateHexGrid(scale: number, width: number, height: number, centerLng: number, centerLat: number) {
-  const h3Resolution = getH3ResolutionFromScale(scale)
-
-  // Try to fetch precomputed data from Supabase
-  const precomputedPayload = await getHexDataForResolution(h3Resolution)
-
-  if (precomputedPayload?.hexagons) {
-    // Convert precomputed hexagons and return
-    const hexagons = convertPrecomputedHexes(precomputedPayload, h3Resolution)
-    const hexPixelRadius = getHexSizeFromScale(scale)
-    console.log(`[v0] Using precomputed ${hexagons.length} hexagons for H3 resolution ${h3Resolution}`)
-    return { hexagons, hexPixelRadius, h3Resolution }
-  }
-
-  // Fallback to mock data generation
-  const hexagons: Array<{ id: string; centerLng: number; centerLat: number; properties: FeatureProperties }> = []
-  const hexPixelRadius = getHexSizeFromScale(scale)
-
-  // ... existing mock data generation code ...
-  const hexWidth = Math.sqrt(3) * hexPixelRadius
-  const hexHeight = 2 * hexPixelRadius
-  const horizontalSpacing = hexWidth
-  const verticalSpacing = hexHeight * 0.75
-
-  const cols = Math.ceil(width / horizontalSpacing) + 2
-  const rows = Math.ceil(height / verticalSpacing) + 2
-
-  for (let row = -1; row < rows; row++) {
-    for (let col = -1; col < cols; col++) {
-      const xOffset = (row % 2) * (hexWidth / 2)
-      const pixelX = col * horizontalSpacing + xOffset
-      const pixelY = row * verticalSpacing
-
-      const properties = getDataForResolution(row, col, h3Resolution)
-
-      hexagons.push({
-        id: properties.id,
-        centerLng: pixelX,
-        centerLat: pixelY,
-        properties,
-      })
-    }
-  }
-
-  console.log(
-    `[v0] Generated ${hexagons.length} mock hexagons at H3 resolution ${h3Resolution}, size ${hexPixelRadius.toFixed(1)}px`,
-  )
-
-  return { hexagons, hexPixelRadius, h3Resolution }
+function mapH3ToFeatures(hexagons: H3Hexagon[]): MappedFeature[] {
+  return hexagons.map((hex) => ({
+    id: hex.h3_id,
+    lat: hex.lat,
+    lng: hex.lng,
+    O: hex.opportunity,
+    R: hex.reliability,
+    n_accts: hex.property_count,
+    alert_pct: hex.alert_pct,
+    stability_flag: hex.alert_pct > 0.15,
+    robustness_flag: hex.reliability < 0.3,
+  }))
 }
 
 export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, className }: MapViewProps) {
@@ -181,105 +147,128 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, cl
     filterHash: "",
   })
 
-  const dataUpdateTimerRef = useRef<NodeJS.Timeout | null>(null)
-  const isInteractingRef = useRef(false)
+  const h3DataCache = useRef<Map<number, MappedFeature[]>>(new Map())
+  const [isPending, startTransition] = useTransition()
+  const dataFetchTimerRef = useRef<NodeJS.Timeout | null>(null)
 
   const [transform, setTransform] = useState<TransformState>({ offsetX: 0, offsetY: 0, scale: 5000 })
   const [isDragging, setIsDragging] = useState(false)
   const [lastMouse, setLastMouse] = useState({ x: 0, y: 0 })
-  const [hoveredFeature, setHoveredFeature] = useState<FeatureProperties | null>(null)
+  const [hoveredFeature, setHoveredFeature] = useState<MappedFeature | null>(null)
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 })
   const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 })
   const [basemapCenter] = useState(HARRIS_COUNTY_CENTER)
 
-  const [frozenHexData, setFrozenHexData] = useState<{
-    hexagons: Array<{ id: string; centerLng: number; centerLat: number; properties: FeatureProperties }>
-    hexPixelRadius: number
-    h3Resolution: number
-  } | null>(null)
+  const [h3Features, setH3Features] = useState<MappedFeature[]>([])
+  const [currentH3Res, setCurrentH3Res] = useState(6)
+  const [isLoading, setIsLoading] = useState(true)
 
-  const basemapZoom = useMemo(() => {
-    return getContinuousBasemapZoom(transform.scale)
-  }, [transform.scale])
-
-  const {
-    hexagons: hexGrid,
-    hexPixelRadius,
-    h3Resolution,
-  } = useMemo(() => {
-    // If we're interacting and have frozen data, return it
-    if (isInteractingRef.current && frozenHexData) {
-      return frozenHexData
-    }
-
-    // For now, return frozen data or empty (will load async)
-    if (frozenHexData) {
-      return frozenHexData
-    }
-
-    // Placeholder until async data loads
-    return { hexagons: [], hexPixelRadius: 40, h3Resolution: 5 }
-  }, [frozenHexData])
+  const basemapZoom = useMemo(() => getContinuousBasemapZoom(transform.scale), [transform.scale])
+  const targetH3Res = useMemo(() => getH3ResolutionFromScale(transform.scale), [transform.scale])
+  const hexPixelRadius = useMemo(() => getHexSizeForResolution(currentH3Res), [currentH3Res])
 
   useEffect(() => {
-    const loadData = async () => {
-      if (isInteractingRef.current && frozenHexData) {
+    if (dataFetchTimerRef.current) {
+      clearTimeout(dataFetchTimerRef.current)
+    }
+
+    dataFetchTimerRef.current = setTimeout(() => {
+      // Check cache first
+      if (h3DataCache.current.has(targetH3Res)) {
+        setH3Features(h3DataCache.current.get(targetH3Res)!)
+        setCurrentH3Res(targetH3Res)
+        setIsLoading(false)
         return
       }
 
-      const newData = await generateHexGrid(transform.scale, canvasSize.width, canvasSize.height, 0, 0)
-      setFrozenHexData(newData)
-    }
-
-    loadData()
-  }, [transform.scale])
-
-  useEffect(() => {
-    // Clear existing timer
-    if (dataUpdateTimerRef.current) {
-      clearTimeout(dataUpdateTimerRef.current)
-    }
-
-    // Set flag that we're interacting
-    isInteractingRef.current = true
-
-    // Freeze current data if not already frozen
-    if (!frozenHexData) {
-      setFrozenHexData(generateHexGrid(transform.scale, canvasSize.width, canvasSize.height, 0, 0))
-    }
-
-    // Set timer to recompute after 300ms of no changes
-    dataUpdateTimerRef.current = setTimeout(() => {
-      isInteractingRef.current = false
-      setFrozenHexData(null) // Unfreeze to trigger recomputation
+      // Fetch from Supabase
+      startTransition(async () => {
+        setIsLoading(true)
+        try {
+          const hexagons = await getH3DataForResolution(targetH3Res)
+          const features = mapH3ToFeatures(hexagons)
+          h3DataCache.current.set(targetH3Res, features)
+          setH3Features(features)
+          setCurrentH3Res(targetH3Res)
+          console.log(`[v0] Loaded ${features.length} hexagons at H3 res ${targetH3Res}`)
+        } catch (error) {
+          console.error("[v0] Failed to fetch H3 data:", error)
+        } finally {
+          setIsLoading(false)
+        }
+      })
     }, 300)
 
     return () => {
-      if (dataUpdateTimerRef.current) {
-        clearTimeout(dataUpdateTimerRef.current)
+      if (dataFetchTimerRef.current) {
+        clearTimeout(dataFetchTimerRef.current)
       }
     }
-  }, [transform.scale])
+  }, [targetH3Res])
+
+  useEffect(() => {
+    const loadInitialData = async () => {
+      try {
+        const hexagons = await getH3DataForResolution(6) // Start at res 6
+        const features = mapH3ToFeatures(hexagons)
+        h3DataCache.current.set(6, features)
+        setH3Features(features)
+        setCurrentH3Res(6)
+        console.log(`[v0] Initial load: ${features.length} hexagons`)
+      } catch (error) {
+        console.error("[v0] Failed to load initial H3 data:", error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    loadInitialData()
+  }, [])
 
   const filteredHexes = useMemo(() => {
-    return hexGrid.filter((hex) => {
-      const props = hex.properties
-
-      if (filters.reliabilityMin > 0 && props.R < filters.reliabilityMin) {
-        return false
-      }
-
-      if (filters.nAcctsMin > 0 && props.n_accts < filters.nAcctsMin) {
-        return false
-      }
-
-      if (!filters.showUnderperformers && props.O < 0) {
-        return false
-      }
-
+    return h3Features.filter((hex) => {
+      if (filters.reliabilityMin > 0 && hex.R < filters.reliabilityMin) return false
+      if (filters.nAcctsMin > 0 && hex.n_accts < filters.nAcctsMin) return false
+      if (!filters.showUnderperformers && hex.O < 0) return false
       return true
     })
-  }, [hexGrid, filters])
+  }, [h3Features, filters])
+
+  const geoToCanvas = useCallback(
+    (lng: number, lat: number) => {
+      const centerMerc = latLngToMercator(basemapCenter.lng, basemapCenter.lat)
+      const pointMerc = latLngToMercator(lng, lat)
+
+      const pixelsPerUnit = transform.scale * 100
+      const dx = (pointMerc.x - centerMerc.x) * pixelsPerUnit
+      const dy = (pointMerc.y - centerMerc.y) * pixelsPerUnit
+
+      return {
+        x: canvasSize.width / 2 + dx + transform.offsetX,
+        y: canvasSize.height / 2 + dy + transform.offsetY,
+      }
+    },
+    [transform, canvasSize, basemapCenter],
+  )
+
+  const canvasToGeo = useCallback(
+    (x: number, y: number) => {
+      const centerMerc = latLngToMercator(basemapCenter.lng, basemapCenter.lat)
+      const pixelsPerUnit = transform.scale * 100
+
+      const dx = (x - canvasSize.width / 2 - transform.offsetX) / pixelsPerUnit
+      const dy = (y - canvasSize.height / 2 - transform.offsetY) / pixelsPerUnit
+
+      const mercX = centerMerc.x + dx
+      const mercY = centerMerc.y + dy
+
+      const lng = mercX * 360 - 180
+      const latRad = Math.atan(Math.sinh(Math.PI * (1 - 2 * mercY)))
+      const lat = (latRad * 180) / Math.PI
+
+      return { lng, lat }
+    },
+    [transform, canvasSize, basemapCenter],
+  )
 
   useEffect(() => {
     const container = containerRef.current
@@ -296,6 +285,7 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, cl
     return () => resizeObserver.disconnect()
   }, [])
 
+  // Basemap rendering
   useEffect(() => {
     const basemapCanvas = basemapCanvasRef.current
     if (!basemapCanvas || !canvasSize) return
@@ -327,24 +317,19 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, cl
     const startTileX = Math.floor(centerTileX - tilesX / 2)
     const startTileY = Math.floor(centerTileY - tilesY / 2)
 
-    let loadedCount = 0
-    let totalTiles = 0
-
     for (let ty = 0; ty < tilesY; ty++) {
       for (let tx = 0; tx < tilesX; tx++) {
         let tileX = startTileX + tx
         const tileY = startTileY + ty
 
         tileX = ((tileX % scale) + scale) % scale
-
         if (tileY < 0 || tileY >= scale) continue
 
-        totalTiles++
         const tileKey = `${z}-${tileX}-${tileY}`
         const tileUrl = getTileUrl(tileX, tileY, z)
 
-        const offsetX = (tileX - centerTileX) * tileSize + canvasSize.width / 2
-        const offsetY = (tileY - centerTileY) * tileSize + canvasSize.height / 2
+        const offsetX = (tileX - centerTileX) * tileSize + canvasSize.width / 2 + transform.offsetX
+        const offsetY = (tileY - centerTileY) * tileSize + canvasSize.height / 2 + transform.offsetY
 
         if (tileCache.current.has(tileKey)) {
           const img = tileCache.current.get(tileKey)!
@@ -352,7 +337,6 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, cl
             ctx.globalAlpha = 0.95
             ctx.drawImage(img, offsetX, offsetY, tileSize, tileSize)
             ctx.globalAlpha = 1
-            loadedCount++
           }
         } else {
           const img = new Image()
@@ -360,8 +344,7 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, cl
           img.onload = () => {
             tileCache.current.set(tileKey, img)
             if (basemapCanvas.isConnected) {
-              const event = new Event("basemapupdate")
-              basemapCanvas.dispatchEvent(event)
+              basemapCanvas.dispatchEvent(new Event("basemapupdate"))
             }
           }
           img.src = tileUrl
@@ -369,38 +352,22 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, cl
         }
       }
     }
-  }, [canvasSize, basemapCenter, basemapZoom])
+  }, [canvasSize, basemapCenter, basemapZoom, transform.offsetX, transform.offsetY])
 
   useEffect(() => {
     const basemapCanvas = basemapCanvasRef.current
     if (!basemapCanvas) return
 
-    const handleUpdate = () => {
-      setCanvasSize((prev) => ({ ...prev }))
-    }
-
+    const handleUpdate = () => setCanvasSize((prev) => ({ ...prev }))
     basemapCanvas.addEventListener("basemapupdate", handleUpdate)
     return () => basemapCanvas.removeEventListener("basemapupdate", handleUpdate)
   }, [])
 
   useEffect(() => {
     const hexCanvas = hexCanvasRef.current
-    if (!hexCanvas || !canvasSize) return
+    if (!hexCanvas || !canvasSize || filteredHexes.length === 0) return
 
     const filterHash = `${filters.reliabilityMin}-${filters.nAcctsMin}-${filters.showUnderperformers}`
-
-    if (
-      lastRenderRef.current.scale === transform.scale &&
-      lastRenderRef.current.h3Res === h3Resolution &&
-      lastRenderRef.current.filterHash === filterHash &&
-      !mapState.selectedId &&
-      !hoveredFeature &&
-      !isDragging
-    ) {
-      return
-    }
-
-    lastRenderRef.current = { scale: transform.scale, h3Res: h3Resolution, filterHash }
 
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current)
@@ -417,13 +384,20 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, cl
 
       ctx.clearRect(0, 0, canvasSize.width, canvasSize.height)
 
+      let renderedCount = 0
       filteredHexes.forEach((hex) => {
-        const props = hex.properties
-        const { x, y } = geoToCanvas(hex.centerLng, hex.centerLat)
+        const { x, y } = geoToCanvas(hex.lng, hex.lat)
 
-        const isSelected = mapState.selectedId === props.id
-        const isHovered = hoveredFeature?.id === props.id
-        const hasWarning = props.stability_flag || props.robustness_flag
+        // Skip hexagons outside visible area (with padding)
+        const padding = hexPixelRadius * 2
+        if (x < -padding || x > canvasSize.width + padding || y < -padding || y > canvasSize.height + padding) {
+          return
+        }
+
+        renderedCount++
+        const isSelected = mapState.selectedId === hex.id
+        const isHovered = hoveredFeature?.id === hex.id
+        const hasWarning = hex.stability_flag || hex.robustness_flag
 
         const vertices = getHexVertices(x, y, hexPixelRadius)
 
@@ -434,8 +408,8 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, cl
         })
         ctx.closePath()
 
-        const baseColor = getOpportunityColor(props.O)
-        const strokeWidth = getReliabilityStrokeWidth(props.R)
+        const baseColor = getOpportunityColor(hex.O)
+        const strokeWidth = getReliabilityStrokeWidth(hex.R)
 
         ctx.strokeStyle = isSelected
           ? "rgba(100, 200, 180, 1)"
@@ -462,36 +436,7 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, cl
         cancelAnimationFrame(animationFrameRef.current)
       }
     }
-  }, [
-    filteredHexes,
-    transform,
-    mapState.selectedId,
-    hoveredFeature,
-    canvasSize,
-    hexPixelRadius,
-    h3Resolution,
-    filters,
-    isDragging,
-  ])
-
-  const geoToCanvas = useCallback(
-    (lng: number, lat: number) => {
-      return {
-        x: lng + transform.offsetX,
-        y: lat + transform.offsetY,
-      }
-    },
-    [transform],
-  )
-
-  const canvasToGeo = useCallback(
-    (x: number, y: number) => {
-      const lng = x - transform.offsetX
-      const lat = y - transform.offsetY
-      return { lng, lat }
-    },
-    [transform],
-  )
+  }, [filteredHexes, transform, mapState.selectedId, hoveredFeature, canvasSize, hexPixelRadius, geoToCanvas, filters])
 
   const pointInPolygon = useCallback((x: number, y: number, polygon: [number, number][]) => {
     let inside = false
@@ -500,7 +445,6 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, cl
         yi = polygon[i][1]
       const xj = polygon[j][0],
         yj = polygon[j][1]
-
       if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) {
         inside = !inside
       }
@@ -511,11 +455,10 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, cl
   const findFeatureAt = useCallback(
     (canvasX: number, canvasY: number) => {
       for (const hex of filteredHexes) {
-        const { x, y } = geoToCanvas(hex.centerLng, hex.centerLat)
+        const { x, y } = geoToCanvas(hex.lng, hex.lat)
         const vertices = getHexVertices(x, y, hexPixelRadius)
-
         if (pointInPolygon(canvasX, canvasY, vertices as [number, number][])) {
-          return hex.properties
+          return hex
         }
       }
       return null
@@ -548,19 +491,11 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, cl
       const feature = findFeatureAt(canvasX, canvasY)
       setHoveredFeature(feature)
       setTooltipPos({ x: canvasX, y: canvasY })
-
-      if (feature) {
-        onFeatureHover(feature.id)
-      } else {
-        onFeatureHover(null)
-      }
+      onFeatureHover(feature?.id ?? null)
     }
   }
 
-  const handleMouseUp = () => {
-    setIsDragging(false)
-  }
-
+  const handleMouseUp = () => setIsDragging(false)
   const handleMouseLeave = () => {
     setIsDragging(false)
     setHoveredFeature(null)
@@ -570,47 +505,22 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, cl
   const handleClick = (e: React.MouseEvent) => {
     const rect = hexCanvasRef.current?.getBoundingClientRect()
     if (!rect) return
-
     const canvasX = e.clientX - rect.left
     const canvasY = e.clientY - rect.top
-
     const feature = findFeatureAt(canvasX, canvasY)
-    if (feature) {
-      onFeatureSelect(feature.id)
-    } else {
-      onFeatureSelect(null)
-    }
+    onFeatureSelect(feature?.id ?? null)
   }
 
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault()
-
     const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1
     const newScale = Math.max(1000, Math.min(50000, transform.scale * zoomFactor))
-
-    setTransform((prev) => ({
-      ...prev,
-      scale: newScale,
-    }))
+    setTransform((prev) => ({ ...prev, scale: newScale }))
   }
 
-  const handleZoomIn = () => {
-    setTransform((prev) => ({
-      ...prev,
-      scale: Math.min(50000, prev.scale * 1.3),
-    }))
-  }
-
-  const handleZoomOut = () => {
-    setTransform((prev) => ({
-      ...prev,
-      scale: Math.max(1000, prev.scale / 1.3),
-    }))
-  }
-
-  const handleReset = () => {
-    setTransform({ offsetX: 0, offsetY: 0, scale: 5000 })
-  }
+  const handleZoomIn = () => setTransform((prev) => ({ ...prev, scale: Math.min(50000, prev.scale * 1.3) }))
+  const handleZoomOut = () => setTransform((prev) => ({ ...prev, scale: Math.max(1000, prev.scale / 1.3) }))
+  const handleReset = () => setTransform({ offsetX: 0, offsetY: 0, scale: 5000 })
 
   return (
     <div ref={containerRef} className={cn("relative w-full h-full overflow-hidden bg-[#0a0f14]", className)}>
@@ -632,6 +542,13 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, cl
         onWheel={handleWheel}
       />
 
+      {(isLoading || isPending) && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 bg-card/90 backdrop-blur px-3 py-1.5 rounded-full border border-border text-sm text-muted-foreground">
+          Loading H3 res {targetH3Res}...
+        </div>
+      )}
+
+      {/* Zoom controls */}
       <div className="absolute bottom-4 right-4 flex flex-col gap-1 z-20">
         <button
           onClick={handleZoomIn}
@@ -667,49 +584,39 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, cl
         </button>
       </div>
 
+      {/* Status bar */}
+      <div className="absolute bottom-4 left-4 z-20 bg-card/90 backdrop-blur px-3 py-1.5 rounded border border-border text-xs text-muted-foreground">
+        H3 Res: {currentH3Res} | Zoom: {basemapZoom.toFixed(1)} | Hexes: {filteredHexes.length}
+      </div>
+
+      {/* Tooltip */}
       {hoveredFeature && !isDragging && (
         <div
-          className="absolute pointer-events-none z-10 bg-card/95 backdrop-blur border border-border rounded-lg shadow-xl p-3 min-w-[200px]"
+          className="absolute pointer-events-none z-30 bg-card/95 backdrop-blur border border-border rounded-lg p-3 text-sm shadow-xl"
           style={{
-            left: Math.min(tooltipPos.x + 12, canvasSize.width - 220),
-            top: Math.min(tooltipPos.y + 12, canvasSize.height - 180),
+            left: Math.min(tooltipPos.x + 12, canvasSize.width - 200),
+            top: Math.min(tooltipPos.y + 12, canvasSize.height - 150),
           }}
         >
-          <div className="space-y-2">
-            <div className="font-medium text-sm text-foreground truncate">{hoveredFeature.id.slice(0, 16)}...</div>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-              <span className="text-muted-foreground">Opportunity:</span>
-              <span className="font-mono text-foreground">{formatOpportunity(hoveredFeature.O)}</span>
-              <span className="text-muted-foreground">Reliability:</span>
-              <span className="font-mono text-foreground">{formatReliability(hoveredFeature.R)}</span>
-              <span className="text-muted-foreground">Accounts:</span>
-              <span className="font-mono text-foreground">{hoveredFeature.n_accts}</span>
-              <span className="text-muted-foreground">APE:</span>
-              <span className="font-mono text-foreground">{hoveredFeature.med_mean_ape_pct.toFixed(1)}%</span>
-              <span className="text-muted-foreground">CV:</span>
-              <span className="font-mono text-foreground">{hoveredFeature.med_mean_pred_cv_pct.toFixed(1)}%</span>
-              {(hoveredFeature.stability_flag || hoveredFeature.robustness_flag) && (
-                <>
-                  <span className="text-muted-foreground">Warning:</span>
-                  <span className="text-amber-500 font-medium">
-                    {hoveredFeature.stability_flag ? "Stability" : ""}
-                    {hoveredFeature.stability_flag && hoveredFeature.robustness_flag ? ", " : ""}
-                    {hoveredFeature.robustness_flag ? "Robustness" : ""}
-                  </span>
-                </>
-              )}
-            </div>
+          <div className="font-medium text-foreground mb-2 text-xs truncate max-w-[180px]">{hoveredFeature.id}</div>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+            <span className="text-muted-foreground">Opportunity:</span>
+            <span className="text-foreground font-medium">{formatOpportunity(hoveredFeature.O)}</span>
+            <span className="text-muted-foreground">Reliability:</span>
+            <span className="text-foreground font-medium">{formatReliability(hoveredFeature.R)}</span>
+            <span className="text-muted-foreground">Properties:</span>
+            <span className="text-foreground font-medium">{hoveredFeature.n_accts}</span>
+            <span className="text-muted-foreground">Alert %:</span>
+            <span className="text-foreground font-medium">{(hoveredFeature.alert_pct * 100).toFixed(1)}%</span>
           </div>
+          {(hoveredFeature.stability_flag || hoveredFeature.robustness_flag) && (
+            <div className="mt-2 pt-2 border-t border-border text-xs text-amber-400">
+              {hoveredFeature.stability_flag && <div>High alert rate</div>}
+              {hoveredFeature.robustness_flag && <div>Low reliability</div>}
+            </div>
+          )}
         </div>
       )}
-
-      <div className="absolute bottom-4 left-4 bg-card/80 backdrop-blur border border-border rounded px-3 py-1.5 text-xs font-mono text-muted-foreground z-20">
-        <div className="flex gap-3">
-          <span>H3: {h3Resolution}</span>
-          <span>Zoom: {basemapZoom.toFixed(1)}</span>
-          <span>Hexes: {filteredHexes.length}</span>
-        </div>
-      </div>
     </div>
   )
 }

@@ -2,7 +2,6 @@
 // at H3 resolution 10 and aggregates upward to coarser resolutions
 
 import type { FeatureProperties } from "./types"
-import { getHexDataForResolution } from "./supabase/hex-data"
 
 // Base data storage - finest resolution (H3 res 10)
 const baseDataCache = new Map<string, FeatureProperties>()
@@ -65,29 +64,6 @@ function getBaseCellsForCoarserCell(
   }
 
   return baseCells
-}
-
-// Track whether we're using precomputed data
-let usingPrecomputedData = false
-
-// Get data from Supabase or generate mock data
-export async function getPrecomputedOrMockData(row: number, col: number, h3Resolution: number) {
-  // Try to get precomputed data from Supabase
-  const payload = await getHexDataForResolution(h3Resolution)
-
-  if (payload && payload.hexagons) {
-    usingPrecomputedData = true
-    // Return the converted data (will be filtered by row/col in map-view)
-    return { payload, isPrecomputed: true }
-  }
-
-  // Fallback to mock data
-  usingPrecomputedData = false
-  return { isPrecomputed: false }
-}
-
-export function isUsingPrecomputedData() {
-  return usingPrecomputedData
 }
 
 // Aggregate base data up to a target resolution
