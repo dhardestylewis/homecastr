@@ -66,25 +66,15 @@ function getBaseCellsForCoarserCell(
   return baseCells
 }
 
-// DEPRECATED: Mock hierarchical data system
-// This was used for development but is now replaced with real Supabase data
+// This file is DEPRECATED and should not be used.
+// All hexagon data now comes from Supabase via getH3DataForResolution() in app/actions/h3-data.ts
 
-export function getDataForResolution(row: number, col: number, h3Resolution: number): FeatureProperties {
-  console.warn("[v0] DEPRECATED: hierarchical-data.ts should not be called - use real Supabase data instead")
-
-  // Return minimal mock data as fallback
-  return {
-    id: `deprecated-hex-r${h3Resolution}-${row}-${col}`,
-    O: 0,
-    R: 0,
-    n_accts: 0,
-    med_mean_ape_pct: 0,
-    med_mean_pred_cv_pct: 0,
-    stability_flag: false,
-    robustness_flag: false,
-  }
+export function getDataForResolution(): never {
+  throw new Error(
+    "DEPRECATED: hierarchical-data.ts is no longer used. Use getH3DataForResolution() from app/actions/h3-data.ts instead.",
+  )
 }
 
-export function clearDataCache() {
-  console.warn("[v0] DEPRECATED: clearDataCache called on deprecated mock data system")
+export function clearDataCache(): never {
+  throw new Error("DEPRECATED: clearDataCache is no longer used.")
 }

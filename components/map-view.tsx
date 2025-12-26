@@ -185,15 +185,25 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, cl
     }
 
     setIsLoadingData(true)
-    getH3DataForResolution(currentH3Res, 2025)
+    getH3DataForResolution(currentH3Res, 2026) // Updated default forecast year to 2026 to match uploaded data
       .then((data) => {
         console.log(`[v0] Loaded ${data.length} REAL hexagons from Supabase`)
-        h3DataCache.current.set(currentH3Res, data)
-        setRealHexData(data)
+        if (data.length === 0) {
+          console.warn(
+            `[v0] No hexagons returned from Supabase for resolution ${currentH3Res}. Check if data exists in h3_precomputed_hex_rows table.`,
+          )
+          h3DataCache.current.set(currentH3Res, [])
+          setRealHexData([])
+        } else {
+          h3DataCache.current.set(currentH3Res, data)
+          setRealHexData(data)
+        }
         setIsLoadingData(false)
       })
       .catch((err) => {
         console.error("[v0] Failed to load H3 data:", err)
+        h3DataCache.current.set(currentH3Res, [])
+        setRealHexData([])
         setIsLoadingData(false)
       })
   }, [transform.scale])
@@ -274,14 +284,20 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, cl
     const zoomFraction = basemapZoom - z
     const tileScale = Math.pow(2, zoomFraction)
 
-    const centerWorldCoord = latLngToMercator(basemapCenter.lng, basemapCenter.lat)
     const scale = Math.pow(2, z)
 
-    const metersPerPixel = 40075016.686 / (256 * Math.pow(2, basemapZoom))
-    const offsetLng = (-transform.offsetX / canvasSize.width) * (360 / scale)
-    const offsetLat = (transform.offsetY / canvasSize.height) * (180 / scale)
+    const pixelsPerDegreeLng = (256 * scale) / 360
+    const offsetLng = -transform.offsetX / pixelsPerDegreeLng
 
-    const adjustedCenter = latLngToMercator(basemapCenter.lng + offsetLng, basemapCenter.lat + offsetLat)
+    // For latitude, we need to account for Mercator distortion
+    const centerMerc = latLngToMercator(basemapCenter.lng, basemapCenter.lat)
+    const offsetMercY = transform.offsetY / (256 * scale)
+    const adjustedMercY = centerMerc.y + offsetMercY
+
+    // Convert back to latitude
+    const adjustedLat = (Math.atan(Math.sinh(Math.PI * (1 - 2 * adjustedMercY))) * 180) / Math.PI
+
+    const adjustedCenter = latLngToMercator(basemapCenter.lng + offsetLng, adjustedLat)
 
     const centerTileX = adjustedCenter.x * scale
     const centerTileY = adjustedCenter.y * scale
@@ -330,7 +346,7 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, cl
         }
       }
     }
-  }, [canvasSize, basemapCenter, basemapZoom, transform])
+  }, [canvasSize, basemapCenter, basemapZoom, transform]) // Fixed basemap panning to sync with hex transform
 
   useEffect(() => {
     const basemapCanvas = basemapCanvasRef.current

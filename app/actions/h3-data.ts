@@ -13,7 +13,7 @@ export interface H3HexagonData {
   alert_pct: number
 }
 
-export async function getH3DataForResolution(h3Resolution: number, forecastYear = 2025): Promise<H3HexagonData[]> {
+export async function getH3DataForResolution(h3Resolution: number, forecastYear = 2026): Promise<H3HexagonData[]> {
   try {
     const supabase = await getSupabaseServerClient()
 
