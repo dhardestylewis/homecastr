@@ -66,48 +66,25 @@ function getBaseCellsForCoarserCell(
   return baseCells
 }
 
-// Aggregate base data up to a target resolution
+// DEPRECATED: Mock hierarchical data system
+// This was used for development but is now replaced with real Supabase data
+
 export function getDataForResolution(row: number, col: number, h3Resolution: number): FeatureProperties {
-  const id = `hex-r${h3Resolution}-${row}-${col}`
+  console.warn("[v0] DEPRECATED: hierarchical-data.ts should not be called - use real Supabase data instead")
 
-  if (h3Resolution === 10) {
-    // Finest resolution - return base data directly
-    const baseData = getBaseData(row, col)
-    return { ...baseData, id }
-  }
-
-  // Coarser resolution - aggregate from base cells
-  const baseCells = getBaseCellsForCoarserCell(row, col, h3Resolution)
-  const baseDataArray = baseCells.map(({ row: r, col: c }) => getBaseData(r, c))
-
-  // Aggregate metrics
-  const n_accts = baseDataArray.reduce((sum, d) => sum + d.n_accts, 0)
-  const weightedO = baseDataArray.reduce((sum, d) => sum + d.O * d.n_accts, 0) / n_accts
-  const weightedR = baseDataArray.reduce((sum, d) => sum + d.R * d.n_accts, 0) / n_accts
-
-  // For error metrics, use median of base cells
-  const sortedApe = baseDataArray.map((d) => d.med_mean_ape_pct).sort((a, b) => a - b)
-  const sortedCv = baseDataArray.map((d) => d.med_mean_pred_cv_pct).sort((a, b) => a - b)
-  const medianApe = sortedApe[Math.floor(sortedApe.length / 2)]
-  const medianCv = sortedCv[Math.floor(sortedCv.length / 2)]
-
-  // Flags: only true if majority of base cells have the flag
-  const stabilityCount = baseDataArray.filter((d) => d.stability_flag).length
-  const robustnessCount = baseDataArray.filter((d) => d.robustness_flag).length
-
+  // Return minimal mock data as fallback
   return {
-    id,
-    O: weightedO, // Aggregated Opportunity
-    R: weightedR, // Aggregated Reliability (typically higher when aggregated)
-    n_accts, // Sum of accounts
-    med_mean_ape_pct: medianApe, // Median APE (typically lower when aggregated)
-    med_mean_pred_cv_pct: medianCv, // Median CV (typically lower when aggregated)
-    stability_flag: stabilityCount > baseCells.length / 2,
-    robustness_flag: robustnessCount > baseCells.length / 2,
+    id: `deprecated-hex-r${h3Resolution}-${row}-${col}`,
+    O: 0,
+    R: 0,
+    n_accts: 0,
+    med_mean_ape_pct: 0,
+    med_mean_pred_cv_pct: 0,
+    stability_flag: false,
+    robustness_flag: false,
   }
 }
 
-// Clear cache if needed (e.g., when user changes data source)
 export function clearDataCache() {
-  baseDataCache.clear()
+  console.warn("[v0] DEPRECATED: clearDataCache called on deprecated mock data system")
 }

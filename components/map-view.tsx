@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { getDataForResolution } from "@/lib/hierarchical-data"
+import { getH3DataForResolution } from "@/app/actions/h3-data"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { cn } from "@/lib/utils"
@@ -113,46 +113,30 @@ function getReliabilityStrokeWidth(r: number): number {
   return 3
 }
 
-function generateHexGrid(transform: TransformState, width: number, height: number) {
-  const hexagons: Array<{ id: string; pixelX: number; pixelY: number; properties: FeatureProperties }> = []
+function geoToCanvas(
+  lng: number,
+  lat: number,
+  canvasWidth: number,
+  canvasHeight: number,
+  transform: TransformState,
+  basemapCenter: { lng: number; lat: number },
+): { x: number; y: number } {
+  // Web Mercator projection
+  const centerMerc = latLngToMercator(basemapCenter.lng, basemapCenter.lat)
+  const pointMerc = latLngToMercator(lng, lat)
 
-  const h3Resolution = getH3ResolutionFromScale(transform.scale)
-  const hexPixelRadius = getHexSizeFromScale(transform.scale)
+  // Scale factor based on zoom/scale
+  const metersPerPixel = 40075016.686 / (256 * Math.pow(2, getContinuousBasemapZoom(transform.scale)))
 
-  const hexWidth = Math.sqrt(3) * hexPixelRadius
-  const hexHeight = 2 * hexPixelRadius
-  const horizontalSpacing = hexWidth
-  const verticalSpacing = hexHeight * 0.75
+  // Convert mercator difference to pixels
+  const dx = ((pointMerc.x - centerMerc.x) * 40075016.686) / metersPerPixel
+  const dy = ((pointMerc.y - centerMerc.y) * 40075016.686) / metersPerPixel
 
-  // Calculate grid offset based on transform to maintain consistency during pan
-  const gridOffsetX = transform.offsetX % horizontalSpacing
-  const gridOffsetY = transform.offsetY % verticalSpacing
-
-  const cols = Math.ceil((width + Math.abs(gridOffsetX)) / horizontalSpacing) + 2
-  const rows = Math.ceil((height + Math.abs(gridOffsetY)) / verticalSpacing) + 2
-
-  for (let row = -2; row < rows; row++) {
-    for (let col = -2; col < cols; col++) {
-      const xOffset = (row % 2) * (hexWidth / 2)
-      const pixelX = col * horizontalSpacing + xOffset - gridOffsetX
-      const pixelY = row * verticalSpacing - gridOffsetY
-
-      const properties = getDataForResolution(row, col, h3Resolution)
-
-      hexagons.push({
-        id: properties.id,
-        pixelX,
-        pixelY,
-        properties,
-      })
-    }
+  // Apply transform offset and center on canvas
+  return {
+    x: canvasWidth / 2 + dx + transform.offsetX,
+    y: canvasHeight / 2 + dy + transform.offsetY,
   }
-
-  console.log(
-    `[v0] Generated ${hexagons.length} hexagons at H3 resolution ${h3Resolution}, size ${hexPixelRadius.toFixed(1)}px`,
-  )
-
-  return { hexagons, hexPixelRadius, h3Resolution }
 }
 
 export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, className }: MapViewProps) {
@@ -166,6 +150,10 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, cl
     h3Res: 0,
     filterHash: "",
   })
+
+  const h3DataCache = useRef<Map<number, any[]>>(new Map())
+  const [isLoadingData, setIsLoadingData] = useState(false)
+  const [realHexData, setRealHexData] = useState<any[]>([])
 
   const dataUpdateTimerRef = useRef<NodeJS.Timeout | null>(null)
   const isInteractingRef = useRef(false)
@@ -189,11 +177,68 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, cl
   }, [transform.scale])
 
   useEffect(() => {
-    const { hexagons, hexPixelRadius, h3Resolution } = generateHexGrid(transform, canvasSize.width, canvasSize.height)
+    const currentH3Res = getH3ResolutionFromScale(transform.scale)
+
+    if (h3DataCache.current.has(currentH3Res)) {
+      setRealHexData(h3DataCache.current.get(currentH3Res)!)
+      return
+    }
+
+    setIsLoadingData(true)
+    getH3DataForResolution(currentH3Res, 2025)
+      .then((data) => {
+        console.log(`[v0] Loaded ${data.length} REAL hexagons from Supabase`)
+        h3DataCache.current.set(currentH3Res, data)
+        setRealHexData(data)
+        setIsLoadingData(false)
+      })
+      .catch((err) => {
+        console.error("[v0] Failed to load H3 data:", err)
+        setIsLoadingData(false)
+      })
+  }, [transform.scale])
+
+  useEffect(() => {
+    const currentH3Res = getH3ResolutionFromScale(transform.scale)
+    const hexSize = getHexSizeFromScale(transform.scale)
+
+    const hexagons = realHexData
+      .map((hex) => {
+        const canvasPos = geoToCanvas(hex.lng, hex.lat, canvasSize.width, canvasSize.height, transform, basemapCenter)
+
+        // Convert real Supabase fields to FeatureProperties
+        const properties: FeatureProperties = {
+          id: hex.h3_id,
+          O: hex.opportunity * 100, // Convert 0.03 → 3%
+          R: hex.reliability,
+          n_accts: hex.property_count,
+          med_mean_ape_pct: hex.sample_accuracy * 100,
+          med_mean_pred_cv_pct: hex.sample_accuracy * 100,
+          stability_flag: hex.alert_pct > 0.15,
+          robustness_flag: hex.alert_pct > 0.25,
+        }
+
+        return {
+          id: hex.h3_id,
+          pixelX: canvasPos.x,
+          pixelY: canvasPos.y,
+          properties,
+        }
+      })
+      .filter((hex) => {
+        // Only render hexes visible on canvas
+        return (
+          hex.pixelX > -100 &&
+          hex.pixelX < canvasSize.width + 100 &&
+          hex.pixelY > -100 &&
+          hex.pixelY < canvasSize.height + 100
+        )
+      })
+
     setFilteredHexes(hexagons)
-    setHexPixelRadius(hexPixelRadius)
-    setH3Resolution(h3Resolution)
-  }, [transform, canvasSize, filters])
+    setHexPixelRadius(hexSize)
+    setH3Resolution(currentH3Res)
+  }, [realHexData, transform, canvasSize, basemapCenter])
 
   useEffect(() => {
     const container = containerRef.current
@@ -231,8 +276,15 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, cl
 
     const centerWorldCoord = latLngToMercator(basemapCenter.lng, basemapCenter.lat)
     const scale = Math.pow(2, z)
-    const centerTileX = centerWorldCoord.x * scale
-    const centerTileY = centerWorldCoord.y * scale
+
+    const metersPerPixel = 40075016.686 / (256 * Math.pow(2, basemapZoom))
+    const offsetLng = (-transform.offsetX / canvasSize.width) * (360 / scale)
+    const offsetLat = (transform.offsetY / canvasSize.height) * (180 / scale)
+
+    const adjustedCenter = latLngToMercator(basemapCenter.lng + offsetLng, basemapCenter.lat + offsetLat)
+
+    const centerTileX = adjustedCenter.x * scale
+    const centerTileY = adjustedCenter.y * scale
 
     const tileSize = 256 * tileScale
     const tilesX = Math.ceil(canvasSize.width / tileSize) + 2
@@ -240,9 +292,6 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, cl
 
     const startTileX = Math.floor(centerTileX - tilesX / 2)
     const startTileY = Math.floor(centerTileY - tilesY / 2)
-
-    let loadedCount = 0
-    let totalTiles = 0
 
     for (let ty = 0; ty < tilesY; ty++) {
       for (let tx = 0; tx < tilesX; tx++) {
@@ -253,7 +302,6 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, cl
 
         if (tileY < 0 || tileY >= scale) continue
 
-        totalTiles++
         const tileKey = `${z}-${tileX}-${tileY}`
         const tileUrl = getTileUrl(tileX, tileY, z)
 
@@ -266,7 +314,6 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, cl
             ctx.globalAlpha = 0.95
             ctx.drawImage(img, offsetX, offsetY, tileSize, tileSize)
             ctx.globalAlpha = 1
-            loadedCount++
           }
         } else {
           const img = new Image()
@@ -283,7 +330,7 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, cl
         }
       }
     }
-  }, [canvasSize, basemapCenter, basemapZoom])
+  }, [canvasSize, basemapCenter, basemapZoom, transform])
 
   useEffect(() => {
     const basemapCanvas = basemapCanvasRef.current
@@ -331,7 +378,14 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, cl
 
       ctx.clearRect(0, 0, canvasSize.width, canvasSize.height)
 
-      filteredHexes.forEach((hex) => {
+      const regularHexes = filteredHexes.filter(
+        (hex) => hex.properties.id !== mapState.selectedId && hex.properties.id !== hoveredFeature?.id,
+      )
+      const specialHexes = filteredHexes.filter(
+        (hex) => hex.properties.id === mapState.selectedId || hex.properties.id === hoveredFeature?.id,
+      )
+
+      const renderHex = (hex: (typeof filteredHexes)[0], isSpecial: boolean) => {
         const props = hex.properties
         const x = hex.pixelX
         const y = hex.pixelY
@@ -374,7 +428,11 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, cl
           ctx.fillStyle = baseColor
           ctx.fill()
         }
-      })
+      }
+
+      // Render regular hexes first
+      regularHexes.forEach((hex) => renderHex(hex, false))
+      specialHexes.forEach((hex) => renderHex(hex, true))
     })
   }, [filteredHexes, hexPixelRadius, mapState.selectedId, hoveredFeature, isDragging, canvasSize])
 
@@ -508,40 +566,11 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, cl
         onWheel={handleWheel}
       />
 
-      <div className="absolute bottom-4 right-4 flex flex-col gap-1 z-20">
-        <button
-          onClick={handleZoomIn}
-          className="w-8 h-8 bg-card/95 backdrop-blur-sm border border-border rounded flex items-center justify-center text-foreground hover:bg-card transition-colors shadow-lg"
-          aria-label="Zoom in"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-        </button>
-        <button
-          onClick={handleZoomOut}
-          className="w-8 h-8 bg-card/95 backdrop-blur-sm border border-border rounded flex items-center justify-center text-foreground hover:bg-card transition-colors shadow-lg"
-          aria-label="Zoom out"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
-          </svg>
-        </button>
-        <button
-          onClick={handleReset}
-          className="w-8 h-8 bg-card/95 backdrop-blur-sm border border-border rounded flex items-center justify-center text-foreground hover:bg-card transition-colors shadow-lg"
-          aria-label="Reset view"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-            />
-          </svg>
-        </button>
-      </div>
+      {isLoadingData && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-card/95 backdrop-blur-sm border border-border rounded-lg px-4 py-2 text-sm text-muted-foreground z-20">
+          Loading H3 resolution {getH3ResolutionFromScale(transform.scale)} from Supabase...
+        </div>
+      )}
 
       {hoveredFeature && !isDragging && (
         <div
@@ -579,7 +608,7 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, cl
         </div>
       )}
 
-      <div className="absolute bottom-4 left-4 bg-card/80 backdrop-blur border border-border rounded px-3 py-1.5 text-xs font-mono text-muted-foreground z-20">
+      <div className="absolute bottom-4 left-4 bg-card/80 backdrop-blur border border-border rounded px-3 py-1.5 text-sm font-mono text-muted-foreground z-20">
         <div className="flex gap-3">
           <span>H3: {h3Resolution}</span>
           <span>Zoom: {basemapZoom.toFixed(1)}</span>
