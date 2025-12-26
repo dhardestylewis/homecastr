@@ -80,12 +80,26 @@ function getH3ResolutionFromScale(scale: number): number {
   return 10
 }
 
-function getHexSizeFromScale(scale: number): number {
-  const baseSize = 40
-  const minSize = 30
-  const maxSize = 50
-  const scaledSize = baseSize * (scale / 10000)
-  return Math.max(minSize, Math.min(maxSize, scaledSize))
+function getH3EdgeLengthMeters(resolution: number): number {
+  // Average H3 edge lengths in meters for each resolution
+  const edgeLengths: Record<number, number> = {
+    5: 8544.408,
+    6: 3229.482,
+    7: 1220.629,
+    8: 461.354,
+    9: 174.375,
+    10: 65.907,
+  }
+  return edgeLengths[resolution] || 65.907
+}
+
+function h3EdgeToPixelRadius(edgeLengthMeters: number, lat: number, scale: number): number {
+  // Meters per pixel at this latitude and zoom level
+  const metersPerPixel = (156543.03392 * Math.cos((lat * Math.PI) / 180)) / scale
+
+  // For a flat-top hex, the radius from center to vertex is edge_length
+  // For a regular hexagon: circumradius = edge_length
+  return edgeLengthMeters / metersPerPixel
 }
 
 // Generate regular hexagon vertices relative to center (flat-top orientation)
@@ -167,9 +181,8 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, cl
   const [basemapCenter] = useState(HARRIS_COUNTY_CENTER)
 
   const [filteredHexes, setFilteredHexes] = useState<
-    Array<{ id: string; pixelX: number; pixelY: number; properties: FeatureProperties }>
+    Array<{ id: string; pixelX: number; pixelY: number; pixelRadius: number; properties: FeatureProperties }>
   >([])
-  const [hexPixelRadius, setHexPixelRadius] = useState<number>(0)
   const [h3Resolution, setH3Resolution] = useState<number>(0)
 
   const basemapZoom = useMemo(() => {
@@ -210,11 +223,15 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, cl
 
   useEffect(() => {
     const currentH3Res = getH3ResolutionFromScale(transform.scale)
-    const hexSize = getHexSizeFromScale(transform.scale)
+
+    const edgeLengthMeters = getH3EdgeLengthMeters(currentH3Res)
+    const centerLat = basemapCenter.lat
 
     const hexagons = realHexData
       .map((hex) => {
         const canvasPos = geoToCanvas(hex.lng, hex.lat, canvasSize.width, canvasSize.height, transform, basemapCenter)
+
+        const pixelRadius = h3EdgeToPixelRadius(edgeLengthMeters, hex.lat, transform.scale)
 
         // Convert real Supabase fields to FeatureProperties
         const properties: FeatureProperties = {
@@ -232,6 +249,7 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, cl
           id: hex.h3_id,
           pixelX: canvasPos.x,
           pixelY: canvasPos.y,
+          pixelRadius, // Use calculated radius instead of fixed size
           properties,
         }
       })
@@ -246,7 +264,6 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, cl
       })
 
     setFilteredHexes(hexagons)
-    setHexPixelRadius(hexSize)
     setH3Resolution(currentH3Res)
   }, [realHexData, transform, canvasSize, basemapCenter])
 
@@ -405,12 +422,13 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, cl
         const props = hex.properties
         const x = hex.pixelX
         const y = hex.pixelY
+        const radius = hex.pixelRadius
 
         const isSelected = mapState.selectedId === props.id
         const isHovered = hoveredFeature?.id === props.id
         const hasWarning = props.stability_flag || props.robustness_flag
 
-        const vertices = getHexVertices(x, y, hexPixelRadius)
+        const vertices = getHexVertices(x, y, radius)
 
         ctx.beginPath()
         vertices.forEach((vertex, i) => {
@@ -450,7 +468,7 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, cl
       regularHexes.forEach((hex) => renderHex(hex, false))
       specialHexes.forEach((hex) => renderHex(hex, true))
     })
-  }, [filteredHexes, hexPixelRadius, mapState.selectedId, hoveredFeature, isDragging, canvasSize])
+  }, [filteredHexes, mapState.selectedId, hoveredFeature, isDragging, canvasSize])
 
   const pointInPolygon = useCallback((point: [number, number], polygon: [number, number][]) => {
     let inside = false
@@ -476,14 +494,14 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, cl
       const y = e.clientY - rect.top
 
       for (const hex of filteredHexes) {
-        const vertices = getHexVertices(hex.pixelX, hex.pixelY, hexPixelRadius)
+        const vertices = getHexVertices(hex.pixelX, hex.pixelY, hex.pixelRadius)
         if (pointInPolygon([x, y], vertices)) {
           onFeatureSelect(hex.properties.id)
           break
         }
       }
     },
-    [filteredHexes, hexPixelRadius, onFeatureSelect],
+    [filteredHexes, onFeatureSelect],
   )
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -509,7 +527,7 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, cl
       setLastMouse({ x: e.clientX, y: e.clientY })
     } else {
       for (const hex of filteredHexes) {
-        const vertices = getHexVertices(hex.pixelX, hex.pixelY, hexPixelRadius)
+        const vertices = getHexVertices(hex.pixelX, hex.pixelY, hex.pixelRadius)
         if (pointInPolygon([canvasX, canvasY], vertices)) {
           setHoveredFeature(hex.properties)
           setTooltipPos({ x: canvasX, y: canvasY })

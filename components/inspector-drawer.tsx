@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils"
 import { DecompositionBar } from "./decomposition-bar"
 import { FanChart } from "./fan-chart"
 import type { DetailsResponse } from "@/lib/types"
-import { generateMockDetailsResponse } from "@/lib/mock-data"
+import { getH3CellDetails } from "@/app/actions/h3-details"
 
 interface InspectorDrawerProps {
   selectedId: string | null
@@ -29,8 +29,13 @@ interface InspectorDrawerProps {
 }
 
 async function fetchDetails(id: string): Promise<DetailsResponse> {
-  await new Promise((resolve) => setTimeout(resolve, 300))
-  return generateMockDetailsResponse(id)
+  const details = await getH3CellDetails(id, 2026)
+
+  if (!details) {
+    throw new Error(`Failed to load details for ${id}`)
+  }
+
+  return details
 }
 
 function formatCurrency(value: number): string {
