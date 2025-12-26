@@ -6,18 +6,41 @@ import { FiltersPanel } from "@/components/filters-panel"
 import { MapView } from "@/components/map-view"
 import { Legend } from "@/components/legend"
 import { InspectorDrawer } from "@/components/inspector-drawer"
+import { PropertySearch } from "@/components/property-search"
+import { ForecastChart } from "@/components/forecast-chart"
 import { useFilters } from "@/hooks/use-filters"
 import { useMapState } from "@/hooks/use-map-state"
+import { useToast } from "@/hooks/use-toast"
+import type { PropertyForecast } from "@/app/actions/property-forecast"
 
 function DashboardContent() {
   const { filters, setFilters, resetFilters } = useFilters()
   const { mapState, selectFeature, hoverFeature } = useMapState()
   const [isFiltersPanelOpen, setIsFiltersPanelOpen] = useState(true)
+  const [forecastData, setForecastData] = useState<{ acct: string; data: PropertyForecast[] } | null>(null)
+  const { toast } = useToast()
 
-  const handleSearch = useCallback((query: string) => {
-    // TODO: Implement search - geocode address or lookup by ID
-    console.log("Search:", query)
-  }, [])
+  const handleForecastLoaded = useCallback(
+    (acct: string, forecast: PropertyForecast[]) => {
+      setForecastData({ acct, data: forecast })
+      toast({
+        title: "Forecast loaded",
+        description: `Found ${forecast.length} years of data for account ${acct}`,
+      })
+    },
+    [toast],
+  )
+
+  const handleSearchError = useCallback(
+    (error: string) => {
+      toast({
+        title: "Search failed",
+        description: error,
+        variant: "destructive",
+      })
+    },
+    [toast],
+  )
 
   const handleToggleFiltersPanel = useCallback(() => {
     setIsFiltersPanelOpen((prev) => !prev)
@@ -34,7 +57,7 @@ function DashboardContent() {
         filters={filters}
         isFiltersPanelOpen={isFiltersPanelOpen}
         onToggleFiltersPanel={handleToggleFiltersPanel}
-        onSearch={handleSearch}
+        onSearch={() => {}}
       />
 
       {/* Main Content */}
@@ -49,20 +72,31 @@ function DashboardContent() {
         />
 
         {/* Map Container */}
-        <main className="flex-1 relative">
-          <MapView
-            filters={filters}
-            mapState={mapState}
-            onFeatureSelect={selectFeature}
-            onFeatureHover={hoverFeature}
-          />
+        <main className="flex-1 relative flex flex-col">
+          <div className="p-4 border-b border-border bg-card/50 backdrop-blur-sm">
+            <PropertySearch onForecastLoaded={handleForecastLoaded} onError={handleSearchError} />
+            {forecastData && (
+              <div className="mt-4">
+                <ForecastChart acct={forecastData.acct} data={forecastData.data} />
+              </div>
+            )}
+          </div>
 
-          {/* Legend Overlay */}
-          <Legend className="absolute bottom-4 left-4 z-10" />
+          <div className="flex-1 relative">
+            <MapView
+              filters={filters}
+              mapState={mapState}
+              onFeatureSelect={selectFeature}
+              onFeatureHover={hoverFeature}
+            />
 
-          {/* Zoom Level Indicator */}
-          <div className="absolute top-4 left-4 z-10 glass-panel rounded-md px-2 py-1 text-xs font-mono text-muted-foreground">
-            Zoom: {mapState.zoom.toFixed(1)}
+            {/* Legend Overlay */}
+            <Legend className="absolute bottom-4 left-4 z-10" />
+
+            {/* Zoom Level Indicator */}
+            <div className="absolute top-4 left-4 z-10 glass-panel rounded-md px-2 py-1 text-xs font-mono text-muted-foreground">
+              Zoom: {mapState.zoom.toFixed(1)}
+            </div>
           </div>
         </main>
 
