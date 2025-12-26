@@ -2,6 +2,7 @@
 
 import type React from "react"
 import { getDataForResolution } from "@/lib/hierarchical-data"
+import { getHexDataForResolution, convertPrecomputedHexes } from "@/lib/supabase/hex-data"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { cn } from "@/lib/utils"
@@ -117,12 +118,25 @@ function getReliabilityStrokeWidth(r: number): number {
   return 3
 }
 
-function generateHexGrid(scale: number, width: number, height: number, centerLng: number, centerLat: number) {
-  const hexagons: Array<{ id: string; centerLng: number; centerLat: number; properties: FeatureProperties }> = []
-
+async function generateHexGrid(scale: number, width: number, height: number, centerLng: number, centerLat: number) {
   const h3Resolution = getH3ResolutionFromScale(scale)
+
+  // Try to fetch precomputed data from Supabase
+  const precomputedPayload = await getHexDataForResolution(h3Resolution)
+
+  if (precomputedPayload?.hexagons) {
+    // Convert precomputed hexagons and return
+    const hexagons = convertPrecomputedHexes(precomputedPayload, h3Resolution)
+    const hexPixelRadius = getHexSizeFromScale(scale)
+    console.log(`[v0] Using precomputed ${hexagons.length} hexagons for H3 resolution ${h3Resolution}`)
+    return { hexagons, hexPixelRadius, h3Resolution }
+  }
+
+  // Fallback to mock data generation
+  const hexagons: Array<{ id: string; centerLng: number; centerLat: number; properties: FeatureProperties }> = []
   const hexPixelRadius = getHexSizeFromScale(scale)
 
+  // ... existing mock data generation code ...
   const hexWidth = Math.sqrt(3) * hexPixelRadius
   const hexHeight = 2 * hexPixelRadius
   const horizontalSpacing = hexWidth
@@ -149,7 +163,7 @@ function generateHexGrid(scale: number, width: number, height: number, centerLng
   }
 
   console.log(
-    `[v0] Generated ${hexagons.length} hexagons at H3 resolution ${h3Resolution}, size ${hexPixelRadius.toFixed(1)}px`,
+    `[v0] Generated ${hexagons.length} mock hexagons at H3 resolution ${h3Resolution}, size ${hexPixelRadius.toFixed(1)}px`,
   )
 
   return { hexagons, hexPixelRadius, h3Resolution }
@@ -198,10 +212,27 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, cl
       return frozenHexData
     }
 
-    // Otherwise generate new data
-    const newData = generateHexGrid(transform.scale, canvasSize.width, canvasSize.height, 0, 0)
-    return newData
-  }, [transform.scale, canvasSize.width, canvasSize.height, frozenHexData])
+    // For now, return frozen data or empty (will load async)
+    if (frozenHexData) {
+      return frozenHexData
+    }
+
+    // Placeholder until async data loads
+    return { hexagons: [], hexPixelRadius: 40, h3Resolution: 5 }
+  }, [frozenHexData])
+
+  useEffect(() => {
+    const loadData = async () => {
+      if (isInteractingRef.current && frozenHexData) {
+        return
+      }
+
+      const newData = await generateHexGrid(transform.scale, canvasSize.width, canvasSize.height, 0, 0)
+      setFrozenHexData(newData)
+    }
+
+    loadData()
+  }, [transform.scale])
 
   useEffect(() => {
     // Clear existing timer
