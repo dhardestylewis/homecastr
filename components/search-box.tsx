@@ -33,6 +33,8 @@ export function SearchBox({ onSearch, placeholder = "Search address or ID..." }:
     <form onSubmit={handleSubmit} className="relative w-full">
       <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
       <Input
+        id="search-box"
+        name="search-box"
         type="search"
         value={query}
         onChange={(e) => setQuery(e.target.value)}

@@ -11,6 +11,7 @@ interface TimeControlsProps {
     maxYear: number
     currentYear: number
     onChange: (year: number) => void
+    onPlayStart?: () => void  // Called when user starts playback
     className?: string
 }
 
@@ -19,22 +20,33 @@ export function TimeControls({
     maxYear,
     currentYear,
     onChange,
+    onPlayStart,
     className,
 }: TimeControlsProps) {
     const [isPlaying, setIsPlaying] = React.useState(false)
+    const hasTriggeredPrefetchRef = React.useRef(false)
 
     // Auto-play functionality
     React.useEffect(() => {
         let interval: NodeJS.Timeout
 
         if (isPlaying) {
+            // Trigger prefetch callback ONCE when play starts
+            if (!hasTriggeredPrefetchRef.current && onPlayStart) {
+                hasTriggeredPrefetchRef.current = true
+                onPlayStart()
+            }
+
             interval = setInterval(() => {
                 onChange(currentYear >= maxYear ? minYear : currentYear + 1)
             }, 1500) // 1.5s per year
+        } else {
+            // Reset prefetch flag when stopped
+            hasTriggeredPrefetchRef.current = false
         }
 
         return () => clearInterval(interval)
-    }, [isPlaying, currentYear, maxYear, minYear, onChange])
+    }, [isPlaying, currentYear, maxYear, minYear, onChange]) // onPlayStart not in deps, accessed via ref pattern
 
     const handlePrevious = () => {
         if (currentYear > minYear) onChange(currentYear - 1)
@@ -50,12 +62,16 @@ export function TimeControls({
         if (isPlaying) setIsPlaying(false)
     }
 
+    // Historical years are ≤ 2025, Forecast years are > 2025
+    const isHistorical = currentYear <= 2025
+    const yearLabel = isHistorical ? "Historical Year" : "Forecast Year"
+
     return (
         <div className={cn("flex flex-col gap-2 p-3 bg-card/95 backdrop-blur-sm border border-border rounded-lg shadow-lg w-[320px]", className)}>
             <div className="flex items-center justify-between mb-1">
                 <div className="flex items-center gap-1.5 text-sm font-semibold">
                     <Calendar className="h-4 w-4 text-muted-foreground" />
-                    <span>Forecast Year</span>
+                    <span>{yearLabel}</span>
                 </div>
                 <span className="text-xl font-mono font-bold text-primary">{currentYear}</span>
             </div>

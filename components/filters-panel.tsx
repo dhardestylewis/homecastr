@@ -86,12 +86,15 @@ export function FiltersPanel({ filters, onFiltersChange, onReset, isOpen, onTogg
               </span>
             </div>
             <Slider
+              id="reliability-min"
+              name="reliability-min"
               value={[filters.reliabilityMin]}
               onValueChange={handleReliabilityChange}
               min={0}
               max={0.8}
               step={0.2}
               className="w-full"
+              aria-label="Reliability minimum"
             />
             <div className="flex justify-between text-[10px] text-muted-foreground px-0.5">
               {RELIABILITY_BINS.slice(0, -1).map((bin) => (
@@ -111,12 +114,15 @@ export function FiltersPanel({ filters, onFiltersChange, onReset, isOpen, onTogg
                 <span className="text-xs text-muted-foreground font-mono">{filters.nAcctsMin || "None"}</span>
               </div>
               <Slider
+                id="n-accts-min"
+                name="n-accts-min"
                 value={[filters.nAcctsMin]}
                 onValueChange={handleNAcctsChange}
                 min={0}
                 max={100}
                 step={5}
                 className="w-full"
+                aria-label="Minimum accounts"
               />
             </div>
 
@@ -129,12 +135,15 @@ export function FiltersPanel({ filters, onFiltersChange, onReset, isOpen, onTogg
                 </span>
               </div>
               <Slider
+                id="med-n-years-min"
+                name="med-n-years-min"
                 value={[filters.medNYearsMin]}
                 onValueChange={handleMedNYearsChange}
                 min={0}
                 max={10}
                 step={0.5}
                 className="w-full"
+                aria-label="Minimum median years"
               />
             </div>
           </div>

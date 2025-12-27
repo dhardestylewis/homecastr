@@ -99,10 +99,15 @@ function DashboardContent() {
             {/* Time Controls Overlay */}
             <div className="absolute top-4 right-4 z-50">
               <TimeControls
-                minYear={2026}
+                minYear={2019}
                 maxYear={2032}
                 currentYear={currentYear}
                 onChange={setCurrentYear}
+                onPlayStart={() => {
+                  console.log('[PAGE] Play started - prefetch all years triggered')
+                  // Note: actual prefetch happens in MapView's cache
+                  // This is just a notification that playback has begun
+                }}
               />
             </div>
           </div>

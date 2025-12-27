@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useEffect } from "react"
+import { useState, useCallback, useEffect, useRef } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import type { MapState } from "@/lib/types"
 
@@ -25,16 +25,22 @@ export function useMapState() {
     hoveredId: null,
   }))
 
-  // Update URL when selectedId changes (moved out of setState to fix React error)
+  // Update URL when selectedId changes - use ref to prevent infinite loops
+  const prevSelectedIdRef = useRef<string | null>(mapState.selectedId)
+
   useEffect(() => {
-    const params = new URLSearchParams(searchParams.toString())
+    // Only update URL if selectedId actually changed
+    if (prevSelectedIdRef.current === mapState.selectedId) return
+    prevSelectedIdRef.current = mapState.selectedId
+
+    const params = new URLSearchParams(window.location.search)
     if (mapState.selectedId) {
       params.set("id", mapState.selectedId)
     } else {
       params.delete("id")
     }
     router.replace(`?${params.toString()}`, { scroll: false })
-  }, [mapState.selectedId, router, searchParams])
+  }, [mapState.selectedId, router])
 
   const setMapState = useCallback(
     (updates: Partial<MapState>) => {

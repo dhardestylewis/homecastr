@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import {
   X,
   TrendingUp,
@@ -97,6 +97,8 @@ function safeFormatInt(value: number | null | undefined): string {
 export function InspectorDrawer({ selectedId, onClose, year = 2026, className }: InspectorDrawerProps) {
   const [details, setDetails] = useState<DetailsResponse | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const lastSelectedIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (!selectedId) {
@@ -104,7 +106,17 @@ export function InspectorDrawer({ selectedId, onClose, year = 2026, className }:
       return
     }
 
-    setIsLoading(true)
+    // Save scroll position before refetch
+    const scrollTop = scrollContainerRef.current?.scrollTop ?? 0
+
+    // Only show loading spinner if selecting a NEW cell, not for year changes
+    const isNewCell = selectedId !== lastSelectedIdRef.current
+    if (isNewCell) {
+      setIsLoading(true)
+    }
+    lastSelectedIdRef.current = selectedId
+
+    console.log(`[INSPECTOR] Fetching details for ${selectedId} year ${year} (isNewCell: ${isNewCell})`)
     fetchDetails(selectedId, year)
       .then((data) => {
         setDetails(data)
@@ -114,6 +126,15 @@ export function InspectorDrawer({ selectedId, onClose, year = 2026, className }:
         }
         if (!data) {
           console.warn(`No details found for ID: ${selectedId}`)
+        }
+
+        // Restore scroll position after data loads (for year changes)
+        if (!isNewCell && scrollContainerRef.current) {
+          requestAnimationFrame(() => {
+            if (scrollContainerRef.current) {
+              scrollContainerRef.current.scrollTop = scrollTop
+            }
+          })
         }
       })
       .catch((err) => {
@@ -179,7 +200,7 @@ export function InspectorDrawer({ selectedId, onClose, year = 2026, className }:
           </div>
 
           {/* Content */}
-          <div className="flex-1 overflow-y-auto custom-scrollbar">
+          <div ref={scrollContainerRef} className="flex-1 overflow-y-auto custom-scrollbar">
             {isLoading ? (
               <div className="p-4 space-y-4">
                 <div className="h-20 bg-muted animate-pulse rounded-lg" />

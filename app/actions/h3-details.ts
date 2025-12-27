@@ -8,6 +8,7 @@ import type { DetailsResponse, FanChartData } from "@/lib/types"
  * This is the authoritative source for the inspector panel.
  */
 export async function getH3CellDetails(h3Id: string, forecastYear = 2026): Promise<DetailsResponse | null> {
+  console.log(`[SERVER] getH3CellDetails called: h3_id=${h3Id}, year=${forecastYear}`)
   const supabase = await getSupabaseServerClient()
 
   // Query the DETAILS table (not hex_rows)
@@ -17,6 +18,8 @@ export async function getH3CellDetails(h3Id: string, forecastYear = 2026): Promi
     .eq("h3_id", h3Id)
     .eq("forecast_year", forecastYear)
     .single()
+
+  console.log(`[SERVER] Query result for ${h3Id}/${forecastYear}: predicted_value=${detailsData?.predicted_value}, opportunity=${detailsData?.opportunity}`)
 
   if (detailsError || !detailsData) {
     console.error(`[v0] Failed to fetch details for ${h3Id}:`, detailsError)
