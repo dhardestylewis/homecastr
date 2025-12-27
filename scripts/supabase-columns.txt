@@ -1,0 +1,71 @@
+=== h3_precomputed_hex_details ===
+Columns: accuracy_term, alert_pct, ape, breakeven_occ, cap_rate, confidence_term, created_at, dscr, fan_p10_y1, fan_p10_y2, fan_p10_y3, fan_p10_y4, fan_p10_y5, fan_p50_y1, fan_p50_y2, fan_p50_y3, fan_p50_y4, fan_p50_y5, fan_p90_y1, fan_p90_y2, fan_p90_y3, fan_p90_y4, fan_p90_y5, forecast_year, h3_id, h3_res, hard_fail, id, inv_dscr_z, lat, liquidity, lng, med_years, medae_z, monthly_rent, noi, opportunity, opportunity_pct, pred_cv, predicted_value, property_count, reliability, risk_score, robustness_term, sample_accuracy, score, stability_term, support_term, tail_gap_z, trend
+
+Sample values:
+  id: 1
+  forecast_year: 2026
+  h3_res: 7
+  h3_id: "87446ca83ffffff"
+  opportunity: 0.105519019048314
+  opportunity_pct: 10.5519019048314
+  trend: "up"
+  reliability: 0.652465181179967
+  accuracy_term: 0.771091493950637
+  confidence_term: 1
+  stability_term: 0.298461538461538
+  robustness_term: 0
+  support_term: 1
+  risk_score: 5.55850882496392
+  tail_gap_z: 6.0332823666465
+  medae_z: 0.116904310984837
+  inv_dscr_z: -0.610108470815481
+  score: 0
+  hard_fail: false
+  alert_pct: 0.701538461538462
+  predicted_value: 595117.719721354
+  noi: 38682.651781888
+  monthly_rent: 4605.07759308191
+  dscr: 1.62083102732413
+  breakeven_occ: 0.731877221128749
+  cap_rate: 0.065
+  property_count: 650
+  sample_accuracy: 0.228908506049363
+  ape: 22.8908506049363
+  pred_cv: 100
+  liquidity: 1
+  med_years: null
+  fan_p10_y1: 645354.710123968
+  fan_p50_y1: 657913.957724621
+  fan_p90_y1: 670473.205325274
+  fan_p10_y2: 699832.46688436
+  fan_p50_y2: 727336.393161917
+  fan_p90_y2: 755370.415234196
+  fan_p10_y3: 758908.975207399
+  fan_p50_y3: 804084.215886501
+  fan_p90_y3: 851017.549514552
+  fan_p10_y4: 822972.439696075
+  fan_p50_y4: 888930.393579077
+  fan_p90_y4: 958775.793935762
+  fan_p10_y5: 892443.835328497
+  fan_p50_y5: 982729.456711772
+  fan_p90_y5: 1080178.69145181
+  lat: 29.7165821709942
+  lng: -95.3911948771907
+  created_at: "2025-12-27T20:07:01.942252+00:00"
+
+=== h3_precomputed_hex_rows ===
+Columns: alert_pct, created_at, forecast_year, h3_id, h3_res, id, lat, lng, opportunity, property_count, reliability, sample_accuracy
+
+Sample values:
+  id: 8242723
+  forecast_year: 2026
+  h3_res: 11
+  h3_id: "8b446c10c968fff"
+  lat: 29.5046791000622
+  lng: -95.1568947816598
+  opportunity: 0.23295156958172
+  reliability: 0.327215707771393
+  property_count: 3
+  sample_accuracy: 0.228908506049363
+  alert_pct: 1
+  created_at: "2025-12-27T20:05:47.008119+00:00"

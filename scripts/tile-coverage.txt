@@ -1,0 +1,33 @@
+=== Tile Data Coverage Check ===
+
+Checking h3_precomputed_hex_rows by resolution for year 2026:
+  H3 Res 5: 0 tiles
+  H3 Res 6: 0 tiles
+  H3 Res 7: 705 tiles
+  H3 Res 8: 3955 tiles
+  H3 Res 9: 20033 tiles
+  H3 Res 10: 95746 tiles
+  H3 Res 11: 0 tiles
+
+Checking h3_precomputed_hex_details by resolution for year 2026:
+  H3 Res 5: 0 tiles
+  H3 Res 6: 0 tiles
+  H3 Res 7: 705 tiles
+  H3 Res 8: 3955 tiles
+  H3 Res 9: 20033 tiles
+  H3 Res 10: 95746 tiles
+  H3 Res 11: 428002 tiles
+
+=== UI Zoom to Resolution Mapping ===
+From map-view.tsx getH3ResolutionForZoom():
+  zoom < 10.5  → H3 res 7
+  zoom < 12.0  → H3 res 8
+  zoom < 13.5  → H3 res 9
+  zoom < 15.0  → H3 res 10
+  zoom >= 15.0 → H3 res 11
+
+From map-view.tsx getContinuousBasemapZoom():
+  scale 1000  → zoom ~9
+  scale 3000  → zoom ~10.5 (initial view)
+  scale 15000 → zoom ~14.2
+  scale 50000 → zoom ~18

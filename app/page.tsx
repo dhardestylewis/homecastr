@@ -12,12 +12,14 @@ import { useFilters } from "@/hooks/use-filters"
 import { useMapState } from "@/hooks/use-map-state"
 import { useToast } from "@/hooks/use-toast"
 import type { PropertyForecast } from "@/app/actions/property-forecast"
+import { TimeControls } from "@/components/time-controls"
 
 function DashboardContent() {
   const { filters, setFilters, resetFilters } = useFilters()
   const { mapState, selectFeature, hoverFeature } = useMapState()
   const [isFiltersPanelOpen, setIsFiltersPanelOpen] = useState(true)
   const [forecastData, setForecastData] = useState<{ acct: string; data: PropertyForecast[] } | null>(null)
+  const [currentYear, setCurrentYear] = useState(2026)
   const { toast } = useToast()
 
   const handleForecastLoaded = useCallback(
@@ -57,7 +59,7 @@ function DashboardContent() {
         filters={filters}
         isFiltersPanelOpen={isFiltersPanelOpen}
         onToggleFiltersPanel={handleToggleFiltersPanel}
-        onSearch={() => {}}
+        onSearch={() => { }}
       />
 
       {/* Main Content */}
@@ -88,20 +90,30 @@ function DashboardContent() {
               mapState={mapState}
               onFeatureSelect={selectFeature}
               onFeatureHover={hoverFeature}
+              year={currentYear}
             />
 
             {/* Legend Overlay */}
-            <Legend className="absolute bottom-4 left-4 z-10" />
+            <Legend className="absolute bottom-4 left-4 z-50" />
 
-            {/* Zoom Level Indicator */}
-            <div className="absolute top-4 left-4 z-10 glass-panel rounded-md px-2 py-1 text-xs font-mono text-muted-foreground">
-              Zoom: {mapState.zoom.toFixed(1)}
+            {/* Time Controls Overlay */}
+            <div className="absolute top-4 right-4 z-50">
+              <TimeControls
+                minYear={2026}
+                maxYear={2032}
+                currentYear={currentYear}
+                onChange={setCurrentYear}
+              />
             </div>
           </div>
         </main>
 
         {/* Inspector Drawer */}
-        <InspectorDrawer selectedId={mapState.selectedId} onClose={handleCloseInspector} />
+        <InspectorDrawer
+          selectedId={mapState.selectedId}
+          onClose={handleCloseInspector}
+          year={currentYear}
+        />
       </div>
     </div>
   )

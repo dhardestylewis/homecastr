@@ -1,23 +1,50 @@
 // Color utilities for opportunity and reliability encoding
 
 // Opportunity color scale (diverging: red for negative, green for positive)
+// Interpolate between two OKLCH colors
+// range: 0 to 1
+function interpolateOkLch(start: [number, number, number], end: [number, number, number], t: number): string {
+  const l = start[0] + (end[0] - start[0]) * t
+  const c = start[1] + (end[1] - start[1]) * t
+  // Handle hue interpolation correctly (shortest path)
+  let hStart = start[2]
+  let hEnd = end[2]
+
+  if (Math.abs(hEnd - hStart) > 180) {
+    if (hEnd > hStart) hStart += 360
+    else hEnd += 360
+  }
+
+  const h = hStart + (hEnd - hStart) * t
+  return `oklch(${l} ${c} ${h})`
+}
+
+// Continuous Perceptually Uniform Bidirectional Color Scale
+// 2 endpoints + neutral center
+// Negative (< 0): Deep Purple to Neutral
+// Positive (> 0): Neutral to Deep Blue/Cyan
 export function getOpportunityColor(value: number): string {
+  // Define keyframes in [Lightness, Chroma, Hue]
+  const NEGATIVE_EXTREME: [number, number, number] = [0.55, 0.22, 300] // Deep Purple (Low Value)
+  const NEUTRAL: [number, number, number] = [0.97, 0.00, 90]  // White/Grey (Neutral)
+  const POSITIVE_EXTREME: [number, number, number] = [0.55, 0.22, 240] // Deep Blue (High Value)
+
+  // Normalize value to t [0, 1] for each side
+  // Cap at reasonable extremes to avoid washing out too early or late
+  // Assuming relevant range is approx -10% to +20% based on data seen
+
   if (value < 0) {
-    // Negative: red scale
-    const intensity = Math.min(Math.abs(value) / 10, 1)
-    return `oklch(${0.6 - intensity * 0.15} ${0.15 + intensity * 0.1} 25)`
-  } else if (value < 3) {
-    // Low positive: yellow
-    return `oklch(0.75 0.15 85)`
-  } else if (value < 6) {
-    // Mid positive: yellow-green
-    return `oklch(0.75 0.15 120)`
-  } else if (value < 10) {
-    // High positive: green
-    return `oklch(0.70 0.18 145)`
+    // Negative visual range: 0 to -50%
+    // Start from Neutral with SAME hue as Negative Extreme to avoid rainbow effect
+    const NEUTRAL_NEG: [number, number, number] = [0.97, 0, 300]
+    const t = Math.min(Math.abs(value) / 50, 1)
+    return interpolateOkLch(NEUTRAL_NEG, NEGATIVE_EXTREME, t)
   } else {
-    // Very high: teal
-    return `oklch(0.65 0.15 180)`
+    // Positive visual range: 0 to +50%
+    // Start from Neutral with SAME hue as Positive Extreme to avoid rainbow effect
+    const NEUTRAL_POS: [number, number, number] = [0.97, 0, 240]
+    const t = Math.min(value / 50, 1)
+    return interpolateOkLch(NEUTRAL_POS, POSITIVE_EXTREME, t)
   }
 }
 

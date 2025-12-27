@@ -8,12 +8,13 @@ interface LegendProps {
   className?: string
 }
 
-const OPPORTUNITY_SCALE = [
-  { label: "< 0%", color: "bg-[oklch(0.55_0.2_25)]" },
-  { label: "0-3%", color: "bg-[oklch(0.75_0.15_85)]" },
-  { label: "3-6%", color: "bg-[oklch(0.75_0.15_120)]" },
-  { label: "6-10%", color: "bg-[oklch(0.70_0.18_145)]" },
-  { label: "> 10%", color: "bg-[oklch(0.65_0.15_180)]" },
+// Continuous legend gradient
+// Continuous legend gradient
+// Purple (Hue 300) -> White (Purple Hue) -> White (Blue Hue) -> Blue (Hue 240)
+const OPPORTUNITY_GRADIENT = "linear-gradient(to right, oklch(0.55 0.22 300), oklch(0.97 0 300) 50%, oklch(0.97 0 240) 50%, oklch(0.55 0.22 240))"
+
+const OPPORTUNITY_LABELS = [
+  "-50%", "0%", "+50%"
 ]
 
 const RELIABILITY_BINS = [
@@ -30,51 +31,37 @@ export function Legend({ className }: LegendProps) {
       {/* Opportunity Color */}
       <div className="space-y-1.5">
         <div className="flex items-center gap-1.5 text-foreground font-medium">
-          <span>Opportunity</span>
+          <span>Projected Growth</span>
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
                 <Info className="h-3 w-3 text-muted-foreground cursor-help" />
               </TooltipTrigger>
               <TooltipContent side="right" className="max-w-48">
-                <p>Expected financial upside (CAGR). Higher values indicate better investment opportunities.</p>
+                <p>Estimated compound annual growth rate (CAGR).</p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
         </div>
-        <div className="flex gap-0.5">
-          {OPPORTUNITY_SCALE.map((item, i) => (
-            <div key={i} className="flex-1 text-center">
-              <div className={cn("h-3 rounded-sm", item.color)} />
-              <span className="text-[9px] text-muted-foreground mt-0.5 block">{item.label}</span>
-            </div>
-          ))}
+        <div className="flex flex-col gap-1">
+          <div
+            className="h-3 w-full rounded-sm"
+            style={{ background: OPPORTUNITY_GRADIENT }}
+          />
+          <div className="flex justify-between text-[9px] text-muted-foreground font-mono px-0.5">
+            <span>{OPPORTUNITY_LABELS[0]}</span>
+            <span>{OPPORTUNITY_LABELS[1]}</span>
+            <span>{OPPORTUNITY_LABELS[2]}</span>
+          </div>
         </div>
       </div>
 
-      {/* Reliability Opacity */}
-      <div className="space-y-1.5">
-        <div className="flex items-center gap-1.5 text-foreground font-medium">
-          <span>Reliability</span>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Info className="h-3 w-3 text-muted-foreground cursor-help" />
-              </TooltipTrigger>
-              <TooltipContent side="right" className="max-w-48">
-                <p>Trustworthiness of the opportunity score. Lower reliability appears more transparent.</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        </div>
-        <div className="flex gap-0.5">
-          {RELIABILITY_BINS.map((item, i) => (
-            <div key={i} className="flex-1 text-center">
-              <div className={cn("h-3 rounded-sm bg-primary", item.opacity)} />
-              <span className="text-[9px] text-muted-foreground mt-0.5 block">{item.label}</span>
-            </div>
-          ))}
-        </div>
+
+
+      {/* No Data Indicator */}
+      <div className="flex items-center gap-1.5">
+        <div className="w-4 h-4 rounded border border-[#888888] bg-[#888888]/10" />
+        <span className="text-muted-foreground">No Data</span>
       </div>
 
       {/* Warning indicators */}

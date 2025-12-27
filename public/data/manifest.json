@@ -54,9 +54,18 @@
     "stabilityWarning": 0.3,
     "robustnessWarning": 0.3,
     "minSupport": 5,
-    "reliabilityBins": [0.2, 0.4, 0.6, 0.8, 1.0]
+    "reliabilityBins": [
+      0.2,
+      0.4,
+      0.6,
+      0.8,
+      1.0
+    ]
   },
   "fanChartAvailable": true,
-  "defaultCenter": [-98.5795, 39.8283],
-  "defaultZoom": 4
+  "defaultCenter": [
+    -95.3698,
+    29.7604
+  ],
+  "defaultZoom": 10
 }

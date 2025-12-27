@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect, useRef } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import type { FilterState } from "@/lib/types"
 
@@ -8,7 +8,7 @@ const DEFAULT_FILTERS: FilterState = {
   reliabilityMin: 0,
   nAcctsMin: 0,
   medNYearsMin: 0,
-  showUnderperformers: true,
+  showUnderperformers: false,
   highlightWarnings: true,
   layerOverride: undefined,
 }
@@ -16,6 +16,7 @@ const DEFAULT_FILTERS: FilterState = {
 export function useFilters() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const isFirstRender = useRef(true)
 
   const [filters, setFiltersState] = useState<FilterState>(() => {
     // Initialize from URL params
@@ -23,67 +24,55 @@ export function useFilters() {
       reliabilityMin: Number.parseFloat(searchParams.get("rMin") || "0"),
       nAcctsMin: Number.parseInt(searchParams.get("nMin") || "0", 10),
       medNYearsMin: Number.parseFloat(searchParams.get("yMin") || "0"),
-      showUnderperformers: searchParams.get("underperf") !== "false",
+      showUnderperformers: searchParams.get("underperf") === "true",
       highlightWarnings: searchParams.get("warnings") !== "false",
       layerOverride: searchParams.get("layer") ? Number.parseInt(searchParams.get("layer")!, 10) : undefined,
     }
   })
 
-  // Sync filters to URL
-  const updateUrl = useCallback(
-    (newFilters: FilterState) => {
-      const params = new URLSearchParams(searchParams.toString())
+  // Sync filters to URL via useEffect (not during render)
+  useEffect(() => {
+    // Skip URL update on first render (already initialized from URL)
+    if (isFirstRender.current) {
+      isFirstRender.current = false
+      return
+    }
 
-      if (newFilters.reliabilityMin > 0) {
-        params.set("rMin", newFilters.reliabilityMin.toString())
-      } else {
-        params.delete("rMin")
-      }
+    const params = new URLSearchParams()
 
-      if (newFilters.nAcctsMin > 0) {
-        params.set("nMin", newFilters.nAcctsMin.toString())
-      } else {
-        params.delete("nMin")
-      }
+    if (filters.reliabilityMin > 0) {
+      params.set("rMin", filters.reliabilityMin.toString())
+    }
 
-      if (newFilters.medNYearsMin > 0) {
-        params.set("yMin", newFilters.medNYearsMin.toString())
-      } else {
-        params.delete("yMin")
-      }
+    if (filters.nAcctsMin > 0) {
+      params.set("nMin", filters.nAcctsMin.toString())
+    }
 
-      if (!newFilters.showUnderperformers) {
-        params.set("underperf", "false")
-      } else {
-        params.delete("underperf")
-      }
+    if (filters.medNYearsMin > 0) {
+      params.set("yMin", filters.medNYearsMin.toString())
+    }
 
-      if (!newFilters.highlightWarnings) {
-        params.set("warnings", "false")
-      } else {
-        params.delete("warnings")
-      }
+    if (!filters.showUnderperformers) {
+      params.set("underperf", "false")
+    }
 
-      if (newFilters.layerOverride !== undefined) {
-        params.set("layer", newFilters.layerOverride.toString())
-      } else {
-        params.delete("layer")
-      }
+    if (!filters.highlightWarnings) {
+      params.set("warnings", "false")
+    }
 
-      router.replace(`?${params.toString()}`, { scroll: false })
-    },
-    [router, searchParams],
-  )
+    if (filters.layerOverride !== undefined) {
+      params.set("layer", filters.layerOverride.toString())
+    }
+
+    const queryString = params.toString()
+    router.replace(queryString ? `?${queryString}` : "/", { scroll: false })
+  }, [filters, router])
 
   const setFilters = useCallback(
     (updates: Partial<FilterState>) => {
-      setFiltersState((prev) => {
-        const next = { ...prev, ...updates }
-        updateUrl(next)
-        return next
-      })
+      setFiltersState((prev) => ({ ...prev, ...updates }))
     },
-    [updateUrl],
+    [],
   )
 
   const resetFilters = useCallback(() => {

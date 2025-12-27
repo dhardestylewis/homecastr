@@ -25,20 +25,31 @@ import { getH3CellDetails } from "@/app/actions/h3-details"
 interface InspectorDrawerProps {
   selectedId: string | null
   onClose: () => void
+  year?: number
   className?: string
 }
 
-async function fetchDetails(id: string): Promise<DetailsResponse> {
-  const details = await getH3CellDetails(id, 2026)
-
-  if (!details) {
-    throw new Error(`Failed to load details for ${id}`)
-  }
-
+async function fetchDetails(id: string, year: number): Promise<DetailsResponse | null> {
+  const details = await getH3CellDetails(id, year)
   return details
 }
 
-function formatCurrency(value: number): string {
+// =============================================================================
+// Safe Formatting Utilities - Prevent NaN display
+// =============================================================================
+
+/**
+ * Check if a value is a finite number (not null, undefined, NaN, or Infinity)
+ */
+function isFiniteNumber(value: number | null | undefined): value is number {
+  return value != null && Number.isFinite(value)
+}
+
+/**
+ * Format currency with null-safety - returns "N/A" for invalid values
+ */
+function safeFormatCurrency(value: number | null | undefined): string {
+  if (!isFiniteNumber(value)) return "N/A"
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
@@ -46,7 +57,44 @@ function formatCurrency(value: number): string {
   }).format(value)
 }
 
-export function InspectorDrawer({ selectedId, onClose, className }: InspectorDrawerProps) {
+/**
+ * Format percentage with null-safety - returns "N/A" for invalid values
+ * Expects value in 0-1 range, multiplies by 100
+ */
+function safeFormatPercent(value: number | null | undefined, decimals = 0): string {
+  if (!isFiniteNumber(value)) return "N/A"
+  return `${(value * 100).toFixed(decimals)}%`
+}
+
+/**
+ * Format percentage that's already scaled (0-100 range)
+ */
+function safeFormatPercentScaled(value: number | null | undefined, decimals = 0): string {
+  if (!isFiniteNumber(value)) return "N/A"
+  return `${value.toFixed(decimals)}%`
+}
+
+/**
+ * Format fixed decimal with null-safety - returns "N/A" for invalid values
+ */
+function safeFormatFixed(value: number | null | undefined, decimals = 1, suffix = ""): string {
+  if (!isFiniteNumber(value)) return "N/A"
+  return `${value.toFixed(decimals)}${suffix}`
+}
+
+/**
+ * Format integer with null-safety
+ */
+function safeFormatInt(value: number | null | undefined): string {
+  if (!isFiniteNumber(value)) return "N/A"
+  return Math.round(value).toString()
+}
+
+// =============================================================================
+// Component
+// =============================================================================
+
+export function InspectorDrawer({ selectedId, onClose, year = 2026, className }: InspectorDrawerProps) {
   const [details, setDetails] = useState<DetailsResponse | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
@@ -57,10 +105,23 @@ export function InspectorDrawer({ selectedId, onClose, className }: InspectorDra
     }
 
     setIsLoading(true)
-    fetchDetails(selectedId)
-      .then(setDetails)
+    fetchDetails(selectedId, year)
+      .then((data) => {
+        setDetails(data)
+        // Debug logging for NaN investigation
+        if (data) {
+          console.log('[DEBUG] API payload for', selectedId, ':', JSON.stringify(data, null, 2))
+        }
+        if (!data) {
+          console.warn(`No details found for ID: ${selectedId}`)
+        }
+      })
+      .catch((err) => {
+        console.error(err)
+        setDetails(null)
+      })
       .finally(() => setIsLoading(false))
-  }, [selectedId])
+  }, [selectedId, year])
 
   const handleCopyLink = () => {
     const url = new URL(window.location.href)
@@ -82,6 +143,13 @@ export function InspectorDrawer({ selectedId, onClose, className }: InspectorDra
   }
 
   const isOpen = selectedId !== null
+
+  // Helper to get trend icon
+  const getTrendIcon = (trend: "up" | "down" | "stable" | undefined) => {
+    if (trend === "up") return <TrendingUp className="h-4 w-4 text-green-500" />
+    if (trend === "down") return <TrendingDown className="h-4 w-4 text-red-500" />
+    return <Minus className="h-4 w-4 text-muted-foreground" />
+  }
 
   return (
     <aside
@@ -123,23 +191,28 @@ export function InspectorDrawer({ selectedId, onClose, className }: InspectorDra
                 {/* Headline Metrics */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="bg-secondary/50 rounded-lg p-3">
-                    <div className="text-xs text-muted-foreground mb-1">Opportunity</div>
+                    <div className="text-xs text-muted-foreground mb-1">Projected Growth</div>
                     <div className="flex items-center gap-1.5">
                       <span className="text-2xl font-bold text-primary">
-                        {details.opportunity.value > 0 ? "+" : ""}
-                        {details.opportunity.value.toFixed(1)}
+                        {isFiniteNumber(details.opportunity.value)
+                          ? `${details.opportunity.value > 0 ? "+" : ""}${details.opportunity.value.toFixed(1)}`
+                          : "N/A"}
                       </span>
                       <span className="text-xs text-muted-foreground">{details.opportunity.unit}</span>
-                      {details.opportunity.trend === "up" && <TrendingUp className="h-4 w-4 text-green-500" />}
-                      {details.opportunity.trend === "down" && <TrendingDown className="h-4 w-4 text-red-500" />}
-                      {details.opportunity.trend === "stable" && <Minus className="h-4 w-4 text-muted-foreground" />}
+                      {isFiniteNumber(details.opportunity.value) && getTrendIcon(details.opportunity.trend)}
                     </div>
                   </div>
                   <div className="bg-secondary/50 rounded-lg p-3">
-                    <div className="text-xs text-muted-foreground mb-1">Reliability</div>
+                    <div className="text-xs text-muted-foreground mb-1">Data Confidence</div>
                     <div className="flex items-baseline gap-1">
-                      <span className="text-2xl font-bold">{(details.reliability.value * 100).toFixed(0)}</span>
-                      <span className="text-sm text-muted-foreground">%</span>
+                      <span className="text-2xl font-bold">
+                        {isFiniteNumber(details.reliability.value)
+                          ? (details.reliability.value * 100).toFixed(0)
+                          : "N/A"}
+                      </span>
+                      {isFiniteNumber(details.reliability.value) && (
+                        <span className="text-sm text-muted-foreground">%</span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -147,7 +220,7 @@ export function InspectorDrawer({ selectedId, onClose, className }: InspectorDra
                 {/* Reliability Decomposition */}
                 <div className="space-y-2">
                   <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                    Reliability Decomposition
+                    Confidence Factors
                   </h3>
                   <DecompositionBar components={details.reliability.components} />
                 </div>
@@ -163,18 +236,18 @@ export function InspectorDrawer({ selectedId, onClose, className }: InspectorDra
                       </h3>
                       <div className="bg-secondary/30 rounded-lg p-3 space-y-2">
                         <div className="flex justify-between items-center">
-                          <span className="text-sm text-muted-foreground">Predicted Value</span>
+                          <span className="text-sm text-muted-foreground">Predicted Value ({year})</span>
                           <span className="font-mono font-semibold text-primary">
-                            {formatCurrency(details.proforma.predicted_value)}
+                            {safeFormatCurrency(details.proforma.predicted_value)}
                           </span>
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-muted-foreground">NOI</span>
-                          <span className="font-mono">{formatCurrency(details.proforma.noi)}</span>
+                          <span className="font-mono">{safeFormatCurrency(details.proforma.noi)}</span>
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-muted-foreground">Monthly Rent</span>
-                          <span className="font-mono">{formatCurrency(details.proforma.monthly_rent)}</span>
+                          <span className="font-mono">{safeFormatCurrency(details.proforma.monthly_rent)}</span>
                         </div>
                         <Separator className="my-2" />
                         <div className="grid grid-cols-2 gap-2 text-sm">
@@ -183,38 +256,46 @@ export function InspectorDrawer({ selectedId, onClose, className }: InspectorDra
                             <span
                               className={cn(
                                 "font-mono font-medium",
-                                details.proforma.dscr >= 1.25
-                                  ? "text-green-500"
-                                  : details.proforma.dscr >= 1.05
-                                    ? "text-warning"
-                                    : "text-destructive",
+                                isFiniteNumber(details.proforma.dscr)
+                                  ? details.proforma.dscr >= 1.25
+                                    ? "text-green-500"
+                                    : details.proforma.dscr >= 1.05
+                                      ? "text-warning"
+                                      : "text-destructive"
+                                  : "text-muted-foreground",
                               )}
                             >
-                              {details.proforma.dscr.toFixed(2)}x
+                              {safeFormatFixed(details.proforma.dscr, 2, "x")}
                             </span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-muted-foreground">Cap Rate</span>
-                            <span className="font-mono">{(details.proforma.cap_rate * 100).toFixed(1)}%</span>
+                            <span className="font-mono">
+                              {safeFormatPercent(details.proforma.cap_rate, 1)}
+                            </span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-muted-foreground">Breakeven</span>
                             <span
                               className={cn(
                                 "font-mono",
-                                details.proforma.breakeven_occ <= 0.85
-                                  ? "text-green-500"
-                                  : details.proforma.breakeven_occ <= 0.92
-                                    ? "text-warning"
-                                    : "text-destructive",
+                                isFiniteNumber(details.proforma.breakeven_occ)
+                                  ? details.proforma.breakeven_occ <= 0.85
+                                    ? "text-green-500"
+                                    : details.proforma.breakeven_occ <= 0.92
+                                      ? "text-warning"
+                                      : "text-destructive"
+                                  : "text-muted-foreground",
                               )}
                             >
-                              {(details.proforma.breakeven_occ * 100).toFixed(0)}%
+                              {safeFormatPercent(details.proforma.breakeven_occ, 0)}
                             </span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-muted-foreground">Liquidity</span>
-                            <span className="font-mono">{details.proforma.liquidity_rank.toFixed(0)}%</span>
+                            <span className="font-mono">
+                              {safeFormatPercentScaled(details.proforma.liquidity_rank, 0)}
+                            </span>
                           </div>
                         </div>
                       </div>
@@ -241,6 +322,7 @@ export function InspectorDrawer({ selectedId, onClose, className }: InspectorDra
                         <div className="flex items-center justify-between mb-3">
                           <div className="flex items-center gap-2">
                             <span className="text-sm font-medium">Investment Score</span>
+                            <span className="text-[10px] text-muted-foreground ml-1">(0-10)</span>
                             {details.riskScoring.alert_triggered && (
                               <span className="text-[10px] px-1.5 py-0.5 rounded bg-destructive/20 text-destructive font-medium">
                                 ALERT
@@ -250,14 +332,18 @@ export function InspectorDrawer({ selectedId, onClose, className }: InspectorDra
                           <span
                             className={cn(
                               "text-2xl font-bold",
-                              details.riskScoring.score >= 7
-                                ? "text-green-500"
-                                : details.riskScoring.score >= 4
-                                  ? "text-warning"
-                                  : "text-destructive",
+                              isFiniteNumber(details.riskScoring.score)
+                                ? details.riskScoring.score >= 7
+                                  ? "text-green-500"
+                                  : details.riskScoring.score >= 4
+                                    ? "text-warning"
+                                    : "text-destructive"
+                                : "text-muted-foreground",
                             )}
                           >
-                            {details.riskScoring.score.toFixed(1)}
+                            {isFiniteNumber(details.riskScoring.score)
+                              ? `${details.riskScoring.score.toFixed(1)}/10`
+                              : "N/A"}
                           </span>
                         </div>
                         <div className="space-y-1.5 text-xs">
@@ -266,28 +352,43 @@ export function InspectorDrawer({ selectedId, onClose, className }: InspectorDra
                             <span
                               className={cn(
                                 "font-mono",
-                                Math.abs(details.riskScoring.R) <= 1
-                                  ? "text-green-500"
-                                  : Math.abs(details.riskScoring.R) <= 2
-                                    ? "text-warning"
-                                    : "text-destructive",
+                                isFiniteNumber(details.riskScoring.R)
+                                  ? Math.abs(details.riskScoring.R) <= 1
+                                    ? "text-green-500"
+                                    : Math.abs(details.riskScoring.R) <= 2
+                                      ? "text-warning"
+                                      : "text-destructive"
+                                  : "text-muted-foreground",
                               )}
                             >
-                              {details.riskScoring.R >= 0 ? "+" : ""}
-                              {details.riskScoring.R.toFixed(2)}
+                              {isFiniteNumber(details.riskScoring.R)
+                                ? `${details.riskScoring.R >= 0 ? "+" : ""}${details.riskScoring.R.toFixed(2)}`
+                                : "N/A"}
                             </span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-muted-foreground">Tail Gap (z)</span>
-                            <span className="font-mono">{details.riskScoring.tail_gap_z.toFixed(2)}</span>
+                            <span className="text-muted-foreground">Tail Gap</span>
+                            <span className="font-mono">
+                              {isFiniteNumber(details.riskScoring.tail_gap_z)
+                                ? `${details.riskScoring.tail_gap_z.toFixed(2)}σ`
+                                : "N/A"}
+                            </span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-muted-foreground">MedAE (z)</span>
-                            <span className="font-mono">{details.riskScoring.medAE_z.toFixed(2)}</span>
+                            <span className="text-muted-foreground">MedAE</span>
+                            <span className="font-mono">
+                              {isFiniteNumber(details.riskScoring.medAE_z)
+                                ? `${details.riskScoring.medAE_z.toFixed(2)}σ`
+                                : "N/A"}
+                            </span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-muted-foreground">Inv DSCR (z)</span>
-                            <span className="font-mono">{details.riskScoring.inv_dscr_z.toFixed(2)}</span>
+                            <span className="text-muted-foreground">Inv DSCR</span>
+                            <span className="font-mono">
+                              {isFiniteNumber(details.riskScoring.inv_dscr_z)
+                                ? `${details.riskScoring.inv_dscr_z.toFixed(2)}σ`
+                                : "N/A"}
+                            </span>
                           </div>
                         </div>
                       </div>
@@ -302,7 +403,7 @@ export function InspectorDrawer({ selectedId, onClose, className }: InspectorDra
                     <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                       Projection Fan Chart
                     </h3>
-                    <FanChart data={details.fanChart} />
+                    <FanChart data={details.fanChart} startYear={year} />
                   </div>
                 )}
 
@@ -339,7 +440,7 @@ export function InspectorDrawer({ selectedId, onClose, className }: InspectorDra
                             <span className="text-[10px] font-medium capitalize">{key.replace(/_/g, " ")}</span>
                           </div>
                           <div className="text-xs font-mono">
-                            {test.value.toFixed(2)} / {test.threshold.toFixed(2)}
+                            {safeFormatFixed(test.value, 2)} / {safeFormatFixed(test.threshold, 2)}
                           </div>
                         </div>
                       ))}
@@ -349,30 +450,46 @@ export function InspectorDrawer({ selectedId, onClose, className }: InspectorDra
 
                 <Separator />
 
-                {/* Metrics */}
+                {/* Support Metrics */}
                 <div className="space-y-2">
                   <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Support Metrics</h3>
                   <div className="grid grid-cols-2 gap-2 text-sm">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Accounts</span>
-                      <span className="font-mono">{details.metrics.n_accts}</span>
+                      <span className="font-mono">{safeFormatInt(details.metrics.n_accts)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Med Years</span>
-                      <span className="font-mono">{details.metrics.med_n_years.toFixed(1)}</span>
+                      <span className="font-mono">{safeFormatFixed(details.metrics.med_n_years, 1)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">APE</span>
-                      <span className="font-mono">{details.metrics.med_mean_ape_pct.toFixed(1)}%</span>
+                      <span className="text-muted-foreground">APE (proxy)</span>
+                      <span className="font-mono">
+                        {safeFormatPercentScaled(details.metrics.med_mean_ape_pct, 1)}
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Pred CV</span>
-                      <span className="font-mono">{details.metrics.med_mean_pred_cv_pct.toFixed(1)}%</span>
+                      <span className="font-mono">
+                        {safeFormatPercentScaled(details.metrics.med_mean_pred_cv_pct, 1)}
+                      </span>
                     </div>
                   </div>
                 </div>
               </div>
-            ) : null}
+            ) : (
+              <div className="p-8 text-center space-y-3">
+                <div className="mx-auto w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+                  <AlertTriangle className="h-6 w-6 text-muted-foreground" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-medium">Data Unavailable</h3>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    No detailed analytics found for this location.
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Actions */}

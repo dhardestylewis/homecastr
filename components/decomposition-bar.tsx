@@ -16,16 +16,27 @@ const COMPONENT_CONFIG = {
   support_term: { label: "Support", color: "bg-[oklch(0.70_0.12_60)]" },
 }
 
+/**
+ * Check if a value is a finite number (not null, undefined, NaN, or Infinity)
+ */
+function isFiniteNumber(value: number | null | undefined): value is number {
+  return value != null && Number.isFinite(value)
+}
+
 export function DecompositionBar({ components }: DecompositionBarProps) {
-  const total = Object.values(components).reduce((sum, v) => sum + v, 0)
-  const average = total / Object.keys(components).length
+  // Filter to only valid (finite) components
+  const validEntries = (Object.entries(components) as [keyof ReliabilityComponents, number | null][])
+    .filter(([_, value]) => isFiniteNumber(value)) as [keyof ReliabilityComponents, number][]
+
+  const total = validEntries.reduce((sum, [_, v]) => sum + v, 0)
+  const average = validEntries.length > 0 ? total / validEntries.length : 0
 
   return (
     <div className="space-y-3">
-      {/* Horizontal stacked bar */}
-      <div className="h-6 rounded-md overflow-hidden flex">
+      {/* Horizontal stacked bar - only show valid components */}
+      <div className="h-6 rounded-md overflow-hidden flex bg-secondary/30">
         <TooltipProvider>
-          {(Object.entries(components) as [keyof ReliabilityComponents, number][]).map(([key, value]) => {
+          {validEntries.map(([key, value]) => {
             const config = COMPONENT_CONFIG[key]
             const widthPercent = (value / 5) * 100 // Each can contribute up to 1, 5 total
 
@@ -47,19 +58,24 @@ export function DecompositionBar({ components }: DecompositionBarProps) {
         </TooltipProvider>
       </div>
 
-      {/* Individual bars */}
+      {/* Individual bars - show all, with N/A for missing */}
       <div className="space-y-1.5">
-        {(Object.entries(components) as [keyof ReliabilityComponents, number][]).map(([key, value]) => {
+        {(Object.entries(components) as [keyof ReliabilityComponents, number | null][]).map(([key, value]) => {
           const config = COMPONENT_CONFIG[key]
+          const isValid = isFiniteNumber(value)
 
           return (
             <div key={key} className="flex items-center gap-2">
               <span className="text-[10px] text-muted-foreground w-20 truncate">{config.label}</span>
               <div className="flex-1 h-1.5 bg-secondary rounded-full overflow-hidden">
-                <div className={cn("h-full rounded-full", config.color)} style={{ width: `${value * 100}%` }} />
+                {isValid ? (
+                  <div className={cn("h-full rounded-full", config.color)} style={{ width: `${value * 100}%` }} />
+                ) : (
+                  <div className="h-full rounded-full bg-muted/50" style={{ width: "0%" }} />
+                )}
               </div>
               <span className="text-[10px] font-mono text-muted-foreground w-8 text-right">
-                {(value * 100).toFixed(0)}%
+                {isValid ? `${(value * 100).toFixed(0)}%` : "N/A"}
               </span>
             </div>
           )

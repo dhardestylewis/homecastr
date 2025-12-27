@@ -1,0 +1,70 @@
+=== Comprehensive Tile Data Audit ===
+
+Timestamp: 2025-12-27T20:29:54.346Z
+Table: h3_precomputed_hex_details
+Forecast Year: 2026
+
+
+=== H3 Resolution 7 ===
+Total records: 705
+Sample size: 200
+
+Field analysis (from sample):
+  ✅ opportunity: valid=100.0%, null=0.0%, NaN=0.0%, zero=0.0%
+  ✅ reliability: valid=100.0%, null=0.0%, NaN=0.0%, zero=0.0%
+  ✅ lat: valid=100.0%, null=0.0%, NaN=0.0%, zero=0.0%
+  ✅ lng: valid=100.0%, null=0.0%, NaN=0.0%, zero=0.0%
+  ✅ property_count: valid=100.0%, null=0.0%, NaN=0.0%, zero=0.0%
+
+=== H3 Resolution 8 ===
+Total records: 3,955
+Sample size: 200
+
+Field analysis (from sample):
+  ✅ opportunity: valid=100.0%, null=0.0%, NaN=0.0%, zero=0.0%
+  ✅ reliability: valid=100.0%, null=0.0%, NaN=0.0%, zero=0.0%
+  ✅ lat: valid=100.0%, null=0.0%, NaN=0.0%, zero=0.0%
+  ✅ lng: valid=100.0%, null=0.0%, NaN=0.0%, zero=0.0%
+  ✅ property_count: valid=100.0%, null=0.0%, NaN=0.0%, zero=0.0%
+
+=== H3 Resolution 9 ===
+Total records: 20,033
+Sample size: 200
+
+Field analysis (from sample):
+  ✅ opportunity: valid=100.0%, null=0.0%, NaN=0.0%, zero=0.0%
+  ✅ reliability: valid=100.0%, null=0.0%, NaN=0.0%, zero=0.0%
+  ✅ lat: valid=100.0%, null=0.0%, NaN=0.0%, zero=0.0%
+  ✅ lng: valid=100.0%, null=0.0%, NaN=0.0%, zero=0.0%
+  ✅ property_count: valid=100.0%, null=0.0%, NaN=0.0%, zero=0.0%
+
+=== H3 Resolution 10 ===
+Total records: 95,746
+Sample size: 200
+
+Field analysis (from sample):
+  ✅ opportunity: valid=100.0%, null=0.0%, NaN=0.0%, zero=0.0%
+  ✅ reliability: valid=100.0%, null=0.0%, NaN=0.0%, zero=0.0%
+  ✅ lat: valid=100.0%, null=0.0%, NaN=0.0%, zero=0.0%
+  ✅ lng: valid=100.0%, null=0.0%, NaN=0.0%, zero=0.0%
+  ✅ property_count: valid=100.0%, null=0.0%, NaN=0.0%, zero=0.0%
+
+=== H3 Resolution 11 ===
+Total records: 428,002
+Sample size: 200
+
+Field analysis (from sample):
+  ✅ opportunity: valid=100.0%, null=0.0%, NaN=0.0%, zero=0.0%
+  ✅ reliability: valid=100.0%, null=0.0%, NaN=0.0%, zero=0.0%
+  ✅ lat: valid=100.0%, null=0.0%, NaN=0.0%, zero=0.0%
+  ✅ lng: valid=100.0%, null=0.0%, NaN=0.0%, zero=0.0%
+  ✅ property_count: valid=100.0%, null=0.0%, NaN=0.0%, zero=0.0%
+
+=== UI Filter Simulation ===
+The map-view.tsx filters out records where:
+  - isNaN(reliability) OR isNaN(opportunity) OR isNaN(lat) OR isNaN(lng) OR !h3_id
+
+  Res 7: 500/500 pass UI filter (0 rejected)
+  Res 8: 500/500 pass UI filter (0 rejected)
+  Res 9: 500/500 pass UI filter (0 rejected)
+  Res 10: 500/500 pass UI filter (0 rejected)

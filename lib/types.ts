@@ -205,6 +205,7 @@ export interface FeatureProperties {
   med_mean_pred_cv_pct: number
   stability_flag: boolean
   robustness_flag: boolean
+  has_data: boolean // New field: true if property_count > 0, false for empty coverage cells
   med_n_years?: number
   med_predicted_value?: number
   med_noi?: number
@@ -220,7 +221,7 @@ export interface DetailsResponse {
   id: string
   locationLabel: string
   opportunity: {
-    value: number
+    value: number | null
     unit: string
     trend?: "up" | "down" | "stable"
   }
@@ -230,37 +231,37 @@ export interface DetailsResponse {
   }
   metrics: {
     n_accts: number
-    med_n_years: number
-    med_mean_ape_pct: number
-    med_mean_pred_cv_pct: number
+    med_n_years: number | null  // v6: not computed
+    med_mean_ape_pct: number | null
+    med_mean_pred_cv_pct: number | null  // v6: not computed
   }
   proforma?: {
-    predicted_value: number
-    noi: number
-    monthly_rent: number
-    dscr: number
-    breakeven_occ: number
-    cap_rate: number
-    liquidity_rank: number
+    predicted_value: number | null
+    noi: number | null
+    monthly_rent: number | null
+    dscr: number | null
+    breakeven_occ: number | null
+    cap_rate: number | null
+    liquidity_rank: number | null  // v6: not computed
   }
   riskScoring?: {
-    R: number
-    tail_gap_z: number
-    medAE_z: number
-    inv_dscr_z: number
+    R: number | null
+    tail_gap_z: number | null  // v6: not stored
+    medAE_z: number | null  // v6: not stored
+    inv_dscr_z: number | null  // v6: not stored
     alert_triggered: boolean
-    score: number
+    score: number | null
   }
   stressTests?: StressTests
   fanChart?: FanChartData
 }
 
 export interface ReliabilityComponents {
-  accuracy_term: number
-  confidence_term: number
-  stability_term: number
-  robustness_term: number
-  support_term: number
+  accuracy_term: number | null
+  confidence_term: number | null
+  stability_term: number | null
+  robustness_term: number | null  // v6: always null
+  support_term: number | null
 }
 
 export interface StressTests {
