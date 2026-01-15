@@ -1,0 +1,14 @@
+=== Checking Confidence Factor columns ===
+
+h3_precomputed_hex_rows columns:
+alert_pct, created_at, forecast_year, h3_id, h3_res, id, lat, lng, opportunity, property_count, reliability, sample_accuracy
+
+h3_precomputed_hex_details columns:
+accuracy_term, alert_pct, ape, breakeven_occ, cap_rate, confidence_term, created_at, current_value, dscr, fan_p10_y1, fan_p10_y2, fan_p10_y3, fan_p10_y4, fan_p10_y5, fan_p50_y1, fan_p50_y2, fan_p50_y3, fan_p50_y4, fan_p50_y5, fan_p90_y1, fan_p90_y2, fan_p90_y3, fan_p90_y4, fan_p90_y5, forecast_year, h3_id, h3_res, hard_fail, id, inv_dscr_z, liquidity, med_years, medae_z, monthly_rent, noi, opportunity, opportunity_pct, pred_cv, predicted_value, property_count, reliability, risk_score, robustness_term, sample_accuracy, score, stability_term, support_term, tail_gap_z, trend
+
+Confidence factor values:
+  accuracy_term: null
+  confidence_term: null
+  stability_term: null
+  robustness_term: null
+  support_term: null

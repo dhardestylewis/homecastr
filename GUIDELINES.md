@@ -69,6 +69,7 @@ Based on competitive research (Zillow shows Zestimate as dollar value only; Redf
 - Avoid σ-notation and technical metrics (hide for homeowner view)
 - Use plain English: "High/Medium/Low" instead of percentages
 - Hide investor-only metrics (DSCR, Cap Rate, Breakeven, Risk Factor)
+- **Note**: Users may have retail investing experience (Robinhood, Kalshi) so some familiarity with basic concepts [Added: 2026-01-14 20:33]
 
 ### Code Practices (UNREVIEWED) [Added: 2026-01-14 20:14]
 
