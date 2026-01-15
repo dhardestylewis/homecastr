@@ -6,7 +6,7 @@ import { cellToBoundary, latLngToCell } from "h3-js"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { cn } from "@/lib/utils"
-import { getOpportunityColor, formatOpportunity, formatReliability } from "@/lib/utils/colors"
+import { getOpportunityColor, getValueColor, formatOpportunity, formatCurrency, formatReliability } from "@/lib/utils/colors"
 import type { FilterState, FeatureProperties, MapState } from "@/lib/types"
 
 // MapView Props Interface
@@ -665,9 +665,12 @@ export function MapView({
 
             // Coverage style (neutral) vs Data style (colored)
             // Neutral: Low opacity gray
-            // Data: Opportunity color
+            // Data: Opportunity color OR Value color
             const fillColor = isDataCell
-                ? getOpportunityColor(properties.O)
+                ? (filters.colorMode === "value" && properties.med_predicted_value !== undefined
+                    ? getValueColor(properties.med_predicted_value)
+                    : getOpportunityColor(properties.O)
+                )
                 : "rgba(128, 128, 128, 0.1)" // Neutral coverage fill
 
             // Draw path
@@ -982,18 +985,31 @@ export function MapView({
                 >
                     {tooltipData.properties.has_data ? (
                         <>
-                            <div className="font-medium text-foreground mb-1">Projected Growth</div>
+                            <div className="font-medium text-foreground mb-1">
+                                {filters.colorMode === "value" ? "Property Value" : "Projected Growth"}
+                            </div>
                             <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                                <span className="text-muted-foreground">CAGR:</span>
-                                <span className={cn("font-mono font-medium", tooltipData.properties.O >= 0 ? "text-primary" : "text-destructive")}>
-                                    {formatOpportunity(tooltipData.properties.O)}
-                                </span>
+                                {filters.colorMode === "value" ? (
+                                    <>
+                                        <span className="text-muted-foreground">Value:</span>
+                                        <span className="font-mono font-medium text-foreground">
+                                            {properties.med_predicted_value ? formatCurrency(properties.med_predicted_value) : "N/A"}
+                                        </span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <span className="text-muted-foreground">CAGR:</span>
+                                        <span className={cn("font-mono font-medium", properties.O >= 0 ? "text-primary" : "text-destructive")}>
+                                            {formatOpportunity(properties.O)}
+                                        </span>
+                                    </>
+                                )}
                                 <span className="text-muted-foreground">Confidence:</span>
-                                <span className="font-mono text-foreground">{formatReliability(tooltipData.properties.R)}</span>
+                                <span className="font-mono text-foreground">{formatReliability(properties.R)}</span>
                                 <span className="text-muted-foreground">Properties:</span>
-                                <span className="text-foreground">{tooltipData.properties.n_accts}</span>
+                                <span className="text-foreground">{properties.n_accts}</span>
                                 <span className="text-muted-foreground">Sample Accuracy:</span>
-                                <span className="text-foreground">{tooltipData.properties.med_mean_ape_pct?.toFixed(1)}%</span>
+                                <span className="text-foreground">{properties.med_mean_ape_pct?.toFixed(1)}%</span>
                             </div>
 
                             {(tooltipData.properties.stability_flag || tooltipData.properties.robustness_flag) && (

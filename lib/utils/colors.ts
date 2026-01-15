@@ -66,13 +66,52 @@ export function getReliabilityBinLabel(value: number): string {
   return "Very High"
 }
 
+
+// Continuous Sequential Color Scale for Property Values ($)
+// Magma-like: Deep Purple -> Red -> Orange -> Yellow
+export function getValueColor(value: number): string {
+  // Domain: 0 to 1.5M (Soft cap)
+  const MIN_VAL = 100_000
+  const MAX_VAL = 1_500_000
+
+  // Normalize t [0, 1]
+  const t = Math.max(0, Math.min(1, (value - MIN_VAL) / (MAX_VAL - MIN_VAL)))
+
+  // Keyframes [Lightness, Chroma, Hue]
+  const START: [number, number, number] = [0.25, 0.10, 280] // Deep Purple
+  const MID: [number, number, number] = [0.60, 0.20, 30]  // Red-Orange
+  const END: [number, number, number] = [0.95, 0.15, 80]  // Yellow
+
+  if (t < 0.5) {
+    // Interpolate Start -> Mid
+    const localT = t * 2
+    return interpolateOkLch(START, MID, localT)
+  } else {
+    // Interpolate Mid -> End
+    const localT = (t - 0.5) * 2
+    return interpolateOkLch(MID, END, localT)
+  }
+}
+
 // Format opportunity value
 export function formatOpportunity(value: number, unit = "% CAGR"): string {
   const sign = value >= 0 ? "+" : ""
   return `${sign}${value.toFixed(1)}${unit}`
 }
 
+// Format currency value
+export function formatCurrency(value: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0,
+    notation: "compact",
+    compactDisplay: "short"
+  }).format(value)
+}
+
 // Format reliability as percentage
 export function formatReliability(value: number): string {
   return `${(value * 100).toFixed(0)}%`
 }
+

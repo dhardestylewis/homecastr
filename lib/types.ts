@@ -297,6 +297,7 @@ export interface FilterState {
   medNYearsMin: number
   showUnderperformers: boolean
   highlightWarnings: boolean
+  colorMode: "growth" | "value"
   layerOverride?: number
   dscrMin?: number
   scoreMin?: number
@@ -322,6 +323,7 @@ export interface QueryParams {
   yMin?: string
   underperf?: string
   warnings?: string
+  mode?: "growth" | "value"
   layer?: string
   lat?: string
   lng?: string

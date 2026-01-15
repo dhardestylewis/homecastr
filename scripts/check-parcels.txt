@@ -1,0 +1,7 @@
+=== Parcels Table Check ===
+
+✓ Found table 'parcels' with columns: acct_key, acct_13, geom, created_at
+  ✓ Has geometry column
+✗ Table 'parcel_boundaries' check failed: 404 Not Found
+✗ Table 'property_boundaries' check failed: 404 Not Found
+✗ Table 'h3_aoi_parcels' check failed: 404 Not Found

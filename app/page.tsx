@@ -140,7 +140,10 @@ function DashboardContent() {
             />
 
             {/* Legend Overlay */}
-            <Legend className="absolute bottom-4 left-4 z-50" />
+            <Legend
+              className="absolute bottom-4 left-4 z-50"
+              colorMode={filters.colorMode}
+            />
 
             {/* Time Controls Overlay */}
             <div className="absolute top-4 right-4 z-50">

@@ -10,6 +10,7 @@ const DEFAULT_FILTERS: FilterState = {
   medNYearsMin: 0,
   showUnderperformers: false,
   highlightWarnings: false,
+  colorMode: "growth",
   layerOverride: undefined,
 }
 
@@ -20,12 +21,14 @@ export function useFilters() {
 
   const [filters, setFiltersState] = useState<FilterState>(() => {
     // Initialize from URL params
+    const modeParam = searchParams.get("mode")
     return {
       reliabilityMin: Number.parseFloat(searchParams.get("rMin") || "0"),
       nAcctsMin: Number.parseInt(searchParams.get("nMin") || "0", 10),
       medNYearsMin: Number.parseFloat(searchParams.get("yMin") || "0"),
       showUnderperformers: searchParams.get("underperf") === "true",
       highlightWarnings: searchParams.get("warnings") !== "false",
+      colorMode: (modeParam === "value" ? "value" : "growth"),
       layerOverride: searchParams.get("layer") ? Number.parseInt(searchParams.get("layer")!, 10) : undefined,
     }
   })
@@ -58,6 +61,10 @@ export function useFilters() {
 
     if (!filters.highlightWarnings) {
       params.set("warnings", "false")
+    }
+
+    if (filters.colorMode !== "growth") {
+      params.set("mode", filters.colorMode)
     }
 
     if (filters.layerOverride !== undefined) {

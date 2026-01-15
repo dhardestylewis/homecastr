@@ -105,6 +105,40 @@ export function FiltersPanel({ filters, onFiltersChange, onReset, isOpen, onTogg
             </div>
           </div>
 
+          {/* Map Color Mode */}
+          <div className="space-y-3 pt-2 border-t border-border/50">
+            <Label className="text-sm font-medium text-sidebar-foreground">Map Color Mode</Label>
+            <div className="grid grid-cols-2 gap-2 p-1 bg-secondary/50 rounded-lg">
+              <button
+                onClick={() => onFiltersChange({ colorMode: "growth" })}
+                className={cn(
+                  "px-2 py-1.5 text-xs font-medium rounded-md transition-all",
+                  filters.colorMode === "growth"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Growth %
+              </button>
+              <button
+                onClick={() => onFiltersChange({ colorMode: "value" })}
+                className={cn(
+                  "px-2 py-1.5 text-xs font-medium rounded-md transition-all",
+                  filters.colorMode === "value"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Prop. Value $
+              </button>
+            </div>
+            <p className="text-[10px] text-muted-foreground">
+              {filters.colorMode === "growth"
+                ? "Colors represent predicted capital appreciation"
+                : "Colors represent raw property values"}
+            </p>
+          </div>
+
           {/* Support Filters */}
           <div className="space-y-4">
             <Label className="text-sm font-medium text-sidebar-foreground">Support Filters</Label>

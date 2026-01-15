@@ -9,36 +9,38 @@ interface LegendProps {
 }
 
 // Continuous legend gradient
-// Continuous legend gradient
 // Purple (Hue 300) -> White (Purple Hue) -> White (Blue Hue) -> Blue (Hue 240)
 const OPPORTUNITY_GRADIENT = "linear-gradient(to right, oklch(0.55 0.22 300), oklch(0.97 0 300) 50%, oklch(0.97 0 240) 50%, oklch(0.55 0.22 240))"
 
-const OPPORTUNITY_LABELS = [
-  "-50%", "0%", "+50%"
-]
+// Magma-like: Deep Purple -> Red -> Orange -> Yellow
+const VALUE_GRADIENT = "linear-gradient(to right, oklch(0.25 0.10 280), oklch(0.60 0.20 30), oklch(0.95 0.15 80))"
 
-const RELIABILITY_BINS = [
-  { label: "Very Low", opacity: "opacity-25" },
-  { label: "Low", opacity: "opacity-45" },
-  { label: "Moderate", opacity: "opacity-65" },
-  { label: "High", opacity: "opacity-85" },
-  { label: "Very High", opacity: "opacity-100" },
-]
+const OPPORTUNITY_LABELS = ["-50%", "0%", "+50%"]
+const VALUE_LABELS = ["$100k", "$800k", "$1.5M+"]
 
-export function Legend({ className }: LegendProps) {
+interface LegendProps {
+  className?: string
+  colorMode?: "growth" | "value"
+}
+
+export function Legend({ className, colorMode = "growth" }: LegendProps) {
   return (
     <div className={cn("glass-panel rounded-lg p-3 space-y-3 text-xs", className)}>
-      {/* Opportunity Color */}
+      {/* Color Scale */}
       <div className="space-y-1.5">
         <div className="flex items-center gap-1.5 text-foreground font-medium">
-          <span>Projected Growth</span>
+          <span>{colorMode === "value" ? "Property Value" : "Projected Growth"}</span>
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
                 <Info className="h-3 w-3 text-muted-foreground cursor-help" />
               </TooltipTrigger>
               <TooltipContent side="right" className="max-w-48">
-                <p>Estimated compound annual growth rate (CAGR).</p>
+                <p>
+                  {colorMode === "value"
+                    ? "Estimated median property value ($)."
+                    : "Estimated compound annual growth rate (CAGR)."}
+                </p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
@@ -46,12 +48,22 @@ export function Legend({ className }: LegendProps) {
         <div className="flex flex-col gap-1">
           <div
             className="h-3 w-full rounded-sm"
-            style={{ background: OPPORTUNITY_GRADIENT }}
+            style={{ background: colorMode === "value" ? VALUE_GRADIENT : OPPORTUNITY_GRADIENT }}
           />
           <div className="flex justify-between text-[9px] text-muted-foreground font-mono px-0.5">
-            <span>{OPPORTUNITY_LABELS[0]}</span>
-            <span>{OPPORTUNITY_LABELS[1]}</span>
-            <span>{OPPORTUNITY_LABELS[2]}</span>
+            {colorMode === "value" ? (
+              <>
+                <span>{VALUE_LABELS[0]}</span>
+                <span>{VALUE_LABELS[1]}</span>
+                <span>{VALUE_LABELS[2]}</span>
+              </>
+            ) : (
+              <>
+                <span>{OPPORTUNITY_LABELS[0]}</span>
+                <span>{OPPORTUNITY_LABELS[1]}</span>
+                <span>{OPPORTUNITY_LABELS[2]}</span>
+              </>
+            )}
           </div>
         </div>
       </div>
