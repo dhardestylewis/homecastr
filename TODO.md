@@ -12,6 +12,7 @@
 - [x] **Reliability filter broken**: Now works (data exists in hex_rows)
 - [x] **Med Years filter broken**: Hidden (no column exists in DB)
 - [ ] **Zoom/cell loading issue**: Only cells on right side load at some zoom levels
+- [ ] **Timelapse rendering slow**: Consider MVT tiles, WebGL (Deck.gl), or pre-caching all years
 
 ### P2 - Feature Gaps
 - [ ] **Fan chart missing**: Investigate if DB has fan chart columns populated

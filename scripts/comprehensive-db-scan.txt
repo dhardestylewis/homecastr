@@ -1,0 +1,111 @@
+=== COMPREHENSIVE DB SCAN ===
+Timestamp: 2026-01-15T01:42:50.944Z
+
+
+============================================================
+TABLE: h3_aoi_grid
+============================================================
+Columns (6): aoi_id, geom, h3_id, h3_res, lat, lng
+
+Sample values:
+  aoi_id: "harris_county"
+  geom: {"type":"Polygon","crs":{"type":"name","properties":{"name":"EPSG:4326"}},"coord
+  h3_id: "8b446ca1e4acfff"
+  h3_res: 11
+  lat: 29.6765894880583
+  lng: -95.5028140807621
+
+============================================================
+TABLE: h3_precomputed_hex_details
+============================================================
+Columns (49): accuracy_term, alert_pct, ape, breakeven_occ, cap_rate, confidence_term, created_at, current_value, dscr, fan_p10_y1, fan_p10_y2, fan_p10_y3, fan_p10_y4, fan_p10_y5, fan_p50_y1, fan_p50_y2, fan_p50_y3, fan_p50_y4, fan_p50_y5, fan_p90_y1, fan_p90_y2, fan_p90_y3, fan_p90_y4, fan_p90_y5, forecast_year, h3_id, h3_res, hard_fail, id, inv_dscr_z, liquidity, med_years, medae_z, monthly_rent, noi, opportunity, opportunity_pct, pred_cv, predicted_value, property_count, reliability, risk_score, robustness_term, sample_accuracy, score, stability_term, support_term, tail_gap_z, trend
+
+Sample values:
+  accuracy_term: NULL
+  alert_pct: 0
+  ape: NULL
+  breakeven_occ: NULL
+  cap_rate: NULL
+  confidence_term: NULL
+  created_at: "2025-12-28T02:14:24.200607+00:00"
+  current_value: NULL
+  dscr: NULL
+  fan_p10_y1: NULL
+  fan_p10_y2: NULL
+  fan_p10_y3: NULL
+  fan_p10_y4: NULL
+  fan_p10_y5: NULL
+  fan_p50_y1: NULL
+  fan_p50_y2: NULL
+  fan_p50_y3: NULL
+  fan_p50_y4: NULL
+  fan_p50_y5: NULL
+  fan_p90_y1: NULL
+  fan_p90_y2: NULL
+  fan_p90_y3: NULL
+  fan_p90_y4: NULL
+  fan_p90_y5: NULL
+  forecast_year: 2025
+  h3_id: "8b446cac6995fff"
+  h3_res: 11
+  hard_fail: "f"
+  id: 3729633
+  inv_dscr_z: NULL
+  liquidity: NULL
+  med_years: NULL
+  medae_z: NULL
+  monthly_rent: NULL
+  noi: 267857.525
+  opportunity: 0
+  opportunity_pct: 0
+  pred_cv: NULL
+  predicted_value: 4120885
+  property_count: 1
+  reliability: 1
+  risk_score: NULL
+  robustness_term: NULL
+  sample_accuracy: 1
+  score: 5
+  stability_term: NULL
+  support_term: NULL
+  tail_gap_z: NULL
+  trend: "stable"
+
+============================================================
+TABLE: h3_precomputed_hex_rows
+============================================================
+Columns (12): alert_pct, created_at, forecast_year, h3_id, h3_res, id, lat, lng, opportunity, property_count, reliability, sample_accuracy
+
+Sample values:
+  alert_pct: 0
+  created_at: "2025-12-27T20:05:47.008119+00:00"
+  forecast_year: 2026
+  h3_id: "88446dda5dfffff"
+  h3_res: 8
+  id: 8121043
+  lat: 29.8325836490571
+  lng: -95.7380806000942
+  opportunity: -0.0073653240911174
+  property_count: 270
+  reliability: 0.912892637412725
+  sample_accuracy: 0.228908506049363
+
+============================================================
+TABLE: parcels
+============================================================
+Columns (4): acct_13, acct_key, created_at, geom
+
+Sample values:
+  acct_13: "0401830000019"
+  acct_key: 401830000019
+  created_at: "2025-12-26T03:14:24.546002+00:00"
+  geom: {"type":"MultiPolygon","crs":{"type":"name","properties":{"name":"EPSG:4326"}},"
+
+
+============================================================
+SUMMARY: Found 4 accessible tables
+============================================================
+- h3_aoi_grid (6 columns)
+- h3_precomputed_hex_details (49 columns)
+- h3_precomputed_hex_rows (12 columns)
+- parcels (4 columns)
