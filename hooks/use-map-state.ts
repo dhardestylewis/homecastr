@@ -29,6 +29,8 @@ export function useMapState() {
   const prevSelectedIdRef = useRef<string | null>(mapState.selectedId)
 
   useEffect(() => {
+    if (typeof window === "undefined") return
+
     // Only update URL if selectedId actually changed
     if (prevSelectedIdRef.current === mapState.selectedId) return
     prevSelectedIdRef.current = mapState.selectedId
@@ -42,12 +44,9 @@ export function useMapState() {
     router.replace(`?${params.toString()}`, { scroll: false })
   }, [mapState.selectedId, router])
 
-  const setMapState = useCallback(
-    (updates: Partial<MapState>) => {
-      setMapStateInternal((prev) => ({ ...prev, ...updates }))
-    },
-    [],
-  )
+  const setMapState = useCallback((updates: Partial<MapState>) => {
+    setMapStateInternal((prev) => ({ ...prev, ...updates }))
+  }, [])
 
   const selectFeature = useCallback(
     (id: string | null) => {

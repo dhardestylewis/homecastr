@@ -528,6 +528,8 @@ export function MapView({
 
   // DPR-size the hex canvas (match basemap canvas)
   useEffect(() => {
+    if (typeof window === "undefined") return
+
     const canvas = hexCanvasRef.current
     if (!canvas) return
 
