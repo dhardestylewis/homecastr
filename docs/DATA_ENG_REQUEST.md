@@ -138,12 +138,54 @@ This looks like placeholder/test data. Please verify and correct if needed.
 
 ---
 
+
+---
+
+## 🔍 Code Diagnosis (from Pipeline v14.4)
+
+### 1. Fan Chart (Prediction Intervals)
+**Issue**: The pipeline explicitly fills these with NaNs.
+**Location**: `process_historical_and_forecast` function
+```python
+# Lines ~398-400 in script
+for i in range(1, Config.FAN_CHART_HORIZON + 1):
+    for p in ["p10", "p50", "p90"]:
+        metrics[f"fan_{p}_y{i}"] = np.nan  # <--- Explicitly checking empty
+```
+**Fix Required**: Implement quantile aggregation logic in the `metrics` grouping step.
+
+### 2. Confidence Factors & Value Spread
+**Issue**: Columns exist in schema but are **not computed** in `compute_property_level_metrics` or `aggs`.
+**Missing Logic**:
+- `accuracy_term`, `confidence_term`, `stability_term`, `robustness_term`, `support_term`
+- `pred_cv`, `liquidity`, `ape`
+**Status**: Added to `staging_cols` but values never populated (stay NaN).
+
+### 3. Current vs Predicted Value Confusion
+**Issue**: For historical years, the pipeline **renames** actuals to predicted:
+```python
+# Phase 2 setup
+hist_subset = hist_subset.rename(columns={'actual_value': 'predicted_value'})
+```
+**Result**: Historical rows have `predicted_value` populated with actuals, but `current_value` is explicitly set to `np.nan` for historical years:
+```python
+if is_historical:
+    if "current_value" not in metrics.columns: metrics["current_value"] = np.nan
+```
+**Fix Required**: 
+1. Do not rename `actual_value` -> `predicted_value` for history, OR 
+2. Populate `current_value` with the actuals before renaming.
+
+### 4. 2026+ Anomaly
+**Suspected Source**: The pipeline reads directly from `production_forecast_...parquet`. If the input parquet contains flat $20M values, the pipeline passes them through.
+**Action**: Check the upstream parquet generation (ML model inference).
+
+---
+
 ## Summary Checklist
 
-- [ ] Populate fan chart columns (15 columns)
-- [ ] Populate `current_value` or add actual values
-- [ ] Populate confidence factor columns (5 columns)
-- [ ] Populate `pred_cv`, `ape`, `medae_z`
-- [ ] Populate `med_years`
-- [ ] Resolve hex_details vs hex_rows data consistency
-- [ ] Fix 2026+ value anomaly
+- [ ] **PIPELINE**: Implement Fan Chart logic (quantile aggregation)
+- [ ] **PIPELINE**: Implement Confidence Terms calculation
+- [ ] **PIPELINE**: Fix Historical Data mapping (`actual_value` -> `current_value`)
+- [ ] **MODEL**: Investigate 2026+ forecast values in parquet
+
