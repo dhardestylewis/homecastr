@@ -249,6 +249,26 @@ export function InspectorDrawer({ selectedId, onClose, year = 2026, className }:
 
                 <Separator />
 
+                {/* Predicted Value - Keep visible for homeowners */}
+                {details.proforma?.predicted_value && (
+                  <>
+                    <div className="space-y-2">
+                      <div className="bg-secondary/30 rounded-lg p-3">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-muted-foreground">Predicted Value ({year})</span>
+                          <span className="font-mono font-semibold text-primary text-lg">
+                            {safeFormatCurrency(details.proforma.predicted_value)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <Separator />
+                  </>
+                )}
+
+                {/* HIDDEN: Proforma section - Investor metrics hidden for homeowner-focused view
+                    Kept in code per user request (not removed). Contains:
+                    - NOI, Monthly Rent, DSCR, Cap Rate, Breakeven, Liquidity
                 {details.proforma && (
                   <>
                     <div className="space-y-2">
@@ -257,12 +277,6 @@ export function InspectorDrawer({ selectedId, onClose, year = 2026, className }:
                         Proforma
                       </h3>
                       <div className="bg-secondary/30 rounded-lg p-3 space-y-2">
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-muted-foreground">Predicted Value ({year})</span>
-                          <span className="font-mono font-semibold text-primary">
-                            {safeFormatCurrency(details.proforma.predicted_value)}
-                          </span>
-                        </div>
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-muted-foreground">NOI</span>
                           <span className="font-mono">{safeFormatCurrency(details.proforma.noi)}</span>
@@ -275,49 +289,19 @@ export function InspectorDrawer({ selectedId, onClose, year = 2026, className }:
                         <div className="grid grid-cols-2 gap-2 text-sm">
                           <div className="flex justify-between">
                             <span className="text-muted-foreground">DSCR</span>
-                            <span
-                              className={cn(
-                                "font-mono font-medium",
-                                isFiniteNumber(details.proforma.dscr)
-                                  ? details.proforma.dscr >= 1.25
-                                    ? "text-green-500"
-                                    : details.proforma.dscr >= 1.05
-                                      ? "text-warning"
-                                      : "text-destructive"
-                                  : "text-muted-foreground",
-                              )}
-                            >
-                              {safeFormatFixed(details.proforma.dscr, 2, "x")}
-                            </span>
+                            <span className="font-mono">{safeFormatFixed(details.proforma.dscr, 2, "x")}</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-muted-foreground">Cap Rate</span>
-                            <span className="font-mono">
-                              {safeFormatPercent(details.proforma.cap_rate, 1)}
-                            </span>
+                            <span className="font-mono">{safeFormatPercent(details.proforma.cap_rate, 1)}</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-muted-foreground">Breakeven</span>
-                            <span
-                              className={cn(
-                                "font-mono",
-                                isFiniteNumber(details.proforma.breakeven_occ)
-                                  ? details.proforma.breakeven_occ <= 0.85
-                                    ? "text-green-500"
-                                    : details.proforma.breakeven_occ <= 0.92
-                                      ? "text-warning"
-                                      : "text-destructive"
-                                  : "text-muted-foreground",
-                              )}
-                            >
-                              {safeFormatPercent(details.proforma.breakeven_occ, 0)}
-                            </span>
+                            <span className="font-mono">{safeFormatPercent(details.proforma.breakeven_occ, 0)}</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-muted-foreground">Liquidity</span>
-                            <span className="font-mono">
-                              {safeFormatPercentScaled(details.proforma.liquidity_rank, 0)}
-                            </span>
+                            <span className="font-mono">{safeFormatPercentScaled(details.proforma.liquidity_rank, 0)}</span>
                           </div>
                         </div>
                       </div>
@@ -325,6 +309,7 @@ export function InspectorDrawer({ selectedId, onClose, year = 2026, className }:
                     <Separator />
                   </>
                 )}
+                */}
 
                 {/* HIDDEN: Risk Scoring section - Technical metrics hidden for homeowner-focused view
                     Kept in code per user request (not removed). Contains:
