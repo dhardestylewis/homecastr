@@ -1,0 +1,118 @@
+=== FAN CHART COLUMN ANALYSIS ===
+
+Expected columns in h3_precomputed_hex_details:
+  - fan_p10_y1
+  - fan_p10_y2
+  - fan_p10_y3
+  - fan_p10_y4
+  - fan_p10_y5
+  - fan_p50_y1
+  - fan_p50_y2
+  - fan_p50_y3
+  - fan_p50_y4
+  - fan_p50_y5
+  - fan_p90_y1
+  - fan_p90_y2
+  - fan_p90_y3
+  - fan_p90_y4
+  - fan_p90_y5
+
+Sample rows (5):
+--------------------------------------------------------------------------------
+h3_id: 8b446cac6995fff, year: 2025
+  predicted_value: 4120885
+  Fan chart values:
+    fan_p10_y1: NULL
+    fan_p10_y2: NULL
+    fan_p10_y3: NULL
+    fan_p10_y4: NULL
+    fan_p10_y5: NULL
+    fan_p50_y1: NULL
+    fan_p50_y2: NULL
+    fan_p50_y3: NULL
+    fan_p50_y4: NULL
+    fan_p50_y5: NULL
+    fan_p90_y1: NULL
+    fan_p90_y2: NULL
+    fan_p90_y3: NULL
+    fan_p90_y4: NULL
+    fan_p90_y5: NULL
+
+h3_id: 8b446cac6998fff, year: 2025
+  predicted_value: 1897533
+  Fan chart values:
+    fan_p10_y1: NULL
+    fan_p10_y2: NULL
+    fan_p10_y3: NULL
+    fan_p10_y4: NULL
+    fan_p10_y5: NULL
+    fan_p50_y1: NULL
+    fan_p50_y2: NULL
+    fan_p50_y3: NULL
+    fan_p50_y4: NULL
+    fan_p50_y5: NULL
+    fan_p90_y1: NULL
+    fan_p90_y2: NULL
+    fan_p90_y3: NULL
+    fan_p90_y4: NULL
+    fan_p90_y5: NULL
+
+h3_id: 8b446cac699afff, year: 2025
+  predicted_value: 2283882
+  Fan chart values:
+    fan_p10_y1: NULL
+    fan_p10_y2: NULL
+    fan_p10_y3: NULL
+    fan_p10_y4: NULL
+    fan_p10_y5: NULL
+    fan_p50_y1: NULL
+    fan_p50_y2: NULL
+    fan_p50_y3: NULL
+    fan_p50_y4: NULL
+    fan_p50_y5: NULL
+    fan_p90_y1: NULL
+    fan_p90_y2: NULL
+    fan_p90_y3: NULL
+    fan_p90_y4: NULL
+    fan_p90_y5: NULL
+
+h3_id: 8b446cac699bfff, year: 2025
+  predicted_value: 1606122
+  Fan chart values:
+    fan_p10_y1: NULL
+    fan_p10_y2: NULL
+    fan_p10_y3: NULL
+    fan_p10_y4: NULL
+    fan_p10_y5: NULL
+    fan_p50_y1: NULL
+    fan_p50_y2: NULL
+    fan_p50_y3: NULL
+    fan_p50_y4: NULL
+    fan_p50_y5: NULL
+    fan_p90_y1: NULL
+    fan_p90_y2: NULL
+    fan_p90_y3: NULL
+    fan_p90_y4: NULL
+    fan_p90_y5: NULL
+
+h3_id: 8b446cac699cfff, year: 2025
+  predicted_value: 1799678.5
+  Fan chart values:
+    fan_p10_y1: NULL
+    fan_p10_y2: NULL
+    fan_p10_y3: NULL
+    fan_p10_y4: NULL
+    fan_p10_y5: NULL
+    fan_p50_y1: NULL
+    fan_p50_y2: NULL
+    fan_p50_y3: NULL
+    fan_p50_y4: NULL
+    fan_p50_y5: NULL
+    fan_p90_y1: NULL
+    fan_p90_y2: NULL
+    fan_p90_y3: NULL
+    fan_p90_y4: NULL
+    fan_p90_y5: NULL
+
+--------------------------------------------------------------------------------
+Rows with non-null fan_p50_y1: NONE
