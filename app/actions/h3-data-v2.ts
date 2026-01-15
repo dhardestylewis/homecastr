@@ -88,6 +88,7 @@ export async function getH3DataV2(
 
     for (const idChunk of chunks) {
         // Primary source: hex_rows (has reliable data)
+        // Use .range() to override Supabase default 1000 limit
         const { data: rowsData, error: rowsError } = await supabase
             .from("h3_precomputed_hex_rows")
             .select(
@@ -96,6 +97,7 @@ export async function getH3DataV2(
             .eq("forecast_year", year)
             .eq("h3_res", res)
             .in("h3_id", idChunk)
+            .range(0, 999)  // Explicit range - chunk is 500 so this is safe
 
         if (rowsError) {
             console.error("[DBG] hex_rows chunk error", rowsError)
@@ -111,6 +113,7 @@ export async function getH3DataV2(
             .eq("forecast_year", year)
             .eq("h3_res", res)
             .in("h3_id", idChunk)
+            .range(0, 999)  // Explicit range
 
         if (!detailsError && detailsData) details_all.push(...detailsData)
     }

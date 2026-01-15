@@ -1,0 +1,8 @@
+=== Grid Cell Counts by Resolution ===
+
+Resolution 6: */0
+Resolution 7: 0-0/705
+Resolution 8: 0-0/3955
+Resolution 9: 0-0/20033
+Resolution 10: 0-0/95746
+Resolution 11: 0-0/428002
