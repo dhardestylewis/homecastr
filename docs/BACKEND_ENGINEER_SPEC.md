@@ -1,4 +1,4 @@
-# Backend Engineer Specification: Minimal map Data Contract
+# Backend Engineer Specification: Unified Map Data Contract
 
 **Status**: READY FOR IMPLEMENTATION  
 **Date**: 2026-01-15  
@@ -9,9 +9,9 @@ The frontend requires a unified, optimized schema to reduce payload size and que
 
 **Key Requirements**:
 1.  **Create New Schema**: `h3_unified_forecasts` (Partitioned by year).
-2.  **Backfill Data**: Populate from existing sources.
-3.  **Update View**: Create `view_h3_frontend_api` to handle derived logic.
-4.  **Optimizations**: Use `REAL` (Float4) and Arrays for time-series.
+2.  **Create View**: `view_h3_frontend_api` to handle derived logic.
+3.  **Backfill & Populate**: Fill missing data (Fan Charts, Historicals) using specific logic defined in Section 4.
+4.  **Infrastructure**: deploy required RPCs defined in Section 5.
 
 ---
 
@@ -132,7 +132,7 @@ JOIN h3_aoi_grid g ON f.h3_id = g.h3_id AND f.h3_res = g.h3_res;
 Execute the SQL above to create the table partitions (you will need to create partitions for 2020-2030) and the view.
 
 ### Step 2: Backfill Data
-Use the following pattern to populate the new table from the old `h3_precomputed_hex_details` table.
+Use the following pattern to populate the new table from the old `h3_precomputed_hex_details`. Note that you will need to compute/extract the array values as detailed in Section 4.
 
 ```sql
 INSERT INTO h3_unified_forecasts (
@@ -151,7 +151,7 @@ SELECT
     risk_score, score, (hard_fail = 't'), alert_pct, med_years,
     tail_gap_z, medae_z, inv_dscr_z,
     accuracy_term, confidence_term, stability_term, robustness_term, support_term,
-    -- Construct Arrays
+    -- Construct Arrays from legacy columns if available, otherwise NULL
     ARRAY[fan_p10_y1, fan_p10_y2, fan_p10_y3, fan_p10_y4, fan_p10_y5],
     ARRAY[fan_p50_y1, fan_p50_y2, fan_p50_y3, fan_p50_y4, fan_p50_y5],
     ARRAY[fan_p90_y1, fan_p90_y2, fan_p90_y3, fan_p90_y4, fan_p90_y5]
@@ -159,7 +159,55 @@ FROM h3_precomputed_hex_details
 WHERE forecast_year BETWEEN 2026 AND 2030; -- Process in batches
 ```
 
-### Step 3: Frontend Queries
-Ensure your new `View` supports the following exact query patterns used by the frontend:
-1.  **Viewport Fetch**: `SELECT ... FROM view_h3_frontend_api WHERE lat BETWEEN x AND y ...`
-2.  **ID Lookup**: `SELECT * FROM view_h3_frontend_api WHERE h3_id = '...'`
+---
+
+## 4. Pipeline & Data Population Requirements
+
+The following data is currently MISSING or BROKEN in the source tables and must be fixed during the population of `h3_unified_forecasts`.
+
+### A. Fan Chart (Prediction Intervals)
+**Requirement**: Populate `fan_p10`, `fan_p50`, `fan_p90` arrays.
+*   **Source**: Quantile regression or Monte Carlo simulation from the ML pipeline.
+*   **Logic**:
+    *   `fan_p10`: 10th percentile (pessimistic)
+    *   `fan_p50`: Median (expected)
+    *   `fan_p90`: 90th percentile (optimistic)
+*   **Current Issue**: Pipeline explicitly fills these with `NaN`. This must be implemented.
+
+### B. Historical Data (2019-2025)
+**Requirement**: Populate `h3_unified_forecasts` for historical years (2020, 2021, etc.).
+*   **Predicted Value**: For history, `predicted_value` should store the **Actual/Assessed Value** (median of the hex).
+*   **Current Issue**: Historical rows are missing entirely or have NULL `med_predicted_value`, causing the map to be blank in historical mode.
+*   **Action**: Ensure historical actuals are mapped to `predicted_value` in this schema.
+
+### C. Reliability Components
+**Requirement**: Populate decomposition terms.
+*   `accuracy_term`, `confidence_term`, `stability_term`, `robustness_term`, `support_term`.
+*   These are currently NULL in source tables but required for the "Confidence Breakdown" UI.
+
+---
+
+## 5. Infrastructure Requirements (RPCs)
+
+### A. Parcel Geometry RPC
+**Blocker**: Frontend cannot fetch lot lines for Max Zoom level.
+**Action**: Create the following RPC function in Supabase.
+
+```sql
+create or replace function get_parcels_in_bounds(min_lat float, min_lng float, max_lat float, max_lng float)
+returns table (
+  acct_key text,
+  geom geometry
+)
+language plpgsql
+as $$
+begin
+  return query
+  select p.acct_key, p.geom
+  from parcels p
+  -- Spatial index usage is critical here
+  where p.geom && ST_MakeEnvelope(min_lng, min_lat, max_lng, max_lat, 4326)
+  limit 2000;
+end;
+$$;
+```
