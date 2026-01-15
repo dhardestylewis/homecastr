@@ -1,0 +1,56 @@
+=== Checking for Actual Values and Residual Error Data ===
+
+Sample rows from hex_details:
+--------------------------------------------------------------------------------
+H3: 8b446cac6995fff, Year: 2025
+  current_value: NULL
+  predicted_value: 4120885
+  ape: NULL
+  sample_accuracy: 1
+  pred_cv: NULL
+  medae_z: NULL
+  tail_gap_z: NULL
+
+H3: 8b446cac6998fff, Year: 2025
+  current_value: NULL
+  predicted_value: 1897533
+  ape: NULL
+  sample_accuracy: 1
+  pred_cv: NULL
+  medae_z: NULL
+  tail_gap_z: NULL
+
+H3: 8b446cac699afff, Year: 2025
+  current_value: NULL
+  predicted_value: 2283882
+  ape: NULL
+  sample_accuracy: 1
+  pred_cv: NULL
+  medae_z: NULL
+  tail_gap_z: NULL
+
+H3: 8b446cac699bfff, Year: 2025
+  current_value: NULL
+  predicted_value: 1606122
+  ape: NULL
+  sample_accuracy: 1
+  pred_cv: NULL
+  medae_z: NULL
+  tail_gap_z: NULL
+
+H3: 8b446cac699cfff, Year: 2025
+  current_value: NULL
+  predicted_value: 1799678.5
+  ape: NULL
+  sample_accuracy: 1
+  pred_cv: NULL
+  medae_z: NULL
+  tail_gap_z: NULL
+
+
+=== Checking for potential actuals tables ===
+✗ h3_actuals: not found
+✗ property_actuals: not found
+✗ assessment_values: not found
+✗ actual_values: not found
+✗ market_values: not found
