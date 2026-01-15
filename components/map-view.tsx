@@ -309,6 +309,8 @@ export function MapView({
     const [filteredHexes, setFilteredHexes] = useState<HexagonData[]>([])
     const [realHexData, setRealHexData] = useState<Array<any>>([])
     const [isLoadingData, setIsLoadingData] = useState(false)
+    const [parcels, setParcels] = useState<Array<any>>([])
+    const [isParcelsLoading, setIsParcelsLoading] = useState(false)
 
 
     const basemapZoom = useMemo(() => getContinuousBasemapZoom(transform.scale), [transform.scale])
@@ -441,6 +443,41 @@ export function MapView({
             }
         }
     }, [transform.scale, transform.offsetX, transform.offsetY, filters.layerOverride, year, canvasSize.width, canvasSize.height, basemapCenter])
+
+    useEffect(() => {
+        // Threshold: Zoom > 14 (approx scale < 4000)
+        // Adjust threshold as needed. mapState.zoom is reliable.
+        const ZOOM_THRESHOLD = 14.5
+
+        if (mapState.zoom < ZOOM_THRESHOLD) {
+            setParcels([])
+            return
+        }
+
+        const bounds = getViewportBoundsAccurate(
+            canvasSize.width,
+            canvasSize.height,
+            transform,
+            basemapCenter
+        )
+
+        // Debounce parcel fetch
+        const timeoutId = setTimeout(async () => {
+            setIsParcelsLoading(true)
+            try {
+                const { getParcels } = await import("@/app/actions/parcels")
+                const data = await getParcels(bounds)
+                setParcels(data)
+            } catch (e) {
+                console.error("Failed to fetch parcels", e)
+            } finally {
+                setIsParcelsLoading(false)
+            }
+        }, 800)
+
+        return () => clearTimeout(timeoutId)
+
+    }, [mapState.zoom, mapState.center, transform, canvasSize, basemapCenter])
 
     // Throttled vertex computation using requestAnimationFrame
     const vertexComputeRef = useRef<number | null>(null)
@@ -993,23 +1030,23 @@ export function MapView({
                                     <>
                                         <span className="text-muted-foreground">Value:</span>
                                         <span className="font-mono font-medium text-foreground">
-                                            {properties.med_predicted_value ? formatCurrency(properties.med_predicted_value) : "N/A"}
+                                            {tooltipData.properties.med_predicted_value ? formatCurrency(tooltipData.properties.med_predicted_value) : "N/A"}
                                         </span>
                                     </>
                                 ) : (
                                     <>
                                         <span className="text-muted-foreground">CAGR:</span>
-                                        <span className={cn("font-mono font-medium", properties.O >= 0 ? "text-primary" : "text-destructive")}>
-                                            {formatOpportunity(properties.O)}
+                                        <span className={cn("font-mono font-medium", tooltipData.properties.O >= 0 ? "text-primary" : "text-destructive")}>
+                                            {formatOpportunity(tooltipData.properties.O)}
                                         </span>
                                     </>
                                 )}
                                 <span className="text-muted-foreground">Confidence:</span>
-                                <span className="font-mono text-foreground">{formatReliability(properties.R)}</span>
+                                <span className="font-mono text-foreground">{formatReliability(tooltipData.properties.R)}</span>
                                 <span className="text-muted-foreground">Properties:</span>
-                                <span className="text-foreground">{properties.n_accts}</span>
+                                <span className="text-foreground">{tooltipData.properties.n_accts}</span>
                                 <span className="text-muted-foreground">Sample Accuracy:</span>
-                                <span className="text-foreground">{properties.med_mean_ape_pct?.toFixed(1)}%</span>
+                                <span className="text-foreground">{tooltipData.properties.med_mean_ape_pct?.toFixed(1)}%</span>
                             </div>
 
                             {(tooltipData.properties.stability_flag || tooltipData.properties.robustness_flag) && (

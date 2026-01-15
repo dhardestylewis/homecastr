@@ -23,9 +23,9 @@
 - [x] **Hide Risk Scoring section**: σ-notation metrics hidden for homeowner view
 - [x] **Data Confidence tier labels**: Shows High/Medium/Low/N/A instead of %
 - [ ] **Sample accuracy terminology**: Is this accuracy (higher=better) or error (lower=better)? Rename for clarity
-- [ ] **Historical year colors**: Add color mode for raw dollar values
+- [x] **Historical year colors**: Add color mode for raw dollar values
 - [ ] **Auto-scaling min accounts by zoom**: Consider adjusting threshold based on H3 resolution
-- [ ] **Property lot lines at max zoom**: Use parcel geometries instead of H3 hexes at innermost zoom (requires parcel data in DB)
+- [x] **Property lot lines at max zoom**: Implemented logic (requires `get_parcels_in_bounds` RPC to function)
 - [ ] **Label aggregated metrics**: At outer zoom levels, clarify that metrics are aggregated across properties in hex
 - [x] **Address search autocomplete**: Show suggestions dropdown (limited to Harris County)
 
