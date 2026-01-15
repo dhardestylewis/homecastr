@@ -657,7 +657,8 @@ export function MapView({
             const passesFilters =
                 properties.R >= filters.reliabilityMin &&
                 properties.n_accts >= filters.nAcctsMin &&
-                (filters.showUnderperformers || properties.O >= 0)
+                (filters.showUnderperformers || properties.O >= 0) &&
+                (filters.medNYearsMin === 0 || (properties.med_n_years ?? 0) >= filters.medNYearsMin)
 
             const isDataCell = properties.has_data && passesFilters
 
@@ -681,12 +682,17 @@ export function MapView({
             ctx.fillStyle = fillColor
             ctx.fill()
 
-            // Stroke (Continuous lattice)
-            // Coverage cells get a subtle stroke, Data cells get same or none?
-            // "Render a visible outline for the cell boundary at all zoom levels"
-            ctx.globalAlpha = 0.2
-            ctx.strokeStyle = "#888888" // Neutral stroke
-            ctx.lineWidth = 1
+            // Stroke - highlight warnings with amber border if enabled
+            const hasWarning = properties.stability_flag || properties.robustness_flag
+            if (filters.highlightWarnings && isDataCell && hasWarning) {
+                ctx.globalAlpha = 0.8
+                ctx.strokeStyle = "#f59e0b" // Amber warning color
+                ctx.lineWidth = 2
+            } else {
+                ctx.globalAlpha = 0.2
+                ctx.strokeStyle = "#888888" // Neutral stroke
+                ctx.lineWidth = 1
+            }
             ctx.stroke()
 
             ctx.globalAlpha = 1

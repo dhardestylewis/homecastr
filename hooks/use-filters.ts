@@ -9,7 +9,7 @@ const DEFAULT_FILTERS: FilterState = {
   nAcctsMin: 0,
   medNYearsMin: 0,
   showUnderperformers: false,
-  highlightWarnings: true,
+  highlightWarnings: false,
   layerOverride: undefined,
 }
 

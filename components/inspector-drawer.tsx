@@ -227,13 +227,14 @@ export function InspectorDrawer({ selectedId, onClose, year = 2026, className }:
                     <div className="text-xs text-muted-foreground mb-1">Data Confidence</div>
                     <div className="flex items-baseline gap-1">
                       <span className="text-2xl font-bold">
-                        {isFiniteNumber(details.reliability.value)
-                          ? (details.reliability.value * 100).toFixed(0)
-                          : "N/A"}
+                        {!isFiniteNumber(details.reliability.value) || details.reliability.value === 0
+                          ? "N/A"
+                          : details.reliability.value >= 0.7
+                            ? "High"
+                            : details.reliability.value >= 0.4
+                              ? "Medium"
+                              : "Low"}
                       </span>
-                      {isFiniteNumber(details.reliability.value) && (
-                        <span className="text-sm text-muted-foreground">%</span>
-                      )}
                     </div>
                   </div>
                 </div>
@@ -325,7 +326,12 @@ export function InspectorDrawer({ selectedId, onClose, year = 2026, className }:
                   </>
                 )}
 
-                {details.riskScoring && (
+                {/* HIDDEN: Risk Scoring section - Technical metrics hidden for homeowner-focused view
+                    Kept in code per user request (not removed). Contains:
+                    - Investment Score (10.0/10 format)
+                    - Risk Factor, Price Deviation (σ), Prediction Error (σ), Debt Stress (σ)
+                */}
+                {false && details.riskScoring && (
                   <>
                     <div className="space-y-2">
                       <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
