@@ -16,6 +16,7 @@
 ### P2 - Feature Gaps
 - [ ] **Fan chart missing**: Investigate if DB has fan chart columns populated
 - [ ] **Predicted value alongside current value**: Add current value display
+- [ ] **Natural boundary aggregation**: Consider using lot lines + organic aggregates (blocks, neighborhoods, school districts, zip codes) instead of H3 hexes - more intuitive for users
 
 ### P3 - UX Improvements
 - [x] **Hide Risk Scoring section**: σ-notation metrics hidden for homeowner view
