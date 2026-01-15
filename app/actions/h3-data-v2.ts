@@ -123,22 +123,21 @@ export async function getH3DataV2(
     const detailsMap = new Map(details_all.map((d: any) => [d.h3_id, d]));
 
     return (grid_rows ?? []).map((g: any) => {
-        // Prefer hex_details (new schema being populated), fallback to hex_rows (legacy)
+        // Field-level merge: prefer hex_details value if non-null, fallback to hex_rows
         const detail = detailsMap.get(g.h3_id);
         const row = rowsMap.get(g.h3_id);
-        const d = detail ?? row;  // Prefer detail, fallback to row
 
         return {
             h3_id: g.h3_id,
             lat: g.lat,
             lng: g.lng,
-            opportunity: d?.opportunity ?? null,
-            reliability: d?.reliability ?? null,
-            property_count: d?.property_count ?? 0,
-            sample_accuracy: d?.sample_accuracy ?? null,
-            alert_pct: d?.alert_pct ?? null,
-            med_years: d?.med_years ?? null,
-            has_data: !!d
+            opportunity: detail?.opportunity ?? row?.opportunity ?? null,
+            reliability: detail?.reliability ?? row?.reliability ?? null,
+            property_count: detail?.property_count ?? row?.property_count ?? 0,
+            sample_accuracy: detail?.sample_accuracy ?? row?.sample_accuracy ?? null,
+            alert_pct: detail?.alert_pct ?? row?.alert_pct ?? null,
+            med_years: detail?.med_years ?? row?.med_years ?? null,
+            has_data: !!(detail || row)
         };
     });
 }
