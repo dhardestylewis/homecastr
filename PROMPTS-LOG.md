@@ -102,3 +102,11 @@ https://github.com/dhardestylewis/GUIDELINES/blob/main/GUIDELINES.md
 ### [2026-01-14 20:20]
 
 not just the full one without consideration, only everything relevant, as much verbatim as possible, while considering each and every single one in chat and whatever updates or specific alterations might be needed for this project
+
+### [2026-01-14 20:21]
+
+using the Mid Med Years slider now turns off everythign for any non-None value? did you check the DB to see if there any values for that in actuality?
+
+### [2026-01-14 20:23]
+
+should the min accounts depend on the zoom level?

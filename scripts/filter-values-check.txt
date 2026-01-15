@@ -1,0 +1,7 @@
+=== Checking reliability and med_years values ===
+
+Reliability (non-null, >0): undefined rows found
+
+Med_years (non-null, >0): undefined rows found
+
+Sample_accuracy (non-null, >0): undefined rows found

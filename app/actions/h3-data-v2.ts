@@ -87,9 +87,9 @@ export async function getH3DataV2(
 
     for (const idChunk of chunks) {
         const { data, error } = await supabase
-            .from("h3_precomputed_hex_details")
+            .from("h3_precomputed_hex_rows")  // Changed from hex_details - that table is empty!
             .select(
-                "h3_id, property_count, opportunity, reliability, sample_accuracy, alert_pct, med_years"
+                "h3_id, property_count, opportunity, reliability, sample_accuracy, alert_pct"
             )
             .eq("forecast_year", year)
             .eq("h3_res", res)

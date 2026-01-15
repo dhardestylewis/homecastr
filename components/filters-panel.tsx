@@ -80,7 +80,9 @@ export function FiltersPanel({ filters, onFiltersChange, onReset, isOpen, onTogg
           {/* Reliability Filter */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <Label className="text-sm font-medium text-sidebar-foreground">Reliability Minimum</Label>
+              <Label className="text-sm font-medium text-sidebar-foreground">
+                Reliability Minimum
+              </Label>
               <span className="text-xs text-muted-foreground font-mono">
                 {filters.reliabilityMin > 0 ? `≥${(filters.reliabilityMin * 100).toFixed(0)}%` : "All"}
               </span>
@@ -126,7 +128,7 @@ export function FiltersPanel({ filters, onFiltersChange, onReset, isOpen, onTogg
               />
             </div>
 
-            {/* Years minimum */}
+            {/* HIDDEN: Min Med Years filter - No med_years column exists in database
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs text-muted-foreground">Min Med Years</span>
@@ -146,6 +148,7 @@ export function FiltersPanel({ filters, onFiltersChange, onReset, isOpen, onTogg
                 aria-label="Minimum median years"
               />
             </div>
+            */}
           </div>
 
           {/* Toggles */}

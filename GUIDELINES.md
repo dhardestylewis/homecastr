@@ -1,11 +1,11 @@
-# Properlytic UI Guidelines
-
 > **Synced from**: https://github.com/dhardestylewis/GUIDELINES/main/GUIDELINES.md (filtered for relevance)
-> **Updated**: 2026-01-14T20:20
+> **Updated**: 2026-01-14T20:25
 
 ---
 
 ## CRITICAL Rules (Adapted for Web Project)
+
+> **CRITICAL**: Always prioritize by TODO priority order. New user prompts should be triaged into the TODO list by priority, not necessarily addressed immediately. (UNREVIEWED) [Added: 2026-01-14 20:25]
 
 > **CRITICAL**: Commit at every turn. After each response that modifies files, run `git add -A && git commit -m "..."`. [Adapted: using `&&` for PowerShell compatibility]
 
