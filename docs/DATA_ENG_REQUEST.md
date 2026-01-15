@@ -26,6 +26,24 @@ The UI has schema in place for many features, but **data is not populated**. Thi
 
 **Expected source**: Quantile regression or Monte Carlo simulation
 
+### Detailed Requirements
+
+**Required Output**:
+For each H3 cell + forecast_year combination, compute the prediction interval fan for years 1-5 into the future:
+- **p10**: 10th percentile (pessimistic scenario)
+- **p50**: 50th percentile (median/expected value)
+- **p90**: 90th percentile (optimistic scenario)
+
+**Example Expected Values**:
+For a hex with `predicted_value = $2,000,000`:
+```
+fan_p10_y1: 1,900,000   fan_p50_y1: 2,000,000   fan_p90_y1: 2,100,000
+fan_p10_y2: 1,850,000   fan_p50_y2: 2,050,000   fan_p90_y2: 2,250,000
+...
+```
+
+**UI Impact**: Critical for rendering prediction uncertainty over time.
+
 ---
 
 ### 2. Current/Actual Values (for CAGR calculation)
