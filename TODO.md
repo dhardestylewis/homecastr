@@ -23,6 +23,7 @@
 - [ ] **Sample accuracy terminology**: Is this accuracy (higher=better) or error (lower=better)? Rename for clarity
 - [ ] **Historical year colors**: Add color mode for raw dollar values
 - [ ] **Auto-scaling min accounts by zoom**: Consider adjusting threshold based on H3 resolution
+- [ ] **Property lot lines at max zoom**: Use parcel geometries instead of H3 hexes at innermost zoom (requires parcel data in DB)
 
 ---
 
