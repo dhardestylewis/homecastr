@@ -474,6 +474,7 @@ export function MapView({
                         stability_flag: hex.alert_pct > 0.15,
                         robustness_flag: hex.alert_pct > 0.25,
                         has_data: hex.has_data,
+                        med_n_years: hex.med_years ?? undefined,
                     }
                     hexPropertyMap.current.set(hex.h3_id, properties)
 

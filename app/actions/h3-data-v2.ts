@@ -11,6 +11,7 @@ export interface H3HexagonDataV2 {
     property_count: number
     sample_accuracy: number | null
     alert_pct: number | null
+    med_years: number | null
     has_data: boolean
 }
 
@@ -88,7 +89,7 @@ export async function getH3DataV2(
         const { data, error } = await supabase
             .from("h3_precomputed_hex_details")
             .select(
-                "h3_id, property_count, opportunity, reliability, sample_accuracy, alert_pct"
+                "h3_id, property_count, opportunity, reliability, sample_accuracy, alert_pct, med_years"
             )
             .eq("forecast_year", year)
             .eq("h3_res", res)
@@ -117,6 +118,7 @@ export async function getH3DataV2(
             property_count: d?.property_count ?? 0,
             sample_accuracy: d?.sample_accuracy ?? null,
             alert_pct: d?.alert_pct ?? null,
+            med_years: d?.med_years ?? null,
             has_data: !!d
         };
     });
