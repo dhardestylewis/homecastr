@@ -78,16 +78,18 @@ export async function getH3DataV2(
 
     if (ids.length === 0) return []
 
-    // 2. Details Query (Chunked)
+    // 2. Details Query (Chunked) - Try hex_rows first, then hex_details as fallback
     const chunkSize = 500
     const chunks: string[][] = []
     for (let i = 0; i < ids.length; i += chunkSize) chunks.push(ids.slice(i, i + chunkSize))
 
+    const rows_all: any[] = []
     const details_all: any[] = []
 
     for (const idChunk of chunks) {
-        const { data, error } = await supabase
-            .from("h3_precomputed_hex_rows")  // Changed from hex_details - that table is empty!
+        // Primary source: hex_rows (has reliable data)
+        const { data: rowsData, error: rowsError } = await supabase
+            .from("h3_precomputed_hex_rows")
             .select(
                 "h3_id, property_count, opportunity, reliability, sample_accuracy, alert_pct"
             )
@@ -95,20 +97,37 @@ export async function getH3DataV2(
             .eq("h3_res", res)
             .in("h3_id", idChunk)
 
-        if (error) {
-            console.error("[DBG] details chunk error", error)
-            throw error
+        if (rowsError) {
+            console.error("[DBG] hex_rows chunk error", rowsError)
         }
-        if (data) details_all.push(...data)
+        if (rowsData) rows_all.push(...rowsData)
+
+        // Secondary source: hex_details (for any additional data)
+        const { data: detailsData, error: detailsError } = await supabase
+            .from("h3_precomputed_hex_details")
+            .select(
+                "h3_id, property_count, opportunity, reliability, sample_accuracy, alert_pct"
+            )
+            .eq("forecast_year", year)
+            .eq("h3_res", res)
+            .in("h3_id", idChunk)
+
+        if (!detailsError && detailsData) details_all.push(...detailsData)
     }
 
-    console.log("[DBG-V2] details_rows fetched:", details_all.length)
+    console.log("[DBG-V2] hex_rows fetched:", rows_all.length)
+    console.log("[DBG-V2] hex_details fetched:", details_all.length)
 
-    // 3. Merge
+    // 3. Merge - prefer hex_details (new canonical), fallback to hex_rows (legacy)
+    const rowsMap = new Map(rows_all.map((d: any) => [d.h3_id, d]));
     const detailsMap = new Map(details_all.map((d: any) => [d.h3_id, d]));
 
     return (grid_rows ?? []).map((g: any) => {
-        const d = detailsMap.get(g.h3_id);
+        // Prefer hex_details (new schema being populated), fallback to hex_rows (legacy)
+        const detail = detailsMap.get(g.h3_id);
+        const row = rowsMap.get(g.h3_id);
+        const d = detail ?? row;  // Prefer detail, fallback to row
+
         return {
             h3_id: g.h3_id,
             lat: g.lat,
