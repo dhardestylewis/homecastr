@@ -1,4 +1,3 @@
-
 import { NextRequest, NextResponse } from "next/server"
 import { getH3CellDetails } from "@/app/actions/h3-details"
 

@@ -1,4 +1,3 @@
-
 // Native fetch is available in Node 18+
 
 const BASE_URL = 'http://localhost:3000/api/validate';

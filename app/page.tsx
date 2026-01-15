@@ -13,6 +13,8 @@ import { useMapState } from "@/hooks/use-map-state"
 import { useToast } from "@/hooks/use-toast"
 import type { PropertyForecast } from "@/app/actions/property-forecast"
 import { TimeControls } from "@/components/time-controls"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { AlertCircle } from "lucide-react"
 
 function DashboardContent() {
   const { filters, setFilters, resetFilters } = useFilters()
@@ -20,6 +22,7 @@ function DashboardContent() {
   const [isFiltersPanelOpen, setIsFiltersPanelOpen] = useState(true)
   const [forecastData, setForecastData] = useState<{ acct: string; data: PropertyForecast[] } | null>(null)
   const [currentYear, setCurrentYear] = useState(2026)
+  const [isUsingMockData, setIsUsingMockData] = useState(false)
   const { toast } = useToast()
 
   const handleForecastLoaded = useCallback(
@@ -52,6 +55,18 @@ function DashboardContent() {
     selectFeature(null)
   }, [selectFeature])
 
+  const handleMockDataDetected = useCallback(() => {
+    if (!isUsingMockData) {
+      setIsUsingMockData(true)
+      toast({
+        title: "Database Quota Exceeded",
+        description: "Displaying mock data. Please upgrade your Supabase plan or contact support.",
+        variant: "destructive",
+        duration: 10000,
+      })
+    }
+  }, [isUsingMockData, toast])
+
   return (
     <div className="h-screen flex flex-col">
       {/* Top Bar */}
@@ -59,7 +74,7 @@ function DashboardContent() {
         filters={filters}
         isFiltersPanelOpen={isFiltersPanelOpen}
         onToggleFiltersPanel={handleToggleFiltersPanel}
-        onSearch={() => { }}
+        onSearch={() => {}}
       />
 
       {/* Main Content */}
@@ -85,12 +100,29 @@ function DashboardContent() {
           </div>
 
           <div className="flex-1 relative">
+            {isUsingMockData && (
+              <Alert
+                variant="destructive"
+                className="absolute top-4 left-1/2 -translate-x-1/2 z-50 w-auto max-w-2xl shadow-lg"
+              >
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Database Quota Exceeded</AlertTitle>
+                <AlertDescription>
+                  Displaying mock data. Contact Supabase support at{" "}
+                  <a href="https://supabase.help" target="_blank" rel="noopener noreferrer" className="underline">
+                    supabase.help
+                  </a>
+                </AlertDescription>
+              </Alert>
+            )}
+
             <MapView
               filters={filters}
               mapState={mapState}
               onFeatureSelect={selectFeature}
               onFeatureHover={hoverFeature}
               year={currentYear}
+              onMockDataDetected={handleMockDataDetected}
             />
 
             {/* Legend Overlay */}
@@ -104,9 +136,7 @@ function DashboardContent() {
                 currentYear={currentYear}
                 onChange={setCurrentYear}
                 onPlayStart={() => {
-                  console.log('[PAGE] Play started - prefetch all years triggered')
-                  // Note: actual prefetch happens in MapView's cache
-                  // This is just a notification that playback has begun
+                  console.log("[PAGE] Play started - prefetch all years triggered")
                 }}
               />
             </div>
@@ -114,11 +144,7 @@ function DashboardContent() {
         </main>
 
         {/* Inspector Drawer */}
-        <InspectorDrawer
-          selectedId={mapState.selectedId}
-          onClose={handleCloseInspector}
-          year={currentYear}
-        />
+        <InspectorDrawer selectedId={mapState.selectedId} onClose={handleCloseInspector} year={currentYear} />
       </div>
     </div>
   )
