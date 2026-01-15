@@ -369,7 +369,7 @@ export function InspectorDrawer({ selectedId, onClose, year = 2026, className }:
                         </div>
                         <div className="space-y-1.5 text-xs">
                           <div className="flex justify-between">
-                            <span className="text-muted-foreground">Risk Score (R)</span>
+                            <span className="text-muted-foreground">Risk Factor</span>
                             <span
                               className={cn(
                                 "font-mono",
@@ -388,7 +388,7 @@ export function InspectorDrawer({ selectedId, onClose, year = 2026, className }:
                             </span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-muted-foreground">Tail Gap</span>
+                            <span className="text-muted-foreground">Price Deviation</span>
                             <span className="font-mono">
                               {isFiniteNumber(details.riskScoring.tail_gap_z)
                                 ? `${details.riskScoring.tail_gap_z.toFixed(2)}σ`
@@ -396,7 +396,7 @@ export function InspectorDrawer({ selectedId, onClose, year = 2026, className }:
                             </span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-muted-foreground">MedAE</span>
+                            <span className="text-muted-foreground">Prediction Error</span>
                             <span className="font-mono">
                               {isFiniteNumber(details.riskScoring.medAE_z)
                                 ? `${details.riskScoring.medAE_z.toFixed(2)}σ`
@@ -404,7 +404,7 @@ export function InspectorDrawer({ selectedId, onClose, year = 2026, className }:
                             </span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-muted-foreground">Inv DSCR</span>
+                            <span className="text-muted-foreground">Debt Stress</span>
                             <span className="font-mono">
                               {isFiniteNumber(details.riskScoring.inv_dscr_z)
                                 ? `${details.riskScoring.inv_dscr_z.toFixed(2)}σ`
@@ -418,13 +418,17 @@ export function InspectorDrawer({ selectedId, onClose, year = 2026, className }:
                   </>
                 )}
 
-                {/* Fan Chart */}
+                {/* Value Timeline Chart - Shows historical + forecast together */}
                 {details.fanChart && (
                   <div className="space-y-2">
                     <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                      Projection Fan Chart
+                      Value Timeline
                     </h3>
-                    <FanChart data={details.fanChart} startYear={year} />
+                    <FanChart
+                      data={details.fanChart}
+                      currentYear={year}
+                      historicalValues={details.historicalValues}
+                    />
                   </div>
                 )}
 
@@ -471,26 +475,26 @@ export function InspectorDrawer({ selectedId, onClose, year = 2026, className }:
 
                 <Separator />
 
-                {/* Support Metrics */}
+                {/* Data Quality Metrics - renamed for clarity */}
                 <div className="space-y-2">
-                  <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Support Metrics</h3>
+                  <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Data Quality</h3>
                   <div className="grid grid-cols-2 gap-2 text-sm">
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Accounts</span>
+                      <span className="text-muted-foreground">Properties</span>
                       <span className="font-mono">{safeFormatInt(details.metrics.n_accts)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Med Years</span>
+                      <span className="text-muted-foreground">Data History</span>
                       <span className="font-mono">{safeFormatFixed(details.metrics.med_n_years, 1)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">APE (proxy)</span>
+                      <span className="text-muted-foreground">Avg Error %</span>
                       <span className="font-mono">
                         {safeFormatPercentScaled(details.metrics.med_mean_ape_pct, 1)}
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Pred CV</span>
+                      <span className="text-muted-foreground">Value Spread</span>
                       <span className="font-mono">
                         {safeFormatPercentScaled(details.metrics.med_mean_pred_cv_pct, 1)}
                       </span>

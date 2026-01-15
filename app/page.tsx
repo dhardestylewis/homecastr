@@ -6,7 +6,6 @@ import { FiltersPanel } from "@/components/filters-panel"
 import { MapView } from "@/components/map-view"
 import { Legend } from "@/components/legend"
 import { InspectorDrawer } from "@/components/inspector-drawer"
-import { PropertySearch } from "@/components/property-search"
 import { ForecastChart } from "@/components/forecast-chart"
 import { useFilters } from "@/hooks/use-filters"
 import { useMapState } from "@/hooks/use-map-state"
@@ -15,10 +14,11 @@ import type { PropertyForecast } from "@/app/actions/property-forecast"
 import { TimeControls } from "@/components/time-controls"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { AlertCircle } from "lucide-react"
+import { geocodeAddress } from "@/app/actions/geocode"
 
 function DashboardContent() {
   const { filters, setFilters, resetFilters } = useFilters()
-  const { mapState, selectFeature, hoverFeature } = useMapState()
+  const { mapState, setMapState, selectFeature, hoverFeature } = useMapState()
   const [isFiltersPanelOpen, setIsFiltersPanelOpen] = useState(true)
   const [forecastData, setForecastData] = useState<{ acct: string; data: PropertyForecast[] } | null>(null)
   const [currentYear, setCurrentYear] = useState(2026)
@@ -74,7 +74,22 @@ function DashboardContent() {
         filters={filters}
         isFiltersPanelOpen={isFiltersPanelOpen}
         onToggleFiltersPanel={handleToggleFiltersPanel}
-        onSearch={() => {}}
+        onSearch={async (query) => {
+          try {
+            const result = await geocodeAddress(query)
+            if (result) {
+              setMapState({
+                center: [result.lng, result.lat],
+                zoom: 14 // Good zoom for neighborhood context
+              })
+              toast({ title: "Found Address", description: result.displayName })
+            } else {
+              handleSearchError(`Address not found: ${query}`)
+            }
+          } catch (e) {
+            handleSearchError("Search failed")
+          }
+        }}
       />
 
       {/* Main Content */}
@@ -91,7 +106,6 @@ function DashboardContent() {
         {/* Map Container */}
         <main className="flex-1 relative flex flex-col">
           <div className="p-4 border-b border-border bg-card/50 backdrop-blur-sm">
-            <PropertySearch onForecastLoaded={handleForecastLoaded} onError={handleSearchError} />
             {forecastData && (
               <div className="mt-4">
                 <ForecastChart acct={forecastData.acct} data={forecastData.data} />

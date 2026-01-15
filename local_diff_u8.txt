@@ -1,0 +1,438 @@
+﻿diff --git a/components/map-view.tsx b/components/map-view.tsx
+index 7bb2e7a..2a57864 100644
+--- a/components/map-view.tsx
++++ b/components/map-view.tsx
+@@ -1,7 +1,7 @@
+ "use client"
+ 
+ import type React from "react"
+-import { getH3DataForResolution } from "@/app/actions/h3-data"
++import { getH3DataV2 } from "@/app/actions/h3-data-v2"
+ import { cellToBoundary, latLngToCell } from "h3-js"
+ 
+ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+@@ -65,40 +65,77 @@ function getH3ResolutionFromScale(scale: number, layerOverride?: number): number
+     return getH3ResolutionForZoom(zoom)
+ }
+ 
+-/**
+- * Calculate viewport bounds (lat/lng) from canvas dimensions and transform state
+- */
+-function getViewportBounds(
++function getScaleFromZoom(zoom: number): number {
++    const minScale = 1000
++    const maxScale = 50000
++    const minZoom = 9
++    const maxZoom = 18
++    const t = (zoom - minZoom) / (maxZoom - minZoom)
++    return minScale * Math.pow(maxScale / minScale, t)
++}
++
++function mercatorToLatLng(x: number, y: number): { lat: number; lng: number } {
++    const lng = x * 360 - 180
++    const latRad = Math.atan(Math.sinh(Math.PI * (1 - 2 * y)))
++    const lat = (latRad * 180) / Math.PI
++    return { lat, lng }
++}
++
++function canvasToLatLng(
++    canvasX: number,
++    canvasY: number,
+     canvasWidth: number,
+     canvasHeight: number,
+     transform: { offsetX: number; offsetY: number; scale: number },
+-    center: { lat: number; lng: number }
+-): { minLat: number; maxLat: number; minLng: number; maxLng: number } {
+-    // Get actual zoom level from scale
++    basemapCenter: { lng: number; lat: number },
++): { lat: number; lng: number } {
+     const zoom = getContinuousBasemapZoom(transform.scale)
++    const z = Math.floor(zoom)
++    const zoomFraction = zoom - z
+ 
+-    // Calculate degrees per pixel at this zoom level
+-    // At zoom 0, the world is 256 pixels wide = 360 degrees
+-    // Each zoom level doubles the resolution
+-    const degreesPerPixel = 360 / (256 * Math.pow(2, zoom))
++    const worldScale = Math.pow(2, z)
++    const worldSize = 256 * worldScale
++    const tileScale = Math.pow(2, zoomFraction)
+ 
+-    // Calculate half viewport size in degrees
+-    const halfWidthDeg = (canvasWidth / 2) * degreesPerPixel
+-    const halfHeightDeg = (canvasHeight / 2) * degreesPerPixel
++    const centerMerc = latLngToMercator(basemapCenter.lng, basemapCenter.lat)
+ 
+-    // Calculate center after pan offset
+-    // Scale converts pixel offset to degree offset
+-    const centerLng = center.lng - (transform.offsetX * degreesPerPixel)
+-    const centerLat = center.lat + (transform.offsetY * degreesPerPixel) // Y is inverted
++    const centerPixelX = centerMerc.x * worldSize - transform.offsetX
++    const centerPixelY = centerMerc.y * worldSize - transform.offsetY
++
++    const pointPixelX = (canvasX - canvasWidth / 2) / tileScale + centerPixelX
++    const pointPixelY = (canvasY - canvasHeight / 2) / tileScale + centerPixelY
++
++    const mx = pointPixelX / worldSize
++    const my = pointPixelY / worldSize
++
++    return mercatorToLatLng(mx, my)
++}
++
++function getViewportBoundsAccurate(
++    canvasWidth: number,
++    canvasHeight: number,
++    transform: { offsetX: number; offsetY: number; scale: number },
++    basemapCenter: { lat: number; lng: number },
++): { minLat: number; maxLat: number; minLng: number; maxLng: number } {
++    const padFrac = 0.2
++    const padX = canvasWidth * padFrac
++    const padY = canvasHeight * padFrac
+ 
+-    // Add 20% padding for smooth loading
+-    const padding = 1.2
++    const corners = [
++        canvasToLatLng(-padX, -padY, canvasWidth, canvasHeight, transform, basemapCenter),
++        canvasToLatLng(canvasWidth + padX, -padY, canvasWidth, canvasHeight, transform, basemapCenter),
++        canvasToLatLng(-padX, canvasHeight + padY, canvasWidth, canvasHeight, transform, basemapCenter),
++        canvasToLatLng(canvasWidth + padX, canvasHeight + padY, canvasWidth, canvasHeight, transform, basemapCenter),
++    ]
++
++    const lats = corners.map(c => c.lat)
++    const lngs = corners.map(c => c.lng)
+ 
+     return {
+-        minLat: centerLat - halfHeightDeg * padding,
+-        maxLat: centerLat + halfHeightDeg * padding,
+-        minLng: centerLng - halfWidthDeg * padding,
+-        maxLng: centerLng + halfWidthDeg * padding
++        minLat: Math.min(...lats),
++        maxLat: Math.max(...lats),
++        minLng: Math.min(...lngs),
++        maxLng: Math.max(...lngs),
+     }
+ }
+ 
+@@ -178,6 +215,10 @@ interface HexagonData {
+ }
+ 
+ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, year = 2026, className }: MapViewProps) {
++    const basemapCenter = useMemo(() => ({ lng: -95.3698, lat: 29.7604 }), [])
++    const [h3Resolution, setH3Resolution] = useState<number>(0)
++    const lastResolutionRef = useRef<number>(0) // Track resolution to clear data on change
++
+     const hexCanvasRef = useRef<HTMLCanvasElement>(null)
+     const highlightCanvasRef = useRef<HTMLCanvasElement>(null) // New: Dedicated layer for interactions
+     const containerRef = useRef<HTMLDivElement>(null)
+@@ -186,6 +227,8 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, ye
+     const tileCache = useRef<Map<string, HTMLImageElement>>(new Map())
+ 
+     // Cache data by "res-year" key
++    // CACHE VERSION: Increment to bust stale cache after server-side changes
++    const CACHE_VERSION = 2
+     const h3DataCache = useRef<Map<string, Array<any>>>(new Map())
+ 
+     // Fast Lookup Map for O(1) access: H3ID -> Properties
+@@ -194,11 +237,59 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, ye
+     const animationFrameRef = useRef<number | null>(null)
+ 
+     const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 })
+-    const [transform, setTransform] = useState<TransformState>({
+-        offsetX: 0,
+-        offsetY: 0,
+-        scale: 3000, // Start zoomed out to show all of Houston
++
++    // Initialize transform from mapState (URL/Props)
++    const [transform, setTransform] = useState<TransformState>(() => {
++        const initialScale = getScaleFromZoom(mapState.zoom)
++        // We can't calculate exact offsets until we know canvas size (which starts at 800x600 but resizes)
++        // But we can approximate using the default size to start close.
++        // Or better: use a useEffect to sync once canvas is ready? 
++        // For now, let's just default to 0 and let the useEffect below sync it.
++        return {
++            offsetX: 0,
++            offsetY: 0,
++            scale: initialScale,
++        }
+     })
++
++    // Sync transform when mapState changes (e.g. Search or URL change)
++    useEffect(() => {
++        if (!mapState.center || !mapState.zoom) return
++
++        const [lng, lat] = mapState.center
++        const targetZoom = mapState.zoom
++
++        // Calculate target scale
++        const targetScale = getScaleFromZoom(targetZoom)
++
++        // Calculate offsets to center the map on the target lat/lng
++        const zoom = getContinuousBasemapZoom(targetScale)
++        const z = Math.floor(zoom)
++        const scale = Math.pow(2, z)
++        const worldSize = 256 * scale
++
++        const centerMerc = latLngToMercator(basemapCenter.lng, basemapCenter.lat)
++        const targetMerc = latLngToMercator(lng, lat)
++
++        // transform.offsetX = (centerMerc.x - targetMerc.x) * worldSize
++        const newOffsetX = (centerMerc.x - targetMerc.x) * worldSize
++        const newOffsetY = (centerMerc.y - targetMerc.y) * worldSize
++
++        setTransform(prev => {
++            // Avoid infinite loops / jitter if close enough?
++            if (Math.abs(prev.offsetX - newOffsetX) < 1 &&
++                Math.abs(prev.offsetY - newOffsetY) < 1 &&
++                Math.abs(prev.scale - targetScale) < 1) {
++                return prev
++            }
++            return {
++                offsetX: newOffsetX,
++                offsetY: newOffsetY,
++                scale: targetScale
++            }
++        })
++    }, [mapState.center, mapState.zoom, basemapCenter])
++
+     const [isDragging, setIsDragging] = useState(false)
+     const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
+ 
+@@ -210,9 +301,6 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, ye
+     const [realHexData, setRealHexData] = useState<Array<any>>([])
+     const [isLoadingData, setIsLoadingData] = useState(false)
+ 
+-    const basemapCenter = useMemo(() => ({ lng: -95.3698, lat: 29.7604 }), [])
+-    const [h3Resolution, setH3Resolution] = useState<number>(0)
+-    const lastResolutionRef = useRef<number>(0) // Track resolution to clear data on change
+ 
+     const basemapZoom = useMemo(() => getContinuousBasemapZoom(transform.scale), [transform.scale])
+ 
+@@ -245,7 +333,7 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, ye
+             const currentH3Res = getH3ResolutionFromScale(transform.scale, filters.layerOverride)
+ 
+             // Calculate viewport bounds for spatial filtering
+-            const bounds = getViewportBounds(
++            const bounds = getViewportBoundsAccurate(
+                 canvasSize.width,
+                 canvasSize.height,
+                 transform,
+@@ -253,7 +341,8 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, ye
+             )
+ 
+             // PRECISE cache key - use 2 decimal places for better cache hit/miss ratio
+-            const cacheKey = `${currentH3Res}-${year}-${bounds.minLat.toFixed(2)}-${bounds.maxLat.toFixed(2)}-${bounds.minLng.toFixed(2)}-${bounds.maxLng.toFixed(2)}`
++            // Includes CACHE_VERSION to bust stale data after server updates
++            const cacheKey = `v${CACHE_VERSION}-${currentH3Res}-${year}-${bounds.minLat.toFixed(2)}-${bounds.maxLat.toFixed(2)}-${bounds.minLng.toFixed(2)}-${bounds.maxLng.toFixed(2)}`
+ 
+             // Check cache first - if hit, just use it (no clearing needed)
+             if (h3DataCache.current.has(cacheKey)) {
+@@ -284,31 +373,28 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, ye
+ 
+             setIsLoadingData(true)
+ 
+-            getH3DataForResolution(currentH3Res, year, bounds)
++            getH3DataV2(currentH3Res, year, bounds)
+                 .then((data) => {
+                     // Filter out NaN/invalid data entries
++                    // Filter out invalid coordinates (lat/lng/id are required)
++                    // But allow missing metrics (o/r are compact names) so we can see the grid even if data is partial
+                     const validData = data.filter(h =>
+-                        !isNaN(h.reliability) &&
+-                        !isNaN(h.opportunity) &&
+                         !isNaN(h.lat) &&
+                         !isNaN(h.lng) &&
+                         h.h3_id
+                     )
+ 
+-                    // DIAGNOSTIC: Log viewport bounds and data stats
+-                    console.log(`[DIAG] Γ£ô COMPLETE FETCH - Viewport: lat=${bounds.minLat.toFixed(2)}ΓåÆ${bounds.maxLat.toFixed(2)}, lng=${bounds.minLng.toFixed(2)}ΓåÆ${bounds.maxLng.toFixed(2)}`)
+-                    console.log(`[DIAG] Resolution: ${currentH3Res}, Year: ${year}, Total: ${data.length} rows, Valid: ${validData.length}`)
+-                    console.log(`[DIAG] Cache key: ${cacheKey}`)
+-
+                     h3DataCache.current.set(cacheKey, validData)
+                     setRealHexData(validData)
+                     setIsLoadingData(false)
+ 
+-                    // BACKGROUND PREFETCH: Prefetch other years in background for smooth playback
++                    // BACKGROUND PREFETCH: DISABLE TO PREVENT DB OVERLOAD
++                    // The aggressive prefetching of 14 years (28+ SQL queries) was causing timeouts
++                    // and connection limits, leading to flickering/missing hexes.
++                    /* 
+                     const allYears = [2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026, 2027, 2028, 2029, 2030, 2031, 2032]
+                     const otherYears = allYears.filter(y => y !== year)
+ 
+-                    // Fire off background fetches (don't await)
+                     otherYears.forEach(otherYear => {
+                         const otherCacheKey = `${currentH3Res}-${otherYear}-${bounds.minLat.toFixed(2)}-${bounds.maxLat.toFixed(2)}-${bounds.minLng.toFixed(2)}-${bounds.maxLng.toFixed(2)}`
+                         if (!h3DataCache.current.has(otherCacheKey)) {
+@@ -320,14 +406,16 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, ye
+                                     h3DataCache.current.set(otherCacheKey, otherValid)
+                                     console.log(`[PREFETCH] Cached year ${otherYear}: ${otherValid.length} rows`)
+                                 })
+-                                .catch(() => { }) // Silently ignore prefetch failures
++                                .catch(() => { }) 
+                         }
+                     })
++                    */
+                 })
+                 .catch((err) => {
+                     if (err.name !== 'AbortError') {
+                         console.error("[v0] Failed to load H3 data:", err)
+-                        setRealHexData([])
++                        // Do NOT clear the map on error - keep showing stale data if available
++                        // setRealHexData([]) 
+                     }
+                     setIsLoadingData(false)
+                 })
+@@ -364,8 +452,8 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, ye
+                     // Populate fast lookup map
+                     const properties: FeatureProperties = {
+                         id: hex.h3_id,
+-                        O: hex.opportunity * 100,
+-                        R: hex.reliability,
++                        O: (hex.o ?? hex.opportunity ?? 0) * 100, // Handle null/compact/full
++                        R: hex.r ?? hex.reliability ?? 0,         // Handle null/compact/full
+                         n_accts: hex.property_count,
+                         med_mean_ape_pct: hex.sample_accuracy * 100,
+                         med_mean_pred_cv_pct: hex.sample_accuracy * 100,
+@@ -755,68 +843,59 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, ye
+         return { zoom, z, tileScale, worldSize }
+     }
+ 
+-    const handleWheel = (e: React.WheelEvent) => {
+-        e.preventDefault()
+-
+-        const rect = hexCanvasRef.current?.getBoundingClientRect()
+-        if (!rect) return
+-        const mouseX = e.clientX - rect.left
+-        const mouseY = e.clientY - rect.top
+-
+-        // 1. Calculate Mercator position of mouse BEFORE zoom
+-        const { worldSize: w1, tileScale: s1 } = getZoomConstants(transform.scale)
+-
+-        // Inverse of: canvasX = (pointPixelX - centerPixelX) * tileScale + canvasWidth / 2
+-        // centerPixelX = centerMerc * worldSize - offsetX
+-        // pointPixelX = mouseMerc * worldSize
++    // [FIX] Manually attach wheel listener to support non-passive prevention (Zoom blocking)
++    useEffect(() => {
++        const canvas = highlightCanvasRef.current
++        if (!canvas) return
+ 
+-        // Simplification: Let's find the "world pixel" offset relative to the center of the world
+-        // projected at *current* tile scale.
++        const onWheel = (e: WheelEvent) => {
++            e.preventDefault()
+ 
+-        // Current Screen -> World Pixel (at integer zoom level z)
+-        // S_screen = (P_world_pixel - Center_world_pixel) * S_tile + Center_screen
+-        // P_world_pixel = (S_screen - Center_screen) / S_tile + Center_world_pixel
++            const rect = canvas.getBoundingClientRect()
++            const mouseX = e.clientX - rect.left
++            const mouseY = e.clientY - rect.top
+ 
+-        // Center_world_pixel = CenterMerc * worldSize - offsetX
++            // 1. Calculate Mercator position of mouse BEFORE zoom
++            const { worldSize: w1, tileScale: s1 } = getZoomConstants(transform.scale)
+ 
+-        const centerMerc = latLngToMercator(basemapCenter.lng, basemapCenter.lat)
+-        const centerWorldPixelX = centerMerc.x * w1 - transform.offsetX
+-        const centerWorldPixelY = centerMerc.y * w1 - transform.offsetY
++            const centerMerc = latLngToMercator(basemapCenter.lng, basemapCenter.lat)
++            const centerWorldPixelX = centerMerc.x * w1 - transform.offsetX
++            const centerWorldPixelY = centerMerc.y * w1 - transform.offsetY
+ 
+-        const mouseWorldPixelX = (mouseX - canvasSize.width / 2) / s1 + centerWorldPixelX
+-        const mouseWorldPixelY = (mouseY - canvasSize.height / 2) / s1 + centerWorldPixelY
++            const mouseWorldPixelX = (mouseX - canvasSize.width / 2) / s1 + centerWorldPixelX
++            const mouseWorldPixelY = (mouseY - canvasSize.height / 2) / s1 + centerWorldPixelY
+ 
+-        // Normalized Mercator (0-1) is invariant across scales
+-        const mouseMercX = mouseWorldPixelX / w1
+-        const mouseMercY = mouseWorldPixelY / w1
++            // Normalized Mercator (0-1) is invariant across scales
++            const mouseMercX = mouseWorldPixelX / w1
++            const mouseMercY = mouseWorldPixelY / w1
+ 
+-        // 2. Calculate New Scale
+-        const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1
+-        const newScale = Math.max(1000, Math.min(50000, transform.scale * zoomFactor))
++            // 2. Calculate New Scale
++            const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1
++            const newScale = Math.max(1000, Math.min(50000, transform.scale * zoomFactor))
+ 
+-        // 3. Calculate New Offset to keep Mouse stationary
+-        const { worldSize: w2, tileScale: s2 } = getZoomConstants(newScale)
++            // 3. Calculate New Offset to keep Mouse stationary
++            const { worldSize: w2, tileScale: s2 } = getZoomConstants(newScale)
+ 
+-        // We want mouseMercX to map back to Screen MouseX
+-        // mouseX = (mouseMercX * w2 - newCenterWorldPixelX) * s2 + canvasWidth/2
+-        // (mouseX - canvasWidth/2)/s2 = mouseMercX * w2 - newCenterWorldPixelX
+-        // newCenterWorldPixelX = mouseMercX * w2 - (mouseX - canvasWidth/2)/s2
++            const newCenterWorldPixelX = mouseMercX * w2 - (mouseX - canvasSize.width / 2) / s2
++            const newCenterWorldPixelY = mouseMercY * w2 - (mouseY - canvasSize.height / 2) / s2
+ 
+-        // And newCenterWorldPixelX = centerMerc * w2 - newOffsetX
+-        // newOffsetX = centerMerc * w2 - newCenterWorldPixelX
++            const newOffsetX = centerMerc.x * w2 - newCenterWorldPixelX
++            const newOffsetY = centerMerc.y * w2 - newCenterWorldPixelY
+ 
+-        const newCenterWorldPixelX = mouseMercX * w2 - (mouseX - canvasSize.width / 2) / s2
+-        const newCenterWorldPixelY = mouseMercY * w2 - (mouseY - canvasSize.height / 2) / s2
++            setTransform({
++                scale: newScale,
++                offsetX: newOffsetX,
++                offsetY: newOffsetY,
++            })
++        }
+ 
+-        const newOffsetX = centerMerc.x * w2 - newCenterWorldPixelX
+-        const newOffsetY = centerMerc.y * w2 - newCenterWorldPixelY
++        // Must be non-passive to preventDefault()
++        canvas.addEventListener('wheel', onWheel, { passive: false })
+ 
+-        setTransform({
+-            scale: newScale,
+-            offsetX: newOffsetX,
+-            offsetY: newOffsetY,
+-        })
+-    }
++        return () => {
++            canvas.removeEventListener('wheel', onWheel)
++        }
++    }, [transform, canvasSize, basemapCenter]) // Re-bind if core params change to keep closure fresh
+ 
+     const handleZoomIn = () => {
+         setTransform((prev) => ({
+@@ -863,7 +942,6 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, ye
+                 onMouseUp={handleMouseUp}
+                 onMouseLeave={handleMouseLeave}
+                 onClick={handleCanvasClick}
+-                onWheel={handleWheel}
+             />
+ 
+             {isLoadingData && (
+@@ -939,7 +1017,7 @@ export function MapView({ filters, mapState, onFeatureSelect, onFeatureHover, ye
+ 
+             {/* Debug Overlay - Shows viewport and data stats */}
+             {(() => {
+-                const bounds = getViewportBounds(canvasSize.width, canvasSize.height, transform, basemapCenter)
++                const bounds = getViewportBoundsAccurate(canvasSize.width, canvasSize.height, transform, basemapCenter)
+                 return (
+                     <div className="absolute bottom-4 left-4 bg-card/95 backdrop-blur-sm border border-border rounded-lg px-3 py-2 text-xs text-muted-foreground z-40 shadow-lg font-mono">
+                         <div className="font-semibold text-foreground mb-1">Debug Info</div>
+diff --git a/hooks/use-map-state.ts b/hooks/use-map-state.ts
+index dba9692..fb9b38a 100644
+--- a/hooks/use-map-state.ts
++++ b/hooks/use-map-state.ts
+@@ -5,8 +5,8 @@ import { useSearchParams, useRouter } from "next/navigation"
+ import type { MapState } from "@/lib/types"
+ 
+ const DEFAULT_MAP_STATE: MapState = {
+-  center: [-98.5795, 39.8283], // US center
+-  zoom: 4,
++  center: [-95.3698, 29.7604], // Houston
++  zoom: 11, // Good zoom for Harris County
+   selectedId: null,
+   hoveredId: null,
+ }
