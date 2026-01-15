@@ -254,6 +254,8 @@ export interface DetailsResponse {
   }
   stressTests?: StressTests
   fanChart?: FanChartData
+  historicalValues?: number[] // Actual values for 2019-2025
+  coordinates?: { lat: number; lng: number } // New v14 schema support
 }
 
 export interface ReliabilityComponents {

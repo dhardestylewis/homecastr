@@ -8,12 +8,13 @@ interface DecompositionBarProps {
   components: ReliabilityComponents
 }
 
+// Layperson-friendly labels with tooltips explaining technical meaning
 const COMPONENT_CONFIG = {
-  accuracy_term: { label: "Accuracy", color: "bg-[oklch(0.65_0.18_180)]" },
-  confidence_term: { label: "Confidence", color: "bg-[oklch(0.70_0.15_145)]" },
-  stability_term: { label: "Stability", color: "bg-[oklch(0.75_0.15_120)]" },
-  robustness_term: { label: "Robustness", color: "bg-[oklch(0.75_0.15_85)]" },
-  support_term: { label: "Support", color: "bg-[oklch(0.70_0.12_60)]" },
+  accuracy_term: { label: "Precision", color: "bg-[oklch(0.65_0.18_180)]" },       // How close predictions are to actual values
+  confidence_term: { label: "Sample Size", color: "bg-[oklch(0.70_0.15_145)]" },   // Number of properties in this area
+  stability_term: { label: "Consistency", color: "bg-[oklch(0.75_0.15_120)]" },    // How stable predictions are over time
+  robustness_term: { label: "Outlier Resistance", color: "bg-[oklch(0.75_0.15_85)]" }, // Not affected by extreme values
+  support_term: { label: "Data Coverage", color: "bg-[oklch(0.70_0.12_60)]" },     // Amount of historical data available
 }
 
 /**
