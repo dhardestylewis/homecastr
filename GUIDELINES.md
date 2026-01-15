@@ -1,11 +1,11 @@
 > **Synced from**: https://github.com/dhardestylewis/GUIDELINES/main/GUIDELINES.md (filtered for relevance)
-> **Updated**: 2026-01-14T20:25
+> **Updated**: 2026-01-14T20:35
 
 ---
 
 ## CRITICAL Rules (Adapted for Web Project)
 
-> **CRITICAL**: Always prioritize by TODO priority order. New user prompts should be triaged into the TODO list by priority, not necessarily addressed immediately. (UNREVIEWED) [Added: 2026-01-14 20:25]
+> **CRITICAL #1 - PRIORITIZATION**: NEVER jump straight to responding to user prompts. ALWAYS first consider the prompt in context of existing TODO priorities. Add new items to TODO with appropriate priority, then continue working on highest priority items. Reread this rule before EVERY response. [Added: 2026-01-14 20:35]
 
 > **CRITICAL**: Commit at every turn. After each response that modifies files, run `git add -A && git commit -m "..."`. [Adapted: using `&&` for PowerShell compatibility]
 
