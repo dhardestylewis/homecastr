@@ -189,3 +189,35 @@ if is_historical:
 - [ ] **PIPELINE**: Fix Historical Data mapping (`actual_value` -> `current_value`)
 - [ ] **MODEL**: Investigate 2026+ forecast values in parquet
 
+
+---
+
+## 🛑 NEW: Critical Blockers (2026-01-14)
+
+### 6. Missing Parcel RPC
+**Feature Blocked**: Property Lot Lines (Max Zoom)
+**Issue**: Frontend is ready to fetch parcels via server action `getParcels`, but the Supabase RPC function `get_parcels_in_bounds` does not exist.
+**Request**: Create the following RPC function in Supabase:
+```sql
+create or replace function get_parcels_in_bounds(min_lat float, min_lng float, max_lat float, max_lng float)
+returns table (
+  acct_key text,
+  geom geometry -- or json/text
+)
+language plpgsql
+as $$
+begin
+  return query
+  select p.acct_key, p.geom
+  from parcels p
+  where p.geom && ST_MakeEnvelope(min_lng, min_lat, max_lng, max_lat, 4326)
+  limit 2000;
+end;
+$$;
+```
+
+### 7. Historical Property Values
+**Feature Blocked**: Value Color Mode (for years 2019-2025)
+**Issue**: The column `med_predicted_value` is **missing** or null in `h3_precomputed_hex_rows` for historical years (e.g., 2020).
+**Evidence**: `select count(*) from h3_precomputed_hex_rows where forecast_year = 2020` returns 0 rows, or query fails with "column does not exist".
+**Request**: Ensure `med_predicted_value` is populated for all available years (2019-2025), even if it's just a copy of `actual_value` or `assessed_value`. We need a dollar figure to color the map in Value Mode.

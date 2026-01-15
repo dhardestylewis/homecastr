@@ -110,3 +110,55 @@ using the Mid Med Years slider now turns off everythign for any non-None value? 
 ### [2026-01-14 20:23]
 
 should the min accounts depend on the zoom level?
+
+## 2026-01-15T16:00 - Minimal Data Contract
+
+### [2026-01-15 16:00]
+
+You are to produce the minimal data contract required for the map frontend.
+
+Goal:
+Minimize database storage and upload volume by storing only the columns that the frontend truly reads.
+
+Task:
+1) Enumerate every frontend read path that touches hex data, including:
+   - RPCs used (names and parameters)
+   - Direct table/view reads
+   - Tile generation queries (if any)
+   - Any joins to grid tables for lat/lng or geometry
+
+2) For each read path, list the exact columns referenced and whether they are required or optional.
+
+3) Provide the minimal schema for a single canonical backend view/table that satisfies all reads.
+   - Prefer computed columns in SQL rather than stored duplicates:
+     - opportunity_pct = 100 * opportunity
+     - trend can be derived from opportunity thresholds
+   - Prefer float4 (REAL) unless float8 is required for correctness.
+
+4) Provide the exact SQL queries that the frontend will use against that minimal schema.
+   Include:
+   - WHERE filters (bounds, year, resolution)
+   - ORDER BY clauses
+   - LIMIT usage
+   - Any pagination keys
+
+Output format:
+A) Minimal column list (authoritative)
+B) SQL DDL for minimal table and minimal view
+C) A migration plan to switch the frontend to the minimal view/table
+
+### [2026-01-15 16:10]
+
+consolidate all this into a single file i can provide back to the backend eng agent
+
+### [2026-01-15 16:12]
+
+if truly consolidated delte other spec files
+
+### [2026-01-15 16:13]
+
+have you been following your GUIDELINEs/git committing
+
+### [2026-01-15 16:14]
+
+i still see those files in place?

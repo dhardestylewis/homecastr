@@ -490,10 +490,38 @@ export function MapView({
 
         // Use requestAnimationFrame to throttle to 60fps max
         vertexComputeRef.current = requestAnimationFrame(() => {
+            // Apply filters to raw hex data first
             const currentH3Res = getH3ResolutionFromScale(transform.scale, filters.layerOverride)
 
-            // Apply filters to raw hex data first
-            const filteredData = realHexData
+            // Auto-scaling Min Accounts Logic
+            // If user sets min accounts > 0, use valid user input. Otherwise auto-scale.
+            const getAutoMinAccounts = (res: number) => {
+                if (res <= 6) return 20  // City view: reduce noise (was 50)
+                if (res === 7) return 5  // District view: light filtering (was 20)
+                if (res === 8) return 0  // Neighborhood: show everything (was 5)
+                return 0                 // Street/Block: show everything
+            }
+
+            const minAccounts = filters.nAcctsMin > 0 ? filters.nAcctsMin : getAutoMinAccounts(currentH3Res)
+
+            // Filter data BEFORE mapping to vertices for performance
+            const filteredData = realHexData.filter(h => {
+                const nAccts = h.property_count ?? 0
+                // Filter 1: Min Accounts
+                if (nAccts < minAccounts) return false
+
+                // Filter 2: Reliability (if needed, currently simplified in UI but keep logic if prop exists)
+                const reliability = h.r ?? h.reliability ?? 0
+                if (filters.reliabilityMin > 0 && reliability < filters.reliabilityMin) return false
+
+                // Filter 3: Underperformers (if toggle is OFF, hide neg growth)
+                // Note: User UI says "Show underperformers" toggle.
+                // If showUnderperformers is FALSE, we HIDE items with growth < 0
+                const growth = h.o ?? h.opportunity ?? 0
+                if (!filters.showUnderperformers && growth < 0) return false
+
+                return true
+            })
 
             // Clear fast lookup
             hexPropertyMap.current.clear()
@@ -507,6 +535,7 @@ export function MapView({
                         R: hex.r ?? hex.reliability ?? 0,         // Handle null/compact/full
                         n_accts: hex.property_count,
                         med_mean_ape_pct: hex.sample_accuracy * 100,
+                        med_predicted_value: hex.med_predicted_value, // Ensure this flows through
                         med_mean_pred_cv_pct: hex.sample_accuracy * 100,
                         stability_flag: hex.alert_pct > 0.15,
                         robustness_flag: hex.alert_pct > 0.25,
@@ -1022,31 +1051,54 @@ export function MapView({
                 >
                     {tooltipData.properties.has_data ? (
                         <>
-                            <div className="font-medium text-foreground mb-1">
+                            <div className="font-medium text-foreground mb-2 pb-2 border-b border-border">
                                 {filters.colorMode === "value" ? "Property Value" : "Projected Growth"}
                             </div>
-                            <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                            <div className="space-y-2">
+                                {/* Value Mode: Show Value big, Growth small below */}
                                 {filters.colorMode === "value" ? (
                                     <>
-                                        <span className="text-muted-foreground">Value:</span>
-                                        <span className="font-mono font-medium text-foreground">
-                                            {tooltipData.properties.med_predicted_value ? formatCurrency(tooltipData.properties.med_predicted_value) : "N/A"}
-                                        </span>
+                                        <div className="flex justify-between items-baseline gap-4">
+                                            <span className="text-muted-foreground">Value:</span>
+                                            <span className="font-mono text-lg font-bold text-foreground">
+                                                {tooltipData.properties.med_predicted_value ? formatCurrency(tooltipData.properties.med_predicted_value) : "N/A"}
+                                            </span>
+                                        </div>
+                                        <div className="flex justify-between items-baseline gap-4">
+                                            <span className="text-muted-foreground">Growth:</span>
+                                            <span className={cn("font-mono", tooltipData.properties.O >= 0 ? "text-green-500" : "text-destructive")}>
+                                                {formatOpportunity(tooltipData.properties.O)}
+                                            </span>
+                                        </div>
                                     </>
                                 ) : (
+                                    /* Growth Mode: Show Growth big, Value small below */
                                     <>
-                                        <span className="text-muted-foreground">CAGR:</span>
-                                        <span className={cn("font-mono font-medium", tooltipData.properties.O >= 0 ? "text-primary" : "text-destructive")}>
-                                            {formatOpportunity(tooltipData.properties.O)}
-                                        </span>
+                                        <div className="flex justify-between items-baseline gap-4">
+                                            <span className="text-muted-foreground">Growth:</span>
+                                            <span className={cn("font-mono text-lg font-bold", tooltipData.properties.O >= 0 ? "text-primary" : "text-destructive")}>
+                                                {formatOpportunity(tooltipData.properties.O)}
+                                            </span>
+                                        </div>
+                                        <div className="flex justify-between items-baseline gap-4">
+                                            <span className="text-muted-foreground">Value:</span>
+                                            <span className="font-mono text-foreground">
+                                                {tooltipData.properties.med_predicted_value ? formatCurrency(tooltipData.properties.med_predicted_value) : "N/A"}
+                                            </span>
+                                        </div>
                                     </>
                                 )}
-                                <span className="text-muted-foreground">Confidence:</span>
-                                <span className="font-mono text-foreground">{formatReliability(tooltipData.properties.R)}</span>
-                                <span className="text-muted-foreground">Properties:</span>
-                                <span className="text-foreground">{tooltipData.properties.n_accts}</span>
-                                <span className="text-muted-foreground">Sample Accuracy:</span>
-                                <span className="text-foreground">{tooltipData.properties.med_mean_ape_pct?.toFixed(1)}%</span>
+
+                                <div className="pt-2 border-t border-border/50 grid grid-cols-2 gap-2 text-xs">
+                                    <div className="flex justify-between gap-2">
+                                        <span className="text-muted-foreground">Confidence:</span>
+                                        <span className="font-mono text-foreground">{formatReliability(tooltipData.properties.R)}</span>
+                                    </div>
+                                    <div className="flex justify-between gap-2">
+                                        <span className="text-muted-foreground">Props:</span>
+                                        <span className="font-mono text-foreground">{tooltipData.properties.n_accts}</span>
+                                    </div>
+                                </div>
                             </div>
 
                             {(tooltipData.properties.stability_flag || tooltipData.properties.robustness_flag) && (

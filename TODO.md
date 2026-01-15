@@ -22,7 +22,7 @@
 ### P3 - UX Improvements
 - [x] **Hide Risk Scoring section**: σ-notation metrics hidden for homeowner view
 - [x] **Data Confidence tier labels**: Shows High/Medium/Low/N/A instead of %
-- [ ] **Sample accuracy terminology**: Is this accuracy (higher=better) or error (lower=better)? Rename for clarity
+- [x] **Sample accuracy terminology**: Renamed to "Mean Error" / "Avg Error %" (clarified it is error, lower is better)
 - [x] **Historical year colors**: Add color mode for raw dollar values
 - [ ] **Auto-scaling min accounts by zoom**: Consider adjusting threshold based on H3 resolution
 - [x] **Property lot lines at max zoom**: Implemented logic (requires `get_parcels_in_bounds` RPC to function)

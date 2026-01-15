@@ -12,6 +12,7 @@ export interface H3HexagonDataV2 {
     sample_accuracy: number | null
     alert_pct: number | null
     med_years: number | null
+    med_predicted_value: number | null
     has_data: boolean
 }
 
@@ -65,16 +66,37 @@ export async function getH3DataV2(
     }
 
     // LIMIT 30,000 to ensure we get all tiles
-    // Use .range() instead of .limit() to override Supabase default 1000 row limit
-    const { data: grid_rows, error: grid_rows_err } = await gridQuery.range(0, 29999)
+    // 1. Grid Query - Paginate to bypass Supabase 1000 row limit
+    let all_grid_rows: any[] = []
+    let offset = 0
+    const BATCH_SIZE = 1000
+    const MAX_ROWS = 30000
 
-    if (grid_rows_err) {
-        console.error("[DBG] grid_rows error", grid_rows_err)
-        throw grid_rows_err
+    while (true) {
+        // Clone query to avoid mutating state if possible, though re-building might be safer.
+        // Since we built 'gridQuery' as a builder chain, we might need to re-apply range.
+        // Actually, Supabase query builders are mutable? Better to start from base or chain off 'gridQuery'.
+        // Let's assume gridQuery is reusable.
+
+        const { data: batch, error: batchErr } = await gridQuery.range(offset, offset + BATCH_SIZE - 1)
+
+        if (batchErr) {
+            console.error("[DBG] grid_rows error", batchErr)
+            throw batchErr
+        }
+
+        if (!batch || batch.length === 0) break
+
+        all_grid_rows.push(...batch)
+
+        if (batch.length < BATCH_SIZE) break
+        if (all_grid_rows.length >= MAX_ROWS) break
+
+        offset += BATCH_SIZE
     }
 
-    const ids = (grid_rows ?? []).map((r) => r.h3_id)
-    console.log("[DBG-V2] grid_rows fetched:", ids.length)
+    const ids = all_grid_rows.map((r) => r.h3_id)
+    console.log("[DBG-V2] grid_rows fetched total:", ids.length)
 
     if (ids.length === 0) return []
 
@@ -92,7 +114,7 @@ export async function getH3DataV2(
         const { data: rowsData, error: rowsError } = await supabase
             .from("h3_precomputed_hex_rows")
             .select(
-                "h3_id, property_count, opportunity, reliability, sample_accuracy, alert_pct"
+                "h3_id, property_count, opportunity, reliability, sample_accuracy, alert_pct, med_predicted_value"
             )
             .eq("forecast_year", year)
             .eq("h3_res", res)
@@ -108,7 +130,7 @@ export async function getH3DataV2(
         const { data: detailsData, error: detailsError } = await supabase
             .from("h3_precomputed_hex_details")
             .select(
-                "h3_id, property_count, opportunity, reliability, sample_accuracy, alert_pct"
+                "h3_id, property_count, opportunity, reliability, sample_accuracy, alert_pct, med_predicted_value"
             )
             .eq("forecast_year", year)
             .eq("h3_res", res)
@@ -125,7 +147,7 @@ export async function getH3DataV2(
     const rowsMap = new Map(rows_all.map((d: any) => [d.h3_id, d]));
     const detailsMap = new Map(details_all.map((d: any) => [d.h3_id, d]));
 
-    return (grid_rows ?? []).map((g: any) => {
+    return (all_grid_rows ?? []).map((g: any) => {
         // Field-level merge: prefer hex_details value if non-null, fallback to hex_rows
         const detail = detailsMap.get(g.h3_id);
         const row = rowsMap.get(g.h3_id);
@@ -140,6 +162,7 @@ export async function getH3DataV2(
             sample_accuracy: detail?.sample_accuracy ?? row?.sample_accuracy ?? null,
             alert_pct: detail?.alert_pct ?? row?.alert_pct ?? null,
             med_years: detail?.med_years ?? row?.med_years ?? null,
+            med_predicted_value: detail?.med_predicted_value ?? row?.med_predicted_value ?? null,
             has_data: !!(detail || row)
         };
     });

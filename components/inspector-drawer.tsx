@@ -212,9 +212,17 @@ export function InspectorDrawer({ selectedId, onClose, year = 2026, className }:
                 {/* Headline Metrics */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="bg-secondary/50 rounded-lg p-3">
-                    <div className="text-xs text-muted-foreground mb-1">Projected Growth</div>
+                    <div className="text-xs text-muted-foreground mb-1">Predicted Value ({year})</div>
                     <div className="flex items-center gap-1.5">
                       <span className="text-2xl font-bold text-primary">
+                        {details.proforma?.predicted_value ? safeFormatCurrency(details.proforma.predicted_value) : "N/A"}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="bg-secondary/50 rounded-lg p-3">
+                    <div className="text-xs text-muted-foreground mb-1">Projected Growth</div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-2xl font-bold text-green-500">
                         {isFiniteNumber(details.opportunity.value)
                           ? `${details.opportunity.value > 0 ? "+" : ""}${details.opportunity.value.toFixed(1)}`
                           : "N/A"}
@@ -223,193 +231,9 @@ export function InspectorDrawer({ selectedId, onClose, year = 2026, className }:
                       {isFiniteNumber(details.opportunity.value) && getTrendIcon(details.opportunity.trend)}
                     </div>
                   </div>
-                  <div className="bg-secondary/50 rounded-lg p-3">
-                    <div className="text-xs text-muted-foreground mb-1">Data Confidence</div>
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-2xl font-bold">
-                        {!isFiniteNumber(details.reliability.value) || details.reliability.value === 0
-                          ? "N/A"
-                          : details.reliability.value >= 0.7
-                            ? "High"
-                            : details.reliability.value >= 0.4
-                              ? "Medium"
-                              : "Low"}
-                      </span>
-                    </div>
-                  </div>
                 </div>
 
-                {/* Reliability Decomposition */}
-                <div className="space-y-2">
-                  <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                    Confidence Factors
-                  </h3>
-                  <DecompositionBar components={details.reliability.components} />
-                </div>
-
-                <Separator />
-
-                {/* Predicted Value - Keep visible for homeowners */}
-                {details.proforma?.predicted_value && (
-                  <>
-                    <div className="space-y-2">
-                      <div className="bg-secondary/30 rounded-lg p-3">
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-muted-foreground">Predicted Value ({year})</span>
-                          <span className="font-mono font-semibold text-primary text-lg">
-                            {safeFormatCurrency(details.proforma.predicted_value)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    <Separator />
-                  </>
-                )}
-
-                {/* HIDDEN: Proforma section - Investor metrics hidden for homeowner-focused view
-                    Kept in code per user request (not removed). Contains:
-                    - NOI, Monthly Rent, DSCR, Cap Rate, Breakeven, Liquidity
-                {details.proforma && (
-                  <>
-                    <div className="space-y-2">
-                      <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
-                        <DollarSign className="h-3.5 w-3.5" />
-                        Proforma
-                      </h3>
-                      <div className="bg-secondary/30 rounded-lg p-3 space-y-2">
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-muted-foreground">NOI</span>
-                          <span className="font-mono">{safeFormatCurrency(details.proforma.noi)}</span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-muted-foreground">Monthly Rent</span>
-                          <span className="font-mono">{safeFormatCurrency(details.proforma.monthly_rent)}</span>
-                        </div>
-                        <Separator className="my-2" />
-                        <div className="grid grid-cols-2 gap-2 text-sm">
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">DSCR</span>
-                            <span className="font-mono">{safeFormatFixed(details.proforma.dscr, 2, "x")}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Cap Rate</span>
-                            <span className="font-mono">{safeFormatPercent(details.proforma.cap_rate, 1)}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Breakeven</span>
-                            <span className="font-mono">{safeFormatPercent(details.proforma.breakeven_occ, 0)}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Liquidity</span>
-                            <span className="font-mono">{safeFormatPercentScaled(details.proforma.liquidity_rank, 0)}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    <Separator />
-                  </>
-                )}
-                */}
-
-                {/* HIDDEN: Risk Scoring section - Technical metrics hidden for homeowner-focused view
-                    Kept in code per user request (not removed). Contains:
-                    - Investment Score (10.0/10 format)
-                    - Risk Factor, Price Deviation (σ), Prediction Error (σ), Debt Stress (σ)
-                */}
-                {false && details.riskScoring && (
-                  <>
-                    <div className="space-y-2">
-                      <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
-                        <ShieldAlert className="h-3.5 w-3.5" />
-                        Risk Scoring
-                      </h3>
-                      <div
-                        className={cn(
-                          "rounded-lg p-3 border",
-                          details.riskScoring.alert_triggered
-                            ? "bg-destructive/10 border-destructive/30"
-                            : "bg-secondary/30 border-transparent",
-                        )}
-                      >
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium">Investment Score</span>
-                            <span className="text-[10px] text-muted-foreground ml-1">(0-10)</span>
-                            {details.riskScoring.alert_triggered && (
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-destructive/20 text-destructive font-medium">
-                                ALERT
-                              </span>
-                            )}
-                          </div>
-                          <span
-                            className={cn(
-                              "text-2xl font-bold",
-                              isFiniteNumber(details.riskScoring.score)
-                                ? details.riskScoring.score >= 7
-                                  ? "text-green-500"
-                                  : details.riskScoring.score >= 4
-                                    ? "text-warning"
-                                    : "text-destructive"
-                                : "text-muted-foreground",
-                            )}
-                          >
-                            {isFiniteNumber(details.riskScoring.score)
-                              ? `${details.riskScoring.score.toFixed(1)}/10`
-                              : "N/A"}
-                          </span>
-                        </div>
-                        <div className="space-y-1.5 text-xs">
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Risk Factor</span>
-                            <span
-                              className={cn(
-                                "font-mono",
-                                isFiniteNumber(details.riskScoring.R)
-                                  ? Math.abs(details.riskScoring.R) <= 1
-                                    ? "text-green-500"
-                                    : Math.abs(details.riskScoring.R) <= 2
-                                      ? "text-warning"
-                                      : "text-destructive"
-                                  : "text-muted-foreground",
-                              )}
-                            >
-                              {isFiniteNumber(details.riskScoring.R)
-                                ? `${details.riskScoring.R >= 0 ? "+" : ""}${details.riskScoring.R.toFixed(2)}`
-                                : "N/A"}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Price Deviation</span>
-                            <span className="font-mono">
-                              {isFiniteNumber(details.riskScoring.tail_gap_z)
-                                ? `${details.riskScoring.tail_gap_z.toFixed(2)}σ`
-                                : "N/A"}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Prediction Error</span>
-                            <span className="font-mono">
-                              {isFiniteNumber(details.riskScoring.medAE_z)
-                                ? `${details.riskScoring.medAE_z.toFixed(2)}σ`
-                                : "N/A"}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Debt Stress</span>
-                            <span className="font-mono">
-                              {isFiniteNumber(details.riskScoring.inv_dscr_z)
-                                ? `${details.riskScoring.inv_dscr_z.toFixed(2)}σ`
-                                : "N/A"}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    <Separator />
-                  </>
-                )}
-
-                {/* Value Timeline Chart - Shows historical + forecast together */}
+                {/* Value Timeline Chart */}
                 {details.fanChart && (
                   <div className="space-y-2">
                     <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
@@ -425,73 +249,81 @@ export function InspectorDrawer({ selectedId, onClose, year = 2026, className }:
 
                 <Separator />
 
-                {/* Stress Tests */}
-                {details.stressTests && (
-                  <div className="space-y-2">
-                    <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Stress Tests</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {Object.entries(details.stressTests).map(([key, test]) => (
-                        <div
-                          key={key}
-                          className={cn(
-                            "rounded-lg p-2.5 border",
-                            test.status === "pass"
-                              ? "bg-green-500/5 border-green-500/20"
-                              : test.status === "warn"
-                                ? "bg-warning/10 border-warning/30"
-                                : "bg-destructive/10 border-destructive/30",
-                          )}
-                        >
-                          <div className="flex items-center gap-1.5 mb-1">
-                            {test.status === "pass" ? (
-                              <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
-                            ) : (
-                              <AlertTriangle
-                                className={cn(
-                                  "h-3.5 w-3.5",
-                                  test.status === "warn" ? "text-warning" : "text-destructive",
-                                )}
-                              />
-                            )}
-                            <span className="text-[10px] font-medium capitalize">{key.replace(/_/g, " ")}</span>
-                          </div>
-                          <div className="text-xs font-mono">
-                            {safeFormatFixed(test.value, 2)} / {safeFormatFixed(test.threshold, 2)}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <Separator />
-
-                {/* Data Quality Metrics - renamed for clarity */}
+                {/* Data Quality & Validation */}
                 <div className="space-y-2">
-                  <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Data Quality</h3>
+                  <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Data Factors</h3>
                   <div className="grid grid-cols-2 gap-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Properties</span>
-                      <span className="font-mono">{safeFormatInt(details.metrics.n_accts)}</span>
+                    <div className="bg-secondary/20 rounded p-2">
+                      <div className="text-xs text-muted-foreground">Confidence</div>
+                      <div className="font-medium">
+                        {!isFiniteNumber(details.reliability.value) || details.reliability.value === 0
+                          ? "N/A"
+                          : details.reliability.value >= 0.7
+                            ? "High"
+                            : details.reliability.value >= 0.4
+                              ? "Medium"
+                              : "Low"}
+                      </div>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Data History</span>
-                      <span className="font-mono">{safeFormatFixed(details.metrics.med_n_years, 1)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Avg Error %</span>
-                      <span className="font-mono">
-                        {safeFormatPercentScaled(details.metrics.med_mean_ape_pct, 1)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Value Spread</span>
-                      <span className="font-mono">
-                        {safeFormatPercentScaled(details.metrics.med_mean_pred_cv_pct, 1)}
-                      </span>
+                    <div className="bg-secondary/20 rounded p-2">
+                      <div className="text-xs text-muted-foreground">Properties</div>
+                      <div className="font-medium">{safeFormatInt(details.metrics.n_accts)}</div>
                     </div>
                   </div>
                 </div>
+
+                {/* Technical / Hidden by default details */}
+                <details className="text-xs text-muted-foreground cursor-pointer group">
+                  <summary className="hover:text-foreground transition-colors mb-2">View Technical Details</summary>
+                  <div className="space-y-4 pt-2 pl-2 border-l-2 border-border/50 ml-1">
+
+                    {/* Confidence Factors */}
+                    <div className="space-y-2">
+                      <h3 className="text-[10px] font-medium uppercase tracking-wide">Confidence Breakdown</h3>
+                      <DecompositionBar components={details.reliability.components} />
+                    </div>
+
+                    {/* Data Quality Metrics */}
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <span>Data History</span>
+                        <span className="font-mono text-foreground">{safeFormatFixed(details.metrics.med_n_years, 1)} yrs</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Avg Error</span>
+                        <span className="font-mono text-foreground">
+                          {safeFormatPercentScaled(details.metrics.med_mean_ape_pct, 1)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Value Spread</span>
+                        <span className="font-mono text-foreground">
+                          {safeFormatPercentScaled(details.metrics.med_mean_pred_cv_pct, 1)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Stress Tests */}
+                    {details.stressTests && (
+                      <div className="space-y-2">
+                        <h3 className="text-[10px] font-medium uppercase tracking-wide">Stress Tests</h3>
+                        <div className="grid grid-cols-1 gap-2">
+                          {Object.entries(details.stressTests).map(([key, test]) => (
+                            <div key={key} className="flex justify-between items-center text-[10px]">
+                              <span className="capitalize">{key.replace(/_/g, " ")}</span>
+                              <span className={cn(
+                                "font-mono px-1.5 py-0.5 rounded",
+                                test.status === "pass" ? "bg-green-500/10 text-green-500" : "bg-destructive/10 text-destructive"
+                              )}>
+                                {test.status === "pass" ? "PASS" : "WARN"}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </details>
               </div>
             ) : (
               <div className="p-8 text-center space-y-3">
@@ -534,7 +366,8 @@ export function InspectorDrawer({ selectedId, onClose, year = 2026, className }:
             </TooltipProvider>
           </div>
         </>
-      )}
-    </aside>
+      )
+      }
+    </aside >
   )
 }

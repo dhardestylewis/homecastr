@@ -77,33 +77,7 @@ export function FiltersPanel({ filters, onFiltersChange, onReset, isOpen, onTogg
       {/* Content */}
       {isOpen && (
         <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-6">
-          {/* Reliability Filter */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <Label className="text-sm font-medium text-sidebar-foreground">
-                Reliability Minimum
-              </Label>
-              <span className="text-xs text-muted-foreground font-mono">
-                {filters.reliabilityMin > 0 ? `≥${(filters.reliabilityMin * 100).toFixed(0)}%` : "All"}
-              </span>
-            </div>
-            <Slider
-              id="reliability-min"
-              name="reliability-min"
-              value={[filters.reliabilityMin]}
-              onValueChange={handleReliabilityChange}
-              min={0}
-              max={0.8}
-              step={0.2}
-              className="w-full"
-              aria-label="Reliability minimum"
-            />
-            <div className="flex justify-between text-[10px] text-muted-foreground px-0.5">
-              {RELIABILITY_BINS.slice(0, -1).map((bin) => (
-                <span key={bin.value}>{bin.label}</span>
-              ))}
-            </div>
-          </div>
+          {/* Reliability Filter - Moved to Advanced */}
 
           {/* Map Color Mode */}
           <div className="space-y-3 pt-2 border-t border-border/50">
@@ -139,103 +113,87 @@ export function FiltersPanel({ filters, onFiltersChange, onReset, isOpen, onTogg
             </p>
           </div>
 
-          {/* Support Filters */}
-          <div className="space-y-4">
-            <Label className="text-sm font-medium text-sidebar-foreground">Support Filters</Label>
+          {/* Advanced Filters (Collapsible) */}
+          <details className="group">
+            <summary className="text-xs font-medium text-muted-foreground cursor-pointer hover:text-foreground list-none flex items-center gap-2 mb-3">
+              <ChevronRight className="h-3 w-3 transition-transform group-open:rotate-90" />
+              Advanced Filters
+            </summary>
 
-            {/* Accounts minimum */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">Min Accounts</span>
-                <span className="text-xs text-muted-foreground font-mono">{filters.nAcctsMin || "None"}</span>
+            <div className="pl-2 space-y-6 border-l border-border/50 ml-1.5 pt-2">
+              {/* Reliability Filter */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium text-sidebar-foreground">
+                    Reliability Minimum
+                  </Label>
+                  <span className="text-xs text-muted-foreground font-mono">
+                    {filters.reliabilityMin > 0 ? `≥${(filters.reliabilityMin * 100).toFixed(0)}%` : "All"}
+                  </span>
+                </div>
+                <Slider
+                  id="reliability-min"
+                  name="reliability-min"
+                  value={[filters.reliabilityMin]}
+                  onValueChange={handleReliabilityChange}
+                  min={0}
+                  max={0.8}
+                  step={0.2}
+                  className="w-full"
+                  aria-label="Reliability minimum"
+                />
+                <div className="flex justify-between text-[10px] text-muted-foreground px-0.5">
+                  {RELIABILITY_BINS.slice(0, -1).map((bin) => (
+                    <span key={bin.value}>{bin.label}</span>
+                  ))}
+                </div>
               </div>
-              <Slider
-                id="n-accts-min"
-                name="n-accts-min"
-                value={[filters.nAcctsMin]}
-                onValueChange={handleNAcctsChange}
-                min={0}
-                max={100}
-                step={5}
-                className="w-full"
-                aria-label="Minimum accounts"
-              />
-            </div>
 
-            {/* HIDDEN: Min Med Years filter - No med_years column exists in database
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">Min Med Years</span>
-                <span className="text-xs text-muted-foreground font-mono">
-                  {filters.medNYearsMin > 0 ? `≥${filters.medNYearsMin}` : "None"}
-                </span>
+              {/* Support Filters (Min Accounts) */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Min Accounts</span>
+                  <span className="text-xs text-muted-foreground font-mono">{filters.nAcctsMin || "None"}</span>
+                </div>
+                <Slider
+                  id="n-accts-min"
+                  name="n-accts-min"
+                  value={[filters.nAcctsMin]}
+                  onValueChange={handleNAcctsChange}
+                  min={0}
+                  max={100}
+                  step={5}
+                  className="w-full"
+                  aria-label="Minimum accounts"
+                />
               </div>
-              <Slider
-                id="med-n-years-min"
-                name="med-n-years-min"
-                value={[filters.medNYearsMin]}
-                onValueChange={handleMedNYearsChange}
-                min={0}
-                max={10}
-                step={0.5}
-                className="w-full"
-                aria-label="Minimum median years"
-              />
+
+              {/* Layer Override */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-sidebar-foreground">Layer Override</Label>
+                <Select
+                  value={filters.layerOverride?.toString() || "auto"}
+                  onValueChange={(value) =>
+                    onFiltersChange({
+                      layerOverride: value === "auto" ? undefined : Number.parseInt(value, 10),
+                    })
+                  }
+                >
+                  <SelectTrigger className="w-full h-8 text-xs bg-sidebar-accent border-sidebar-border">
+                    <SelectValue placeholder="Auto (by zoom)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="auto">Auto (by zoom)</SelectItem>
+                    <SelectItem value="6">H3 Resolution 6</SelectItem>
+                    <SelectItem value="7">H3 Resolution 7</SelectItem>
+                    <SelectItem value="8">H3 Resolution 8</SelectItem>
+                    <SelectItem value="9">H3 Resolution 9</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-[10px] text-muted-foreground">Override automatic zoom-based layer switching</p>
+              </div>
             </div>
-            */}
-          </div>
-
-          {/* Toggles */}
-          <div className="space-y-4">
-            <Label className="text-sm font-medium text-sidebar-foreground">Display Options</Label>
-
-            <div className="flex items-center justify-between">
-              <Label htmlFor="show-underperformers" className="text-xs text-muted-foreground cursor-pointer">
-                Show underperformers
-              </Label>
-              <Switch
-                id="show-underperformers"
-                checked={filters.showUnderperformers}
-                onCheckedChange={(checked) => onFiltersChange({ showUnderperformers: checked })}
-              />
-            </div>
-
-            <div className="flex items-center justify-between">
-              <Label htmlFor="highlight-warnings" className="text-xs text-muted-foreground cursor-pointer">
-                Highlight warnings
-              </Label>
-              <Switch
-                id="highlight-warnings"
-                checked={filters.highlightWarnings}
-                onCheckedChange={(checked) => onFiltersChange({ highlightWarnings: checked })}
-              />
-            </div>
-          </div>
-
-          {/* Layer Override (Advanced) */}
-          <div className="space-y-2">
-            <Label className="text-sm font-medium text-sidebar-foreground">Layer Override</Label>
-            <Select
-              value={filters.layerOverride?.toString() || "auto"}
-              onValueChange={(value) =>
-                onFiltersChange({
-                  layerOverride: value === "auto" ? undefined : Number.parseInt(value, 10),
-                })
-              }
-            >
-              <SelectTrigger className="w-full h-8 text-xs bg-sidebar-accent border-sidebar-border">
-                <SelectValue placeholder="Auto (by zoom)" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="auto">Auto (by zoom)</SelectItem>
-                <SelectItem value="6">H3 Resolution 6</SelectItem>
-                <SelectItem value="7">H3 Resolution 7</SelectItem>
-                <SelectItem value="8">H3 Resolution 8</SelectItem>
-                <SelectItem value="9">H3 Resolution 9</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-[10px] text-muted-foreground">Override automatic zoom-based layer switching</p>
-          </div>
+          </details>
         </div>
       )}
 
