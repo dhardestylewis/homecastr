@@ -109,3 +109,31 @@ export async function getAutocompleteSuggestions(query: string): Promise<Autocom
         return []
     }
 }
+
+/**
+ * Reverse geocodes a coordinate to a human-readable address.
+ */
+export async function reverseGeocode(lat: number, lng: number, zoom = 18): Promise<string | null> {
+    try {
+        const params = new URLSearchParams({
+            lat: lat.toString(),
+            lon: lng.toString(),
+            zoom: zoom.toString(),
+            format: "json",
+        })
+
+        const response = await fetch(`https://nominatim.openstreetmap.org/reverse?${params.toString()}`, {
+            headers: {
+                "User-Agent": "ProperlyticUI/1.0",
+            },
+        })
+
+        if (!response.ok) return null
+
+        const data = await response.json()
+        return data.display_name || null
+    } catch (error) {
+        console.error("[Geocode] Reverse geocode error:", error)
+        return null
+    }
+}

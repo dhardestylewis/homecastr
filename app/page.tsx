@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, Suspense } from "react"
+import { useState, useCallback, Suspense, useEffect } from "react"
 import { MapView } from "@/components/map-view"
 import H3Map from "@/components/h3-map"
 import { Legend } from "@/components/legend"
@@ -13,7 +13,8 @@ import type { PropertyForecast } from "@/app/actions/property-forecast"
 import { TimeControls } from "@/components/time-controls"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { AlertCircle } from "lucide-react"
-import { geocodeAddress } from "@/app/actions/geocode"
+import { geocodeAddress, reverseGeocode } from "@/app/actions/geocode"
+import { cellToLatLng } from "h3-js"
 
 function DashboardContent() {
   const { filters, setFilters, resetFilters } = useFilters()
@@ -21,7 +22,32 @@ function DashboardContent() {
   const [forecastData, setForecastData] = useState<{ acct: string; data: PropertyForecast[] } | null>(null)
   const [currentYear, setCurrentYear] = useState(2026)
   const [isUsingMockData, setIsUsingMockData] = useState(false)
+  const [searchBarValue, setSearchBarValue] = useState<string>("")
   const { toast } = useToast()
+
+  // Reverse Geocode Effect
+  useEffect(() => {
+    if (!mapState.selectedId) {
+      setSearchBarValue("")
+      return
+    }
+
+    // Optimistic update to ID while loading
+    setSearchBarValue(mapState.selectedId)
+
+    const fetchAddress = async () => {
+      try {
+        const [lat, lng] = cellToLatLng(mapState.selectedId!)
+        const address = await reverseGeocode(lat, lng)
+        if (address) {
+          setSearchBarValue(address)
+        }
+      } catch (e) {
+        console.error("Reverse geocode failed", e)
+      }
+    }
+    fetchAddress()
+  }, [mapState.selectedId])
 
   const handleSearchError = useCallback(
     (error: string) => {
@@ -109,7 +135,7 @@ function DashboardContent() {
           <SearchBox
             onSearch={handleSearch}
             placeholder="Search address or ID..."
-            value={mapState.selectedId || ""}
+            value={searchBarValue}
           />
         </div>
 
