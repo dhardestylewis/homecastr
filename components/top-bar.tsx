@@ -10,9 +10,10 @@ interface TopBarProps {
   isFiltersPanelOpen: boolean
   onToggleFiltersPanel: () => void
   onSearch: (query: string) => void
+  onTogglePMTiles: () => void
 }
 
-export function TopBar({ filters, isFiltersPanelOpen, onToggleFiltersPanel, onSearch }: TopBarProps) {
+export function TopBar({ filters, isFiltersPanelOpen, onToggleFiltersPanel, onSearch, onTogglePMTiles }: TopBarProps) {
   // Count active filters
   const activeFilterCount = [
     filters.reliabilityMin > 0,
@@ -46,6 +47,17 @@ export function TopBar({ filters, isFiltersPanelOpen, onToggleFiltersPanel, onSe
 
       {/* Filter Summary */}
       <div className="hidden md:flex items-center gap-2 text-sm text-muted-foreground">
+        <div className="flex items-center gap-2 mr-4 border-r border-border pr-4">
+          <span className="text-xs font-medium">Map Mode:</span>
+          <Button
+            variant={filters.usePMTiles ? "default" : "outline"}
+            size="sm"
+            className="h-6 text-xs px-2"
+            onClick={onTogglePMTiles}
+          >
+            {filters.usePMTiles ? "PMTiles (New)" : "Legacy (DB)"}
+          </Button>
+        </div>
         {activeFilterCount > 0 && (
           <span className="px-2 py-1 bg-primary/10 text-primary rounded-md text-xs font-medium">
             {activeFilterCount} filter{activeFilterCount !== 1 ? "s" : ""} active

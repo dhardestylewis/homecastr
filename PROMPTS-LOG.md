@@ -162,3 +162,24 @@ have you been following your GUIDELINEs/git committing
 ### [2026-01-15 16:14]
 
 i still see those files in place?
+
+### [2026-01-15 17:05]
+
+check 2017 again
+
+[Pipeline logs provided showing 2017 ingestion]
+
+### [2026-01-15 17:07]
+
+did we produce all the values you need to proceed?
+
+[Provided python script "H3 Full Stack MVT Pipeline v14.7"]
+
+### [2026-01-15 17:09]
+
+reload the webserver? i am still not seeing any colors visualized even for historical years?
+
+http://localhost:3000/?underperf=false&mode=value
+
+
+

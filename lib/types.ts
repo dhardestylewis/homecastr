@@ -299,6 +299,7 @@ export interface FilterState {
   highlightWarnings: boolean
   colorMode: "growth" | "value"
   layerOverride?: number
+  usePMTiles?: boolean
   dscrMin?: number
   scoreMin?: number
   excludeAlerts?: boolean

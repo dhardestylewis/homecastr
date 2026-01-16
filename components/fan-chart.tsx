@@ -10,9 +10,9 @@ interface FanChartProps {
   historicalValues?: number[] // Actual values for 2019-2025 (7 values)
 }
 
-// Fixed timeline: 2019-2035 (17 years)
+// Fixed timeline: 2019-2032 (14 years)
 const TIMELINE_START = 2019
-const TIMELINE_END = 2035
+const TIMELINE_END = 2030
 const BASELINE_YEAR = 2025 // Dividing line between history and forecast
 const YEARS = Array.from({ length: TIMELINE_END - TIMELINE_START + 1 }, (_, i) => TIMELINE_START + i)
 
@@ -124,7 +124,7 @@ export function FanChart({
         .join(" ")
     }
 
-    // Build Forecast fan (P10-P90 bands for 2026-2030)
+    // Build Forecast fan (P10-P90 bands for 2026-2032)
     const forecastYears = [2026, 2027, 2028, 2029, 2030]
 
     // Fan area path
@@ -180,7 +180,7 @@ export function FanChart({
     }
 
     // X-axis labels - show every 2 years for clarity
-    const labelYears = [2019, 2021, 2023, 2025, 2027, 2029, 2031, 2033, 2035]
+    const labelYears = [2019, 2021, 2023, 2025, 2027, 2029]
 
     return (
       <svg width={width} height={height} className="w-full h-auto">

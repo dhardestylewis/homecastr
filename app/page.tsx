@@ -4,6 +4,7 @@ import { useState, useCallback, Suspense } from "react"
 import { TopBar } from "@/components/top-bar"
 import { FiltersPanel } from "@/components/filters-panel"
 import { MapView } from "@/components/map-view"
+import H3Map from "@/components/h3-map"
 import { Legend } from "@/components/legend"
 import { InspectorDrawer } from "@/components/inspector-drawer"
 import { ForecastChart } from "@/components/forecast-chart"
@@ -74,6 +75,7 @@ function DashboardContent() {
         filters={filters}
         isFiltersPanelOpen={isFiltersPanelOpen}
         onToggleFiltersPanel={handleToggleFiltersPanel}
+        onTogglePMTiles={() => setFilters({ usePMTiles: !filters.usePMTiles })}
         onSearch={async (query) => {
           try {
             const result = await geocodeAddress(query)
@@ -101,6 +103,7 @@ function DashboardContent() {
           onReset={resetFilters}
           isOpen={isFiltersPanelOpen}
           onToggle={handleToggleFiltersPanel}
+          currentZoom={mapState.zoom}
         />
 
         {/* Map Container */}
@@ -130,14 +133,24 @@ function DashboardContent() {
               </Alert>
             )}
 
-            <MapView
-              filters={filters}
-              mapState={mapState}
-              onFeatureSelect={selectFeature}
-              onFeatureHover={hoverFeature}
-              year={currentYear}
-              onMockDataDetected={handleMockDataDetected}
-            />
+            {filters.usePMTiles ? (
+              <div className="absolute inset-0 z-0">
+                <H3Map year={currentYear} colorMode={filters.colorMode} />
+                <div className="absolute bottom-4 left-4 bg-card/95 backdrop-blur-sm border border-border rounded-lg px-3 py-2 text-xs text-muted-foreground z-40 shadow-lg font-mono">
+                  <div className="font-semibold text-foreground mb-1">PMTiles Mode</div>
+                  <div>Rendering from local MVT</div>
+                </div>
+              </div>
+            ) : (
+              <MapView
+                filters={filters}
+                mapState={mapState}
+                onFeatureSelect={selectFeature}
+                onFeatureHover={hoverFeature}
+                year={currentYear}
+                onMockDataDetected={handleMockDataDetected}
+              />
+            )}
 
             {/* Legend Overlay */}
             <Legend
@@ -149,7 +162,7 @@ function DashboardContent() {
             <div className="absolute top-4 right-4 z-50">
               <TimeControls
                 minYear={2019}
-                maxYear={2032}
+                maxYear={2030}
                 currentYear={currentYear}
                 onChange={setCurrentYear}
                 onPlayStart={() => {

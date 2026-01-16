@@ -105,43 +105,73 @@ export async function getH3DataV2(
     const chunks: string[][] = []
     for (let i = 0; i < ids.length; i += chunkSize) chunks.push(ids.slice(i, i + chunkSize))
 
-    const rows_all: any[] = []
-    const details_all: any[] = []
+    // Parallelize chunk processing to prevent timeouts
+    const results = await Promise.all(
+        chunks.map(async (idChunk) => {
+            const chunkRows: any[] = []
+            const chunkDetails: any[] = []
 
-    for (const idChunk of chunks) {
-        // Primary source: hex_rows (has reliable data)
-        // Use .range() to override Supabase default 1000 limit
-        const { data: rowsData, error: rowsError } = await supabase
-            .from("h3_precomputed_hex_rows")
-            .select(
-                "h3_id, property_count, opportunity, reliability, sample_accuracy, alert_pct, med_predicted_value"
-            )
-            .eq("forecast_year", year)
-            .eq("h3_res", res)
-            .in("h3_id", idChunk)
-            .range(0, 999)  // Explicit range - chunk is 500 so this is safe
+            // Parallel fetch for this chunk
+            const [rowsResult, detailsResult] = await Promise.all([
+                supabase
+                    .from("h3_precomputed_hex_rows")
+                    .select(
+                        "h3_id, property_count, opportunity, reliability, sample_accuracy, alert_pct, med_predicted_value"
+                    )
+                    .eq("forecast_year", year)
+                    .eq("h3_res", res)
+                    .in("h3_id", idChunk)
+                    .range(0, 999), // Explicit range
 
-        if (rowsError) {
-            console.error("[DBG] hex_rows chunk error", rowsError)
-        }
-        if (rowsData) rows_all.push(...rowsData)
+                supabase
+                    .from("h3_precomputed_hex_details")
+                    .select(
+                        "h3_id, property_count, opportunity, reliability, sample_accuracy, alert_pct, predicted_value"
+                    )
+                    .eq("forecast_year", year)
+                    .eq("h3_res", res)
+                    .in("h3_id", idChunk)
+                    .range(0, 999) // Explicit range
+            ])
 
-        // Secondary source: hex_details (for any additional data)
-        const { data: detailsData, error: detailsError } = await supabase
-            .from("h3_precomputed_hex_details")
-            .select(
-                "h3_id, property_count, opportunity, reliability, sample_accuracy, alert_pct, med_predicted_value"
-            )
-            .eq("forecast_year", year)
-            .eq("h3_res", res)
-            .in("h3_id", idChunk)
-            .range(0, 999)  // Explicit range
+            if (rowsResult.error) {
+                console.error("[DBG] hex_rows chunk error", rowsResult.error)
+            }
+            if (rowsResult.data) chunkRows.push(...rowsResult.data)
 
-        if (!detailsError && detailsData) details_all.push(...detailsData)
+            if (!detailsResult.error && detailsResult.data) {
+                chunkDetails.push(...detailsResult.data)
+            }
+
+            return { rows: chunkRows, details: chunkDetails }
+        })
+    )
+
+
+    // Flatten results
+    const rows_all = results.flatMap(r => r.rows)
+    const details_all = results.flatMap(r => r.details)
+
+    console.log(`[DBG-V2] Year ${year} Res ${res}: hex_rows=${rows_all.length}, hex_details=${details_all.length}`)
+
+    // Sample some data to debug opportunity values
+    if (details_all.length > 0) {
+        const sample = details_all.slice(0, 3)
+        console.log(`[DBG-V2] Sample details for year ${year}:`, sample.map((d: any) => ({
+            h3_id: d.h3_id?.slice(0, 10),
+            opportunity: d.opportunity,
+            predicted_value: d.predicted_value
+        })))
+    } else if (rows_all.length > 0) {
+        const sample = rows_all.slice(0, 3)
+        console.log(`[DBG-V2] Sample rows for year ${year}:`, sample.map((d: any) => ({
+            h3_id: d.h3_id?.slice(0, 10),
+            opportunity: d.opportunity,
+            med_predicted_value: d.med_predicted_value
+        })))
+    } else {
+        console.log(`[DBG-V2] NO DATA found for year ${year} at res ${res}`)
     }
-
-    console.log("[DBG-V2] hex_rows fetched:", rows_all.length)
-    console.log("[DBG-V2] hex_details fetched:", details_all.length)
 
     // 3. Merge - prefer hex_details (new canonical), fallback to hex_rows (legacy)
     const rowsMap = new Map(rows_all.map((d: any) => [d.h3_id, d]));
@@ -162,7 +192,8 @@ export async function getH3DataV2(
             sample_accuracy: detail?.sample_accuracy ?? row?.sample_accuracy ?? null,
             alert_pct: detail?.alert_pct ?? row?.alert_pct ?? null,
             med_years: detail?.med_years ?? row?.med_years ?? null,
-            med_predicted_value: detail?.med_predicted_value ?? row?.med_predicted_value ?? null,
+            // FIX: Map predicted_value from details to med_predicted_value
+            med_predicted_value: detail?.predicted_value ?? row?.med_predicted_value ?? null,
             has_data: !!(detail || row)
         };
     });

@@ -76,16 +76,7 @@ export function Legend({ className, colorMode = "growth" }: LegendProps) {
         <span className="text-muted-foreground">No Data</span>
       </div>
 
-      {/* Warning indicators */}
-      <div className="space-y-1.5">
-        <span className="text-foreground font-medium">Warnings</span>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5">
-            <div className="w-4 h-4 rounded border-2 border-dashed border-warning bg-transparent" />
-            <span className="text-muted-foreground">Stability/Robustness</span>
-          </div>
-        </div>
-      </div>
+
     </div>
   )
 }

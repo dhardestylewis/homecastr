@@ -493,35 +493,9 @@ export function MapView({
             // Apply filters to raw hex data first
             const currentH3Res = getH3ResolutionFromScale(transform.scale, filters.layerOverride)
 
-            // Auto-scaling Min Accounts Logic
-            // If user sets min accounts > 0, use valid user input. Otherwise auto-scale.
-            const getAutoMinAccounts = (res: number) => {
-                if (res <= 6) return 20  // City view: reduce noise (was 50)
-                if (res === 7) return 5  // District view: light filtering (was 20)
-                if (res === 8) return 0  // Neighborhood: show everything (was 5)
-                return 0                 // Street/Block: show everything
-            }
-
-            const minAccounts = filters.nAcctsMin > 0 ? filters.nAcctsMin : getAutoMinAccounts(currentH3Res)
-
-            // Filter data BEFORE mapping to vertices for performance
-            const filteredData = realHexData.filter(h => {
-                const nAccts = h.property_count ?? 0
-                // Filter 1: Min Accounts
-                if (nAccts < minAccounts) return false
-
-                // Filter 2: Reliability (if needed, currently simplified in UI but keep logic if prop exists)
-                const reliability = h.r ?? h.reliability ?? 0
-                if (filters.reliabilityMin > 0 && reliability < filters.reliabilityMin) return false
-
-                // Filter 3: Underperformers (if toggle is OFF, hide neg growth)
-                // Note: User UI says "Show underperformers" toggle.
-                // If showUnderperformers is FALSE, we HIDE items with growth < 0
-                const growth = h.o ?? h.opportunity ?? 0
-                if (!filters.showUnderperformers && growth < 0) return false
-
-                return true
-            })
+            // NO FILTERING - show all hexes regardless of account count or growth
+            // All hexes pass through to be rendered
+            const filteredData = realHexData
 
             // Clear fast lookup
             hexPropertyMap.current.clear()
@@ -580,6 +554,14 @@ export function MapView({
             }
         }
     }, [realHexData, transform, canvasSize, basemapCenter, filters])
+
+    // Refresh tooltip when data changes (e.g., during timelapse year change)
+    useEffect(() => {
+        if (hoveredHex && hexPropertyMap.current.has(hoveredHex)) {
+            const props = hexPropertyMap.current.get(hoveredHex)!
+            setTooltipData(prev => prev ? { ...prev, properties: props } : null)
+        }
+    }, [realHexData, hoveredHex])
 
     useEffect(() => {
         const container = containerRef.current
@@ -717,17 +699,8 @@ export function MapView({
         for (const hex of filteredHexes) {
             const { vertices, properties } = hex
 
-            // Determine if this cell should be rendered as "Data" or "Coverage Only"
-            // It is "Data" if:
-            // 1. It has data (has_data=true)
-            // 2. It passes user filters
-            const passesFilters =
-                properties.R >= filters.reliabilityMin &&
-                properties.n_accts >= filters.nAcctsMin &&
-                (filters.showUnderperformers || properties.O >= 0) &&
-                (filters.medNYearsMin === 0 || (properties.med_n_years ?? 0) >= filters.medNYearsMin)
-
-            const isDataCell = properties.has_data && passesFilters
+            // NO FILTERING - all cells with data are rendered as data cells
+            const isDataCell = properties.has_data !== false
 
             // Coverage style (neutral) vs Data style (colored)
             // Neutral: Low opacity gray
@@ -752,18 +725,14 @@ export function MapView({
             ctx.fillStyle = fillColor
             ctx.fill()
 
-            // Stroke - highlight warnings with amber border if enabled
-            const hasWarning = properties.stability_flag || properties.robustness_flag
-            if (filters.highlightWarnings && isDataCell && hasWarning) {
+            // Stability check
+            const hasStabilityWarning = properties.stability_flag || properties.robustness_flag
+            if (filters.highlightWarnings && isDataCell && hasStabilityWarning) {
                 ctx.globalAlpha = 0.8
                 ctx.strokeStyle = "#f59e0b" // Amber warning color
                 ctx.lineWidth = 2
-            } else {
-                ctx.globalAlpha = 0.2
-                ctx.strokeStyle = "#888888" // Neutral stroke
-                ctx.lineWidth = 1
+                ctx.stroke()
             }
-            ctx.stroke()
 
             ctx.globalAlpha = 1
         }
@@ -1089,11 +1058,7 @@ export function MapView({
                                     </>
                                 )}
 
-                                <div className="pt-2 border-t border-border/50 grid grid-cols-2 gap-2 text-xs">
-                                    <div className="flex justify-between gap-2">
-                                        <span className="text-muted-foreground">Confidence:</span>
-                                        <span className="font-mono text-foreground">{formatReliability(tooltipData.properties.R)}</span>
-                                    </div>
+                                <div className="pt-2 border-t border-border/50 text-xs">
                                     <div className="flex justify-between gap-2">
                                         <span className="text-muted-foreground">Props:</span>
                                         <span className="font-mono text-foreground">{tooltipData.properties.n_accts}</span>
@@ -1101,12 +1066,7 @@ export function MapView({
                                 </div>
                             </div>
 
-                            {(tooltipData.properties.stability_flag || tooltipData.properties.robustness_flag) && (
-                                <div className="mt-2 pt-2 border-t border-border text-xs text-amber-400">
-                                    {tooltipData.properties.stability_flag && <div>Stability warning</div>}
-                                    {tooltipData.properties.robustness_flag && <div>Robustness warning</div>}
-                                </div>
-                            )}
+
                         </>
                     ) : (
                         <>
@@ -1145,7 +1105,7 @@ export function MapView({
             {(() => {
                 const bounds = getViewportBoundsAccurate(canvasSize.width, canvasSize.height, transform, basemapCenter)
                 return (
-                    <div className="absolute bottom-4 left-4 bg-card/95 backdrop-blur-sm border border-border rounded-lg px-3 py-2 text-xs text-muted-foreground z-40 shadow-lg font-mono">
+                    <div className="absolute top-4 left-4 bg-card/95 backdrop-blur-sm border border-border rounded-lg px-3 py-2 text-xs text-muted-foreground z-40 shadow-lg font-mono">
                         <div className="font-semibold text-foreground mb-1">Debug Info</div>
                         <div>H3 Res: {h3Resolution} | Zoom: {basemapZoom.toFixed(1)}</div>
                         <div>Fetched: {realHexData.length} | Rendered: {filteredHexes.length}</div>

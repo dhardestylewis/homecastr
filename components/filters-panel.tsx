@@ -16,6 +16,7 @@ interface FiltersPanelProps {
   onReset: () => void
   isOpen: boolean
   onToggle: () => void
+  currentZoom: number // New prop
 }
 
 const RELIABILITY_BINS = [
@@ -26,7 +27,32 @@ const RELIABILITY_BINS = [
   { value: 0.8, label: "≥80%", description: "Very high only" },
 ]
 
-export function FiltersPanel({ filters, onFiltersChange, onReset, isOpen, onToggle }: FiltersPanelProps) {
+function getH3Resolution(zoom: number, override?: number): number {
+  if (override) return override
+  if (zoom < 10.5) return 7 // District
+  if (zoom < 12.0) return 8 // Neighborhood
+  if (zoom < 13.5) return 9 // Block
+  if (zoom < 15.0) return 10
+  return 11
+}
+
+export function FiltersPanel({ filters, onFiltersChange, onReset, isOpen, onToggle, currentZoom }: FiltersPanelProps) {
+  const currentRes = getH3Resolution(currentZoom, filters.layerOverride)
+
+  // Dynamic Slider Max based on View Level
+  const getMaxAccounts = (res: number) => {
+    if (res <= 6) return 500 // City: Lots of aggregation
+    if (res === 7) return 100 // District
+    if (res >= 8) return 25   // Neighborhood/Block
+    return 100
+  }
+
+  const maxAccounts = getMaxAccounts(currentRes)
+
+  // Ensure value doesn't get "stuck" above max visually (though logic handles it)
+  // We won't force-change the filter state to avoid unexpected side effects, 
+  // but we clamp the slider display.
+
   const handleReliabilityChange = useCallback(
     (value: number[]) => {
       onFiltersChange({ reliabilityMin: value[0] })
@@ -92,7 +118,7 @@ export function FiltersPanel({ filters, onFiltersChange, onReset, isOpen, onTogg
                     : "text-muted-foreground hover:text-foreground"
                 )}
               >
-                Growth %
+                Δ vs 2025
               </button>
               <button
                 onClick={() => onFiltersChange({ colorMode: "value" })}
@@ -108,7 +134,7 @@ export function FiltersPanel({ filters, onFiltersChange, onReset, isOpen, onTogg
             </div>
             <p className="text-[10px] text-muted-foreground">
               {filters.colorMode === "growth"
-                ? "Colors represent predicted capital appreciation"
+                ? "Change in value relative to 2025 baseline"
                 : "Colors represent raw property values"}
             </p>
           </div>
@@ -121,52 +147,7 @@ export function FiltersPanel({ filters, onFiltersChange, onReset, isOpen, onTogg
             </summary>
 
             <div className="pl-2 space-y-6 border-l border-border/50 ml-1.5 pt-2">
-              {/* Reliability Filter */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label className="text-sm font-medium text-sidebar-foreground">
-                    Reliability Minimum
-                  </Label>
-                  <span className="text-xs text-muted-foreground font-mono">
-                    {filters.reliabilityMin > 0 ? `≥${(filters.reliabilityMin * 100).toFixed(0)}%` : "All"}
-                  </span>
-                </div>
-                <Slider
-                  id="reliability-min"
-                  name="reliability-min"
-                  value={[filters.reliabilityMin]}
-                  onValueChange={handleReliabilityChange}
-                  min={0}
-                  max={0.8}
-                  step={0.2}
-                  className="w-full"
-                  aria-label="Reliability minimum"
-                />
-                <div className="flex justify-between text-[10px] text-muted-foreground px-0.5">
-                  {RELIABILITY_BINS.slice(0, -1).map((bin) => (
-                    <span key={bin.value}>{bin.label}</span>
-                  ))}
-                </div>
-              </div>
 
-              {/* Support Filters (Min Accounts) */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Min Accounts</span>
-                  <span className="text-xs text-muted-foreground font-mono">{filters.nAcctsMin || "None"}</span>
-                </div>
-                <Slider
-                  id="n-accts-min"
-                  name="n-accts-min"
-                  value={[filters.nAcctsMin]}
-                  onValueChange={handleNAcctsChange}
-                  min={0}
-                  max={100}
-                  step={5}
-                  className="w-full"
-                  aria-label="Minimum accounts"
-                />
-              </div>
 
               {/* Layer Override */}
               <div className="space-y-2">
@@ -193,6 +174,8 @@ export function FiltersPanel({ filters, onFiltersChange, onReset, isOpen, onTogg
                 <p className="text-[10px] text-muted-foreground">Override automatic zoom-based layer switching</p>
               </div>
             </div>
+
+
           </details>
         </div>
       )}
