@@ -12,9 +12,10 @@ import { useDebounce } from "@/hooks/use-debounce"
 interface SearchBoxProps {
   onSearch: (query: string) => void
   placeholder?: string
+  value?: string
 }
 
-export function SearchBox({ onSearch, placeholder = "Search address or ID..." }: SearchBoxProps) {
+export function SearchBox({ onSearch, placeholder = "Search address or ID...", value }: SearchBoxProps) {
   const [query, setQuery] = useState("")
   const [suggestions, setSuggestions] = useState<AutocompleteResult[]>([])
   const [isOpen, setIsOpen] = useState(false)
@@ -38,6 +39,13 @@ export function SearchBox({ onSearch, placeholder = "Search address or ID..." }:
   }, [])
 
   const debouncedQuery = useDebounce(query, 300)
+
+  // Sync with external value (e.g. from map selection)
+  useEffect(() => {
+    if (value && value !== query) {
+      setQuery(value)
+    }
+  }, [value])
 
   useEffect(() => {
     async function fetchSuggestions() {

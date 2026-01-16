@@ -105,12 +105,16 @@ function DashboardContent() {
         )}
 
         {/* Floating Search Bar - Top Left */}
-        <div className="absolute top-4 left-4 z-50 w-80">
-          <SearchBox onSearch={handleSearch} placeholder="Search address..." />
+        <div className="absolute top-4 left-4 right-4 md:right-auto md:w-80 z-50">
+          <SearchBox
+            onSearch={handleSearch}
+            placeholder="Search address or ID..."
+            value={mapState.selectedId || ""}
+          />
         </div>
 
         {/* Time Controls - Top Right */}
-        <div className="absolute top-4 right-4 z-50">
+        <div className="absolute top-[70px] left-4 right-4 md:top-4 md:right-4 md:left-auto md:w-auto z-50">
           <TimeControls
             minYear={2019}
             maxYear={2030}
@@ -119,6 +123,7 @@ function DashboardContent() {
             onPlayStart={() => {
               console.log("[PAGE] Play started - prefetch all years triggered")
             }}
+            className="w-full md:w-[320px]"
           />
         </div>
 
