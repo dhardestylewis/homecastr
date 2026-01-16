@@ -231,6 +231,16 @@ function geoToCanvas(
     return { x: canvasX, y: canvasY }
 }
 
+function getZoomConstants(s: number) {
+    const zoom = getContinuousBasemapZoom(s)
+    const z = Math.floor(zoom)
+    const zoomFraction = zoom - z
+    const tileScale = Math.pow(2, zoomFraction)
+    const worldScale = Math.pow(2, z)
+    const worldSize = 256 * worldScale
+    return { zoom, z, tileScale, worldSize }
+}
+
 interface HexagonData {
     id: string
     vertices: Array<[number, number]>
@@ -266,6 +276,10 @@ export function MapView({
 
     // Fast Lookup Map for O(1) access: H3ID -> Properties
     const hexPropertyMap = useRef<Map<string, FeatureProperties>>(new Map())
+
+    // Touch Handling Refs
+    const lastTouchPosRef = useRef<{ x: number; y: number } | null>(null)
+    const lastPinchDistRef = useRef<number | null>(null)
 
     const animationFrameRef = useRef<number | null>(null)
 
@@ -958,15 +972,7 @@ export function MapView({
         onFeatureHover(null)
     }
 
-    const getZoomConstants = (s: number) => {
-        const zoom = getContinuousBasemapZoom(s)
-        const z = Math.floor(zoom)
-        const zoomFraction = zoom - z
-        const tileScale = Math.pow(2, zoomFraction)
-        const worldScale = Math.pow(2, z)
-        const worldSize = 256 * worldScale
-        return { zoom, z, tileScale, worldSize }
-    }
+
 
     // [FIX] Manually attach wheel listener to support non-passive prevention (Zoom blocking)
     useEffect(() => {
@@ -975,52 +981,136 @@ export function MapView({
 
         const onWheel = (e: WheelEvent) => {
             e.preventDefault()
-
             const rect = canvas.getBoundingClientRect()
             const mouseX = e.clientX - rect.left
             const mouseY = e.clientY - rect.top
 
-            // 1. Calculate Mercator position of mouse BEFORE zoom
-            const { worldSize: w1, tileScale: s1 } = getZoomConstants(transform.scale)
+            setTransform(prev => {
+                const { worldSize: w1, tileScale: s1 } = getZoomConstants(prev.scale)
+                const centerMerc = latLngToMercator(basemapCenter.lng, basemapCenter.lat)
 
-            const centerMerc = latLngToMercator(basemapCenter.lng, basemapCenter.lat)
-            const centerWorldPixelX = centerMerc.x * w1 - transform.offsetX
-            const centerWorldPixelY = centerMerc.y * w1 - transform.offsetY
+                // Mouse in World Pixels (Current)
+                const centerWorldPixelX = centerMerc.x * w1 - prev.offsetX
+                const centerWorldPixelY = centerMerc.y * w1 - prev.offsetY
+                const mouseWorldPixelX = (mouseX - canvasSize.width / 2) / s1 + centerWorldPixelX
+                const mouseWorldPixelY = (mouseY - canvasSize.height / 2) / s1 + centerWorldPixelY
 
-            const mouseWorldPixelX = (mouseX - canvasSize.width / 2) / s1 + centerWorldPixelX
-            const mouseWorldPixelY = (mouseY - canvasSize.height / 2) / s1 + centerWorldPixelY
+                // Normalize to Mercator (0-1)
+                const mouseMercX = mouseWorldPixelX / w1
+                const mouseMercY = mouseWorldPixelY / w1
 
-            // Normalized Mercator (0-1) is invariant across scales
-            const mouseMercX = mouseWorldPixelX / w1
-            const mouseMercY = mouseWorldPixelY / w1
+                // New Scale
+                const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1
+                const newScale = Math.max(1000, Math.min(50000, prev.scale * zoomFactor))
 
-            // 2. Calculate New Scale
-            const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1
-            const newScale = Math.max(1000, Math.min(50000, transform.scale * zoomFactor))
+                // New Constants
+                const { worldSize: w2, tileScale: s2 } = getZoomConstants(newScale)
 
-            // 3. Calculate New Offset to keep Mouse stationary
-            const { worldSize: w2, tileScale: s2 } = getZoomConstants(newScale)
+                // Reverse calculation: Where must Offset be so that MouseMerc aligns with MouseScreen?
+                // mouseScreenX = (mouseMercX * w2 - newOffsetX - centerMercX*w2 + newOffsetX ... wait, complicated
+                // Use the formula from before:
+                // centerWorldPixel = merc * w - offset
+                // offset = merc * w - centerWorldPixel
 
-            const newCenterWorldPixelX = mouseMercX * w2 - (mouseX - canvasSize.width / 2) / s2
-            const newCenterWorldPixelY = mouseMercY * w2 - (mouseY - canvasSize.height / 2) / s2
+                // We know where we want the center of the screen (centerWorldPixel) to be? No.
+                // We want the mouse point (MercX) to be at mouseScreenX.
+                // mouseWorldPixelX2 = mouseMercX * w2
+                // mouseScreenX = (mouseWorldPixelX2 - centerWorldPixelX2) * s2 + w/2
+                // centerWorldPixelX2 = mouseWorldPixelX2 - (mouseScreenX - w/2)/s2
+                // centerWorldPixelX2 = centerMerc * w2 - newOffsetX
+                // newOffsetX = centerMerc * w2 - centerWorldPixelX2
 
-            const newOffsetX = centerMerc.x * w2 - newCenterWorldPixelX
-            const newOffsetY = centerMerc.y * w2 - newCenterWorldPixelY
+                const newCenterWorldPixelX = mouseMercX * w2 - (mouseX - canvasSize.width / 2) / s2
+                const newCenterWorldPixelY = mouseMercY * w2 - (mouseY - canvasSize.height / 2) / s2
 
-            setTransform({
-                scale: newScale,
-                offsetX: newOffsetX,
-                offsetY: newOffsetY,
+                const newOffsetX = centerMerc.x * w2 - newCenterWorldPixelX
+                const newOffsetY = centerMerc.y * w2 - newCenterWorldPixelY
+
+                return { scale: newScale, offsetX: newOffsetX, offsetY: newOffsetY }
             })
         }
 
-        // Must be non-passive to preventDefault()
+        // TOUCH HANDLING
+        const onTouchStart = (e: TouchEvent) => {
+            if (e.touches.length === 1) {
+                lastTouchPosRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
+                lastPinchDistRef.current = null
+            } else if (e.touches.length === 2) {
+                const dx = e.touches[0].clientX - e.touches[1].clientX
+                const dy = e.touches[0].clientY - e.touches[1].clientY
+                lastPinchDistRef.current = Math.sqrt(dx * dx + dy * dy)
+                lastTouchPosRef.current = null
+            }
+        }
+
+        const onTouchMove = (e: TouchEvent) => {
+            if (e.cancelable) e.preventDefault()
+
+            // PAN
+            if (e.touches.length === 1 && lastTouchPosRef.current) {
+                const dx = e.touches[0].clientX - lastTouchPosRef.current.x
+                const dy = e.touches[0].clientY - lastTouchPosRef.current.y
+
+                setTransform(prev => ({
+                    ...prev,
+                    offsetX: prev.offsetX + dx, // Matches mouse pan direction
+                    offsetY: prev.offsetY + dy
+                }))
+                lastTouchPosRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
+            }
+            // PINCH ZOOM
+            else if (e.touches.length === 2 && lastPinchDistRef.current) {
+                const t1 = e.touches[0]
+                const t2 = e.touches[1]
+                const dx = t1.clientX - t2.clientX
+                const dy = t1.clientY - t2.clientY
+                const dist = Math.sqrt(dx * dx + dy * dy)
+
+                const scaleFactor = dist / lastPinchDistRef.current
+                lastPinchDistRef.current = dist
+
+                const rect = canvas.getBoundingClientRect()
+                const cx = (t1.clientX + t2.clientX) / 2 - rect.left
+                const cy = (t1.clientY + t2.clientY) / 2 - rect.top
+
+                setTransform(prev => {
+                    // Reuse Wheel Logic for Pinch Center
+                    const { worldSize: w1, tileScale: s1 } = getZoomConstants(prev.scale)
+                    const centerMerc = latLngToMercator(basemapCenter.lng, basemapCenter.lat)
+
+                    const centerWorldPixelX = centerMerc.x * w1 - prev.offsetX
+                    const centerWorldPixelY = centerMerc.y * w1 - prev.offsetY
+
+                    // Pinch Center in Mercator
+                    const mouseWorldPixelX = (cx - canvasSize.width / 2) / s1 + centerWorldPixelX
+                    const mouseWorldPixelY = (cy - canvasSize.height / 2) / s1 + centerWorldPixelY
+                    const mouseMercX = mouseWorldPixelX / w1
+                    const mouseMercY = mouseWorldPixelY / w1
+
+                    const newScale = Math.max(1000, Math.min(50000, prev.scale * scaleFactor))
+                    const { worldSize: w2, tileScale: s2 } = getZoomConstants(newScale)
+
+                    const newCenterWorldPixelX = mouseMercX * w2 - (cx - canvasSize.width / 2) / s2
+                    const newCenterWorldPixelY = mouseMercY * w2 - (cy - canvasSize.height / 2) / s2
+
+                    const newOffsetX = centerMerc.x * w2 - newCenterWorldPixelX
+                    const newOffsetY = centerMerc.y * w2 - newCenterWorldPixelY
+
+                    return { scale: newScale, offsetX: newOffsetX, offsetY: newOffsetY }
+                })
+            }
+        }
+
         canvas.addEventListener('wheel', onWheel, { passive: false })
+        canvas.addEventListener("touchstart", onTouchStart, { passive: false })
+        canvas.addEventListener("touchmove", onTouchMove, { passive: false })
 
         return () => {
             canvas.removeEventListener('wheel', onWheel)
+            canvas.removeEventListener("touchstart", onTouchStart)
+            canvas.removeEventListener("touchmove", onTouchMove)
         }
-    }, [transform, canvasSize, basemapCenter]) // Re-bind if core params change to keep closure fresh
+    }, [canvasSize, basemapCenter])
 
     const handleZoomIn = () => {
         setTransform((prev) => ({
@@ -1061,7 +1151,7 @@ export function MapView({
             <canvas
                 ref={highlightCanvasRef}
                 style={{ width: canvasSize.width, height: canvasSize.height }}
-                className="cursor-grab active:cursor-grabbing absolute inset-0 z-20"
+                className="cursor-grab active:cursor-grabbing absolute inset-0 z-20 touch-none"
                 onMouseDown={handleMouseDown}
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
