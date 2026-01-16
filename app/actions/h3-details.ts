@@ -13,10 +13,10 @@ export async function getH3CellDetails(h3Id: string, forecastYear = 2026): Promi
 
   // Run queries in parallel: 
   // 1. Details for the requested forecast year
-  // 1. Details for the requested forecast year
-  // 2. Historical values (2019-2025) for the timeline
-  // 3. Grid coordinates (v14 schema normalization)
-  const [detailsResult, historyResult, gridResult] = await Promise.all([
+  // 2. Historical values (2019-2025)
+  // 3. Grid coordinates
+  // 4. Base details for FanChart (2026) if needed
+  const [detailsResult, historyResult, gridResult, baseResult] = await Promise.all([
     supabase
       .from("h3_precomputed_hex_details")
       .select("*")
@@ -28,19 +28,28 @@ export async function getH3CellDetails(h3Id: string, forecastYear = 2026): Promi
       .select("forecast_year, predicted_value")
       .eq("h3_id", h3Id)
       .lte("forecast_year", 2025)
-      .order("forecast_year", { ascending: true })
       .order("forecast_year", { ascending: true }),
     supabase
       .from("h3_aoi_grid")
       .select("lat, lng")
       .eq("h3_id", h3Id)
-      .eq("aoi_id", "harris_county") // Mandatory AOI filter per v14 requirement
-      .single()
+      .eq("aoi_id", "harris_county")
+      .single(),
+    forecastYear !== 2026
+      ? supabase
+        .from("h3_precomputed_hex_details")
+        .select("*")
+        .eq("h3_id", h3Id)
+        .eq("forecast_year", 2026)
+        .single()
+      : Promise.resolve({ data: null, error: null })
   ])
 
   const { data: detailsData, error: detailsError } = detailsResult
   const { data: historyData } = historyResult
-  const { data: gridData } = gridResult // Explicitly separate grid data
+  const { data: gridData } = gridResult
+  // Use base data for FanChart if available (to keep chart stable), otherwise use current details
+  const fanSourceData = baseResult.data ?? detailsData
 
   console.log(`[SERVER] Query result for ${h3Id}/${forecastYear}: predicted_value=${detailsData?.predicted_value}, opportunity=${detailsData?.opportunity}`)
   console.log(`[SERVER] History result for ${h3Id}: ${historyData?.length ?? 0} rows`)
@@ -70,7 +79,7 @@ export async function getH3CellDetails(h3Id: string, forecastYear = 2026): Promi
   const historyMap = new Map(historyData?.map(r => [r.forecast_year, r.predicted_value]) ?? [])
   const historicalValues = [2019, 2020, 2021, 2022, 2023, 2024, 2025].map(y => historyMap.get(y) ?? 0)
 
-  return buildFullResponse(h3Id, detailsData, historicalValues, gridData)
+  return buildFullResponse(h3Id, detailsData, historicalValues, gridData, fanSourceData)
 }
 
 /**
@@ -83,7 +92,7 @@ export async function getH3CellDetails(h3Id: string, forecastYear = 2026): Promi
  * - Additional: ape, pred_cv, med_years
  * - V14: Coordinates from h3_aoi_grid
  */
-function buildFullResponse(h3Id: string, d: any, historicalValues?: number[], grid?: { lat: number; lng: number } | null): DetailsResponse {
+function buildFullResponse(h3Id: string, d: any, historicalValues?: number[], grid?: { lat: number; lng: number } | null, fanData?: any): DetailsResponse {
   return {
     id: h3Id,
     locationLabel: `H3 Cell (Res ${d.h3_res})`,
@@ -127,7 +136,7 @@ function buildFullResponse(h3Id: string, d: any, historicalValues?: number[], gr
       medAE_z: d.medae_z ?? null, // EXISTS - note lowercase 'medae_z' in DB
       inv_dscr_z: d.inv_dscr_z ?? null, // EXISTS in Supabase
     },
-    fanChart: buildFanChart(d),
+    fanChart: buildFanChart(fanData ?? d),
     stressTests: undefined,
   }
 }

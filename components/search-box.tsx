@@ -25,6 +25,8 @@ export function SearchBox({ onSearch, placeholder = "Search address or ID...", v
   // We can't import useDebounce if it doesn't exist, checking imports first.
   // Assuming we need to implement debounce.
 
+  const inputRef = useRef<HTMLInputElement>(null)
+
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   // Close dropdown when clicking outside
@@ -85,6 +87,7 @@ export function SearchBox({ onSearch, placeholder = "Search address or ID...", v
     setQuery("")
     setSuggestions([])
     setIsOpen(false)
+    inputRef.current?.focus()
   }, [])
 
   const handleSelect = useCallback((suggestion: AutocompleteResult) => {
@@ -108,6 +111,7 @@ export function SearchBox({ onSearch, placeholder = "Search address or ID...", v
           <div className="relative flex-1 flex items-center">
             <Search className="h-4 w-4 text-muted-foreground mr-2 shrink-0" />
             <Input
+              ref={inputRef}
               id="search-box"
               name="search-box"
               type="search"
