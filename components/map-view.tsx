@@ -1170,11 +1170,7 @@ export function MapView({
                 onClick={handleCanvasClick}
             />
 
-            {isLoadingData && (
-                <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-card/95 backdrop-blur-sm border border-border rounded-lg px-4 py-2 text-sm text-muted-foreground z-40">
-                    Loading H3 resolution {getH3ResolutionFromScale(transform.scale)} from Supabase...
-                </div>
-            )}
+
 
             {mounted && tooltipData && createPortal(
                 <div
