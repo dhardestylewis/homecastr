@@ -10,7 +10,7 @@ const DEFAULT_FILTERS: FilterState = {
   medNYearsMin: 0,
   showUnderperformers: false,
   highlightWarnings: false,
-  colorMode: "growth",
+  colorMode: "value",
   layerOverride: undefined,
   usePMTiles: true,
 }
@@ -29,7 +29,7 @@ export function useFilters() {
       medNYearsMin: Number.parseFloat(searchParams.get("yMin") || "0"),
       showUnderperformers: searchParams.get("underperf") === "true",
       highlightWarnings: searchParams.get("warnings") === "true",
-      colorMode: (modeParam === "value" ? "value" : "growth"),
+      colorMode: (modeParam === "growth" ? "growth" : "value"),
       layerOverride: searchParams.get("layer") ? Number.parseInt(searchParams.get("layer")!, 10) : undefined,
       usePMTiles: searchParams.get("pmtiles") === "true", // Opt-in until tiles are deployed
     }
