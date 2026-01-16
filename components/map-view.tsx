@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { getH3DataV2 } from "@/app/actions/h3-data-v2"
-import { cellToBoundary, latLngToCell } from "h3-js"
+import { cellToBoundary, latLngToCell, cellToLatLng } from "h3-js"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
@@ -1195,10 +1195,12 @@ export function MapView({
                             {/* Header */}
                             <div className="p-3 border-b border-border/50 bg-muted/30">
                                 <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">
-                                    H3 Cell (Res {h3Resolution})
+                                    {h3Resolution <= 7 ? "District Scale" :
+                                        h3Resolution <= 9 ? "Neighborhood Scale" :
+                                            h3Resolution <= 10 ? "Block Scale" : "Property Scale"} (Res {h3Resolution})
                                 </div>
                                 <div className="font-mono text-xs text-muted-foreground truncate">
-                                    {tooltipData.properties.id}
+                                    {cellToLatLng(tooltipData.properties.id).map((n: number) => n.toFixed(5)).join(", ")}
                                 </div>
                             </div>
 
