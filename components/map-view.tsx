@@ -5,6 +5,7 @@ import { getH3DataV2 } from "@/app/actions/h3-data-v2"
 import { cellToBoundary, latLngToCell } from "h3-js"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import { cn } from "@/lib/utils"
 import { getOpportunityColor, getValueColor, formatOpportunity, formatCurrency, formatReliability } from "@/lib/utils/colors"
 import { TrendingUp, TrendingDown, Minus } from "lucide-react"
@@ -330,7 +331,11 @@ export function MapView({
 
     const [hoveredHex, setHoveredHex] = useState<string | null>(null)
     const [selectedHex, setSelectedHex] = useState<string | null>(null)
-    const [tooltipData, setTooltipData] = useState<{ x: number; y: number; properties: FeatureProperties } | null>(null)
+
+    const [tooltipData, setTooltipData] = useState<{ x: number; y: number; globalX: number; globalY: number; properties: FeatureProperties } | null>(null)
+    const [mounted, setMounted] = useState(false)
+
+    useEffect(() => setMounted(true), [])
 
     const [filteredHexes, setFilteredHexes] = useState<HexagonData[]>([])
     const [realHexData, setRealHexData] = useState<Array<any>>([])
@@ -620,7 +625,7 @@ export function MapView({
         } else if (isMobile && selectedHex && hexPropertyMap.current.has(selectedHex)) {
             // Mobile: Show tooltip for selected hex even if not hovering
             const props = hexPropertyMap.current.get(selectedHex)!
-            setTooltipData({ x: 0, y: 0, properties: props })
+            setTooltipData({ x: 0, y: 0, globalX: 0, globalY: 0, properties: props })
         }
     }, [realHexData, hoveredHex, selectedHex, isMobile])
 
@@ -911,11 +916,11 @@ export function MapView({
                 if (hoveredHex !== cellId) {
                     setHoveredHex(cellId)
                     const props = hexPropertyMap.current.get(cellId)!
-                    setTooltipData({ x: canvasX, y: canvasY, properties: props })
+                    setTooltipData({ x: canvasX, y: canvasY, globalX: e.clientX, globalY: e.clientY, properties: props })
                     onFeatureHover(cellId)
                 } else {
                     // Update tooltip pos even if hex didn't change
-                    setTooltipData(prev => prev ? { ...prev, x: canvasX, y: canvasY } : null)
+                    setTooltipData(prev => prev ? { ...prev, x: canvasX, y: canvasY, globalX: e.clientX, globalY: e.clientY } : null)
                 }
             } else {
                 if (hoveredHex) {
@@ -1070,18 +1075,18 @@ export function MapView({
                 </div>
             )}
 
-            {tooltipData && (
+            {mounted && tooltipData && createPortal(
                 <div
                     className={cn(
-                        "z-50 bg-card/95 backdrop-blur-md border border-border shadow-2xl overflow-hidden",
+                        "z-[9999] bg-card/95 backdrop-blur-md border border-border shadow-2xl overflow-hidden pointer-events-none",
                         isMobile
-                            ? "fixed bottom-0 left-0 right-0 w-full rounded-t-xl rounded-b-none border-t border-x-0 border-b-0"
-                            : "absolute pointer-events-none rounded-xl w-[320px]"
+                            ? "fixed bottom-0 left-0 right-0 w-full rounded-t-xl rounded-b-none border-t border-x-0 border-b-0 pointer-events-auto"
+                            : "fixed rounded-xl w-[320px]"
                     )}
                     style={isMobile ? undefined : {
-                        left: tooltipData.x + 20,
-                        top: tooltipData.y + 20,
-                        transform: tooltipData.x > canvasSize.width - 340 ? 'translateX(-100%) translateX(-40px)' : 'none'
+                        left: tooltipData.globalX + 20,
+                        top: tooltipData.globalY + (tooltipData.globalY > window.innerHeight - 350 ? -20 : 20),
+                        transform: `${tooltipData.globalX > window.innerWidth - 340 ? 'translateX(-100%) translateX(-40px)' : ''} ${tooltipData.globalY > window.innerHeight - 350 ? 'translateY(-100%)' : ''}`.trim() || 'none'
                     }}
                 >
                     {tooltipData.properties.has_data ? (
@@ -1185,7 +1190,8 @@ export function MapView({
                             <div className="font-medium text-muted-foreground text-xs">No data available</div>
                         </div>
                     )}
-                </div>
+                </div>,
+                document.body
             )}
 
             <div className="absolute bottom-4 right-4 flex flex-col gap-2 z-30">

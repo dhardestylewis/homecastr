@@ -91,11 +91,7 @@ export function FanChart({
     if (p10) allValues.push(...p10.filter(v => Number.isFinite(v)))
     if (p90) allValues.push(...p90.filter(v => Number.isFinite(v)))
     if (p50) allValues.push(...p50.filter(v => Number.isFinite(v)))
-    if (childLines) {
-      childLines.forEach(line => {
-        allValues.push(...line.filter(v => Number.isFinite(v)))
-      })
-    }
+
 
     // Fallback if no data
     if (allValues.length === 0) {
