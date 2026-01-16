@@ -67,13 +67,13 @@ export function TimeControls({
     const yearLabel = isHistorical ? "Historical Year" : "Forecast Year"
 
     return (
-        <div className={cn("flex flex-col gap-2 p-3 glass-panel rounded-lg shadow-lg w-[320px]", className)}>
+        <div className={cn("flex flex-col gap-2 p-2 md:p-3 glass-panel rounded-lg shadow-lg w-[320px]", className)}>
             <div className="flex items-center justify-between mb-1">
-                <div className="flex items-center gap-1.5 text-sm font-semibold">
+                <div className="flex items-center gap-1.5 text-xs md:text-sm font-semibold">
                     <Calendar className="h-4 w-4 text-muted-foreground" />
                     <span>{yearLabel}</span>
                 </div>
-                <span className="text-xl font-mono font-bold text-primary">{currentYear}</span>
+                <span className="text-lg md:text-xl font-mono font-bold text-primary">{currentYear}</span>
             </div>
 
             <div className="flex items-center gap-2">
@@ -103,8 +103,8 @@ export function TimeControls({
                 <span>{maxYear}</span>
             </div>
 
-            {/* Optional: Step controls if slider is too fiddly */}
-            <div className="grid grid-cols-2 gap-2 mt-1">
+            {/* Step Controls (Hidden on Mobile for compactness) */}
+            <div className="hidden md:grid grid-cols-2 gap-2 mt-1">
                 <Button
                     variant="ghost"
                     size="sm"

@@ -117,7 +117,7 @@ export function SearchBox({ onSearch, placeholder = "Search address or ID...", v
                 if (!isOpen && e.target.value.length >= 3) setIsOpen(true)
               }}
               placeholder={placeholder}
-              className="h-9 border-none bg-transparent shadow-none focus-visible:ring-0 px-0 text-sm placeholder:text-muted-foreground/70"
+              className="h-9 border-none bg-transparent shadow-none focus-visible:ring-0 px-0 text-sm placeholder:text-muted-foreground/70 [&::-webkit-search-cancel-button]:appearance-none [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-decoration]:hidden"
               aria-label="Search"
               autoComplete="off"
             />

@@ -1227,9 +1227,16 @@ export function MapView({
                                 </div>
                             )}
                             {/* Branding Header */}
-                            <div className="flex items-center gap-2 px-3 py-2 border-b border-border/50 bg-muted/40 backdrop-blur-md">
-                                <Building2 className="w-3.5 h-3.5 text-primary" />
-                                <span className="font-bold text-[10px] tracking-wide text-foreground uppercase">InvestMap</span>
+                            <div className="flex items-center justify-between px-3 py-2 border-b border-border/50 bg-muted/40 backdrop-blur-md">
+                                <div className="flex items-center gap-2">
+                                    <Building2 className="w-3.5 h-3.5 text-primary" />
+                                    <span className="font-bold text-[10px] tracking-wide text-foreground uppercase">InvestMap</span>
+                                </div>
+                                {isMobile && (
+                                    <button onClick={handleReset} className="p-1 -mr-1 text-muted-foreground hover:text-foreground">
+                                        <X className="w-4 h-4" />
+                                    </button>
+                                )}
                             </div>
                             {/* Scale Header */}
                             <div className="p-3 border-b border-border/50 bg-muted/30">
