@@ -94,7 +94,7 @@ export function getValueColor(value: number): string {
 }
 
 // Format opportunity value
-export function formatOpportunity(value: number, unit = "% CAGR"): string {
+export function formatOpportunity(value: number, unit = "%"): string {
   const sign = value >= 0 ? "+" : ""
   return `${sign}${value.toFixed(1)}${unit}`
 }

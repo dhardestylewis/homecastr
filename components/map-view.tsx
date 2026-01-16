@@ -7,7 +7,17 @@ import { cellToBoundary, latLngToCell } from "h3-js"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { cn } from "@/lib/utils"
 import { getOpportunityColor, getValueColor, formatOpportunity, formatCurrency, formatReliability } from "@/lib/utils/colors"
-import type { FilterState, FeatureProperties, MapState } from "@/lib/types"
+import { TrendingUp, TrendingDown, Minus } from "lucide-react"
+import type { FilterState, FeatureProperties, MapState, DetailsResponse } from "@/lib/types"
+import { getH3CellDetails } from "@/app/actions/h3-details"
+import { FanChart } from "./fan-chart"
+
+// Helper to get trend icon
+const getTrendIcon = (trend: "up" | "down" | "stable" | undefined) => {
+    if (trend === "up") return <TrendingUp className="h-3 w-3 text-green-500" />
+    if (trend === "down") return <TrendingDown className="h-3 w-3 text-red-500" />
+    return <Minus className="h-3 w-3 text-muted-foreground" />
+}
 
 // MapView Props Interface
 interface MapViewProps {
@@ -311,6 +321,28 @@ export function MapView({
     const [isLoadingData, setIsLoadingData] = useState(false)
     const [parcels, setParcels] = useState<Array<any>>([])
     const [isParcelsLoading, setIsParcelsLoading] = useState(false)
+    const [hoveredDetails, setHoveredDetails] = useState<DetailsResponse | null>(null)
+    const [isLoadingDetails, setIsLoadingDetails] = useState(false)
+
+    // Fetch detailed data for tooltip when hovering
+    useEffect(() => {
+        if (!hoveredHex) {
+            setHoveredDetails(null)
+            return
+        }
+
+        const timer = setTimeout(() => {
+            setIsLoadingDetails(true)
+            getH3CellDetails(hoveredHex, year)
+                .then(data => {
+                    setHoveredDetails(data)
+                })
+                .catch(err => console.error("Failed to load details", err))
+                .finally(() => setIsLoadingDetails(false))
+        }, 150) // Small delay to prevent spamming
+
+        return () => clearTimeout(timer)
+    }, [hoveredHex, year])
 
 
     const basemapZoom = useMemo(() => getContinuousBasemapZoom(transform.scale), [transform.scale])
@@ -1011,71 +1043,114 @@ export function MapView({
 
             {tooltipData && (
                 <div
-                    className="absolute pointer-events-none z-30 bg-card/95 backdrop-blur-sm border border-border rounded-lg px-3 py-2 text-sm shadow-lg"
+                    className="absolute pointer-events-none z-50 bg-card/95 backdrop-blur-md border border-border rounded-xl shadow-2xl overflow-hidden"
                     style={{
-                        left: tooltipData.x + 15,
-                        top: tooltipData.y + 15,
-                        maxWidth: 280,
+                        left: tooltipData.x + 20,
+                        top: tooltipData.y + 20,
+                        width: 320,
+                        // Ensure it doesn't go off screen (basic logic)
+                        transform: tooltipData.x > canvasSize.width - 340 ? 'translateX(-100%) translateX(-40px)' : 'none'
                     }}
                 >
                     {tooltipData.properties.has_data ? (
-                        <>
-                            <div className="font-medium text-foreground mb-2 pb-2 border-b border-border">
-                                {filters.colorMode === "value" ? "Property Value" : "Projected Growth"}
-                            </div>
-                            <div className="space-y-2">
-                                {/* Value Mode: Show Value big, Growth small below */}
-                                {filters.colorMode === "value" ? (
-                                    <>
-                                        <div className="flex justify-between items-baseline gap-4">
-                                            <span className="text-muted-foreground">Value:</span>
-                                            <span className="font-mono text-lg font-bold text-foreground">
-                                                {tooltipData.properties.med_predicted_value ? formatCurrency(tooltipData.properties.med_predicted_value) : "N/A"}
-                                            </span>
-                                        </div>
-                                        <div className="flex justify-between items-baseline gap-4">
-                                            <span className="text-muted-foreground">Growth:</span>
-                                            <span className={cn("font-mono", tooltipData.properties.O >= 0 ? "text-green-500" : "text-destructive")}>
-                                                {formatOpportunity(tooltipData.properties.O)}
-                                            </span>
-                                        </div>
-                                    </>
-                                ) : (
-                                    /* Growth Mode: Show Growth big, Value small below */
-                                    <>
-                                        <div className="flex justify-between items-baseline gap-4">
-                                            <span className="text-muted-foreground">Growth:</span>
-                                            <span className={cn("font-mono text-lg font-bold", tooltipData.properties.O >= 0 ? "text-primary" : "text-destructive")}>
-                                                {formatOpportunity(tooltipData.properties.O)}
-                                            </span>
-                                        </div>
-                                        <div className="flex justify-between items-baseline gap-4">
-                                            <span className="text-muted-foreground">Value:</span>
-                                            <span className="font-mono text-foreground">
-                                                {tooltipData.properties.med_predicted_value ? formatCurrency(tooltipData.properties.med_predicted_value) : "N/A"}
-                                            </span>
-                                        </div>
-                                    </>
-                                )}
-
-                                <div className="pt-2 border-t border-border/50 text-xs">
-                                    <div className="flex justify-between gap-2">
-                                        <span className="text-muted-foreground">Props:</span>
-                                        <span className="font-mono text-foreground">{tooltipData.properties.n_accts}</span>
-                                    </div>
+                        <div className="flex flex-col">
+                            {/* Header */}
+                            <div className="p-3 border-b border-border/50 bg-muted/30">
+                                <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">
+                                    H3 Cell (Res {h3Resolution})
+                                </div>
+                                <div className="font-mono text-xs text-muted-foreground truncate">
+                                    {tooltipData.properties.id}
                                 </div>
                             </div>
 
+                            <div className="p-4 space-y-5">
+                                {/* Top Stats Row */}
+                                <div className="grid grid-cols-2 gap-3">
+                                    {/* Value Stat */}
+                                    <div>
+                                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">
+                                            Predicted ({year})
+                                        </div>
+                                        <div className="text-xl font-bold text-foreground tracking-tight">
+                                            {tooltipData.properties.med_predicted_value
+                                                ? formatCurrency(tooltipData.properties.med_predicted_value)
+                                                : "N/A"}
+                                        </div>
+                                        {/* Current Value Context */}
+                                        {hoveredDetails?.historicalValues && (
+                                            <div className="text-[10px] text-muted-foreground mt-1">
+                                                Curr: <span className="text-foreground">{formatCurrency(hoveredDetails.historicalValues[hoveredDetails.historicalValues.length - 1])}</span>
+                                            </div>
+                                        )}
+                                    </div>
 
-                        </>
-                    ) : (
-                        <>
-                            <div className="font-medium text-muted-foreground mb-1">No data in this cell</div>
-                            <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                                <span className="text-muted-foreground">Properties:</span>
-                                <span className="text-foreground">0</span>
+                                    {/* Growth Stat */}
+                                    <div>
+                                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">
+                                            Growth
+                                        </div>
+                                        <div className={cn("text-xl font-bold tracking-tight flex items-center gap-1",
+                                            tooltipData.properties.O >= 0 ? "text-green-500" : "text-destructive"
+                                        )}>
+                                            {tooltipData.properties.O > 0 ? "+" : ""}{formatOpportunity(tooltipData.properties.O)}
+                                            {getTrendIcon(tooltipData.properties.O > 0.05 ? "up" : tooltipData.properties.O < -0.02 ? "down" : "stable")}
+                                        </div>
+                                        <div className="text-[10px] text-muted-foreground mt-1">
+                                            CAGR {year > 2025 ? "Forecast" : "History"}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Mini Chart */}
+                                {hoveredDetails?.fanChart ? (
+                                    <div className="space-y-2">
+                                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold flex justify-between">
+                                            <span>Value Timeline</span>
+                                            <span className="text-primary/70">{year}</span>
+                                        </div>
+                                        <div className="h-32 -mx-2">
+                                            <FanChart
+                                                data={hoveredDetails.fanChart}
+                                                currentYear={year}
+                                                height={120}
+                                                historicalValues={hoveredDetails.historicalValues}
+                                            />
+                                        </div>
+                                    </div>
+                                ) : (
+                                    isLoadingDetails && (
+                                        <div className="h-32 flex items-center justify-center">
+                                            <div className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                                        </div>
+                                    )
+                                )}
+
+                                {/* Footer Stats */}
+                                <div className="pt-3 border-t border-border/50 grid grid-cols-2 gap-4">
+                                    <div>
+                                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">
+                                            Properties
+                                        </div>
+                                        <div className="text-sm font-medium text-foreground">
+                                            {tooltipData.properties.n_accts}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">
+                                            Confidence
+                                        </div>
+                                        <div className="text-sm font-medium text-foreground">
+                                            {formatReliability(tooltipData.properties.R)}
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                        </>
+                        </div>
+                    ) : (
+                        <div className="p-3">
+                            <div className="font-medium text-muted-foreground text-xs">No data available</div>
+                        </div>
                     )}
                 </div>
             )}
@@ -1100,29 +1175,6 @@ export function MapView({
                     Reset
                 </button>
             </div>
-
-            {/* Debug Overlay - Shows viewport and data stats */}
-            {(() => {
-                const bounds = getViewportBoundsAccurate(canvasSize.width, canvasSize.height, transform, basemapCenter)
-                return (
-                    <div className="absolute top-4 left-4 bg-card/95 backdrop-blur-sm border border-border rounded-lg px-3 py-2 text-xs text-muted-foreground z-40 shadow-lg font-mono">
-                        <div className="font-semibold text-foreground mb-1">Debug Info</div>
-                        <div>H3 Res: {h3Resolution} | Zoom: {basemapZoom.toFixed(1)}</div>
-                        <div>Fetched: {realHexData.length} | Rendered: {filteredHexes.length}</div>
-                        <div className="text-[10px] opacity-70">
-                            Lat: {bounds.minLat.toFixed(2)}ΓåÆ{bounds.maxLat.toFixed(2)}
-                        </div>
-                        <div className="text-[10px] opacity-70">
-                            Lng: {bounds.minLng.toFixed(2)}ΓåÆ{bounds.maxLng.toFixed(2)}
-                        </div>
-                        {realHexData.length >= 9900 && (
-                            <div className="text-amber-400 font-semibold">ΓÜá LIMIT HIT</div>
-                        )}
-                    </div>
-                )
-            })()}
         </div >
     )
 }
-
-

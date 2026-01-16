@@ -198,7 +198,7 @@ export interface Thresholds {
 
 export interface FeatureProperties {
   id: string
-  O: number // Opportunity score (predicted CAGR or IRR)
+  O: number // Opportunity score (% change vs 2025 baseline)
   R: number // Reliability score (0-1)
   n_accts: number
   med_mean_ape_pct: number

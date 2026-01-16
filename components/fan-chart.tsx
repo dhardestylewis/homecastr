@@ -284,9 +284,6 @@ export function FanChart({
         {/* P50 forecast line */}
         {p50Line && <path d={p50Line} fill="none" stroke="oklch(0.65 0.15 180)" strokeWidth={2} />}
 
-        {/* Y_med line (dashed) */}
-        {medLine && <path d={medLine} fill="none" stroke="oklch(0.75 0.12 60)" strokeWidth={1.5} strokeDasharray="4 2" />}
-
         {/* X-axis labels */}
         {labelYears.map((year) => (
           <text
@@ -325,7 +322,7 @@ export function FanChart({
           </text>
           <rect x={105} y={-6} width={12} height={6} fill="oklch(0.65 0.15 180 / 0.2)" />
           <text x={120} y={0} className="text-[8px] fill-muted-foreground">
-            Range
+            Range (P10-P90)
           </text>
         </g>
       </svg>

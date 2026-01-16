@@ -99,7 +99,7 @@ export function SearchBox({ onSearch, placeholder = "Search address or ID..." }:
             if (!isOpen && e.target.value.length >= 3) setIsOpen(true)
           }}
           placeholder={placeholder}
-          className="pl-9 pr-9 bg-secondary/50 border-transparent focus:border-primary/50 h-9"
+          className="pl-9 pr-9 bg-card/95 backdrop-blur-sm border-border shadow-lg h-10"
           aria-label="Search"
           autoComplete="off"
         />
