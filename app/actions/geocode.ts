@@ -131,7 +131,14 @@ export async function reverseGeocode(lat: number, lng: number, zoom = 18): Promi
         if (!response.ok) return null
 
         const data = await response.json()
-        return data.display_name || null
+
+        // Format: "123, Main St, ..." -> "123 Main St, ..."
+        let formatted = data.display_name
+        if (formatted) {
+            formatted = formatted.replace(/^(\d+),\s+/, "$1 ")
+        }
+
+        return formatted || null
     } catch (error) {
         console.error("[Geocode] Reverse geocode error:", error)
         return null
