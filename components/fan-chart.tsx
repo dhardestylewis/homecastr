@@ -187,7 +187,12 @@ export function FanChart({
     const labelYears = [2019, 2021, 2023, 2025, 2027, 2029]
 
     return (
-      <svg width={width} height={height} className="w-full h-auto">
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        className="w-full h-full"
+        preserveAspectRatio="xMidYMid meet"
+        style={{ maxHeight: height }}
+      >
         {/* Grid lines */}
         {yTicks.map((tick) => (
           <line
