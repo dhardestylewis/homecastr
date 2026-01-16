@@ -567,7 +567,18 @@ export function MapView({
         // Use requestAnimationFrame to throttle to 60fps max
         vertexComputeRef.current = requestAnimationFrame(() => {
             // Apply filters to raw hex data first
+            // Apply filters to raw hex data first
             const currentH3Res = getH3ResolutionFromScale(transform.scale, filters.layerOverride)
+
+            // Reset selection if resolution changes to avoid ghost highlights
+            if (lastResolutionRef.current !== currentH3Res) {
+                setHoveredHex(null)
+                setSelectedHex(null)
+                setTooltipData(null)
+                onFeatureSelect(null)
+                onFeatureHover(null)
+                lastResolutionRef.current = currentH3Res
+            }
 
             // NO FILTERING - show all hexes regardless of account count or growth
             // All hexes pass through to be rendered
