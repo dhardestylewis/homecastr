@@ -96,9 +96,9 @@ function DashboardContent() {
   }, [setFilters])
 
   return (
-    <div className="h-screen flex flex-col">
+    <div className="h-dvh flex flex-col">
       {/* Full-screen Map Container */}
-      <main className="flex-1 relative">
+      <main className="flex-1 relative h-full w-full">
         {isUsingMockData && (
           <Alert
             variant="destructive"
@@ -155,7 +155,7 @@ function DashboardContent() {
 
         {/* Legend with Color Mode Toggle - Bottom Left */}
         <Legend
-          className="absolute bottom-4 left-4 z-50"
+          className="absolute bottom-24 left-4 md:bottom-4 z-50"
           colorMode={filters.colorMode}
           onColorModeChange={handleColorModeChange}
         />

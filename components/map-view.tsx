@@ -1245,7 +1245,7 @@ export function MapView({
 
                             <div className="p-4 space-y-5">
                                 {/* Top Stats Row */}
-                                <div className="grid grid-cols-2 gap-3">
+                                <div className="grid grid-cols-2 gap-3 px-8 md:px-0">
                                     {/* Value Stat */}
                                     <div>
                                         <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">
@@ -1336,7 +1336,7 @@ export function MapView({
                 document.body
             )}
 
-            <div className="absolute bottom-4 right-4 flex flex-col gap-2 z-30">
+            <div className="absolute bottom-24 right-4 md:bottom-4 flex flex-col gap-2 z-30">
                 <button
                     onClick={handleZoomIn}
                     className="w-10 h-10 glass-panel rounded-lg flex items-center justify-center text-foreground hover:bg-accent transition-colors shadow-lg"
