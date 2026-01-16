@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState, useCallback, useEffect, useRef } from "react"
-import { Search, X, MapPin } from "lucide-react"
+import { Search, X, MapPin, Building2 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { getAutocompleteSuggestions, type AutocompleteResult } from "@/app/actions/geocode"
@@ -96,37 +96,50 @@ export function SearchBox({ onSearch, placeholder = "Search address or ID...", v
   return (
     <div className="relative w-full" ref={dropdownRef}>
       <form onSubmit={handleSubmit} className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          id="search-box"
-          name="search-box"
-          type="search"
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value)
-            if (!isOpen && e.target.value.length >= 3) setIsOpen(true)
-          }}
-          placeholder={placeholder}
-          className="pl-9 pr-9 bg-card/95 backdrop-blur-sm border-border shadow-lg h-10"
-          aria-label="Search"
-          autoComplete="off"
-        />
-        {query && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
-            onClick={handleClear}
-            aria-label="Clear search"
-          >
-            <X className="h-3.5 w-3.5" />
-          </Button>
-        )}
+        {/* Main Glass Panel with Branding + Search */}
+        <div className="glass-panel shadow-lg h-10 flex items-center px-3 gap-3 rounded-md w-full md:w-80 md:focus-within:w-[480px] transition-all duration-300 ease-in-out">
+          {/* Branding */}
+          <div className="flex items-center gap-2 text-primary shrink-0 border-r border-border pr-3">
+            <Building2 className="w-4 h-4" />
+            <span className="font-bold text-sm tracking-tight hidden sm:inline-block text-foreground">InvestMap</span>
+          </div>
+
+          {/* Search Input Area */}
+          <div className="relative flex-1 flex items-center">
+            <Search className="h-4 w-4 text-muted-foreground mr-2 shrink-0" />
+            <Input
+              id="search-box"
+              name="search-box"
+              type="search"
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value)
+                if (!isOpen && e.target.value.length >= 3) setIsOpen(true)
+              }}
+              placeholder={placeholder}
+              className="h-9 border-none bg-transparent shadow-none focus-visible:ring-0 px-0 text-sm placeholder:text-muted-foreground/70"
+              aria-label="Search"
+              autoComplete="off"
+            />
+
+            {query && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 ml-1 hover:bg-muted/50 rounded-full"
+                onClick={handleClear}
+                aria-label="Clear search"
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            )}
+          </div>
+        </div>
       </form>
 
       {isOpen && suggestions.length > 0 && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-background border border-border rounded-md shadow-lg z-[100] max-h-60 overflow-y-auto">
+        <div className="absolute top-full left-0 right-0 mt-1 bg-card/95 backdrop-blur-md border border-border rounded-md shadow-lg z-[100] max-h-60 overflow-y-auto">
           {suggestions.map((item, index) => (
             <button
               key={`${item.lat}-${item.lng}-${index}`}

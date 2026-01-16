@@ -8,7 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { cn } from "@/lib/utils"
 import { getOpportunityColor, getValueColor, formatOpportunity, formatCurrency, formatReliability } from "@/lib/utils/colors"
-import { TrendingUp, TrendingDown, Minus } from "lucide-react"
+import { TrendingUp, TrendingDown, Minus, Building2 } from "lucide-react"
 import type { FilterState, FeatureProperties, MapState, DetailsResponse } from "@/lib/types"
 import { getH3CellDetails } from "@/app/actions/h3-details"
 import { getH3ChildTimelines } from "@/app/actions/h3-children"
@@ -1179,7 +1179,7 @@ export function MapView({
             {mounted && tooltipData && createPortal(
                 <div
                     className={cn(
-                        "z-[9999] bg-card/95 backdrop-blur-md border border-border shadow-2xl overflow-hidden pointer-events-none",
+                        "z-[9999] glass-panel shadow-2xl overflow-hidden pointer-events-none",
                         isMobile
                             ? "fixed bottom-0 left-0 right-0 w-full rounded-t-xl rounded-b-none border-t border-x-0 border-b-0 pointer-events-auto"
                             : "fixed rounded-xl w-[320px]"
@@ -1192,7 +1192,12 @@ export function MapView({
                 >
                     {tooltipData.properties.has_data ? (
                         <div className="flex flex-col">
-                            {/* Header */}
+                            {/* Branding Header */}
+                            <div className="flex items-center gap-2 px-3 py-2 border-b border-border/50 bg-muted/40 backdrop-blur-md">
+                                <Building2 className="w-3.5 h-3.5 text-primary" />
+                                <span className="font-bold text-[10px] tracking-wide text-foreground uppercase">InvestMap</span>
+                            </div>
+                            {/* Scale Header */}
                             <div className="p-3 border-b border-border/50 bg-muted/30">
                                 <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">
                                     {h3Resolution <= 7 ? "District Scale" :
@@ -1220,7 +1225,7 @@ export function MapView({
                                         {/* Current Value Context */}
                                         {hoveredDetails?.historicalValues && (
                                             <div className="text-[10px] text-muted-foreground mt-1">
-                                                Curr: <span className="text-foreground">{formatCurrency(hoveredDetails.historicalValues[hoveredDetails.historicalValues.length - 1])}</span>
+                                                Curr (2025): <span className="text-foreground">{formatCurrency(hoveredDetails.historicalValues[hoveredDetails.historicalValues.length - 1])}</span>
                                             </div>
                                         )}
                                     </div>
@@ -1300,19 +1305,19 @@ export function MapView({
             <div className="absolute bottom-4 right-4 flex flex-col gap-2 z-30">
                 <button
                     onClick={handleZoomIn}
-                    className="w-10 h-10 bg-card/95 backdrop-blur-sm border border-border rounded-lg flex items-center justify-center text-foreground hover:bg-accent transition-colors shadow-lg"
+                    className="w-10 h-10 glass-panel rounded-lg flex items-center justify-center text-foreground hover:bg-accent transition-colors shadow-lg"
                 >
                     +
                 </button>
                 <button
                     onClick={handleZoomOut}
-                    className="w-10 h-10 bg-card/95 backdrop-blur-sm border border-border rounded-lg flex items-center justify-center text-foreground hover:bg-accent transition-colors shadow-lg"
+                    className="w-10 h-10 glass-panel rounded-lg flex items-center justify-center text-foreground hover:bg-accent transition-colors shadow-lg"
                 >
                     -
                 </button>
                 <button
                     onClick={handleReset}
-                    className="w-10 h-10 bg-card/95 backdrop-blur-sm border border-border rounded-lg flex items-center justify-center text-foreground hover:bg-accent transition-colors text-xs shadow-lg"
+                    className="w-10 h-10 glass-panel rounded-lg flex items-center justify-center text-foreground hover:bg-accent transition-colors text-[10px] font-medium uppercase tracking-wider shadow-lg"
                 >
                     Reset
                 </button>

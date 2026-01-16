@@ -131,7 +131,7 @@ function DashboardContent() {
         )}
 
         {/* Floating Search Bar - Top Left */}
-        <div className="absolute top-4 left-4 right-4 md:right-auto md:w-80 z-50">
+        <div className="absolute top-4 left-4 right-4 md:right-auto md:w-auto z-50">
           <SearchBox
             onSearch={handleSearch}
             placeholder="Search address or ID..."

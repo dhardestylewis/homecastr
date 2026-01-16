@@ -67,7 +67,7 @@ export function TimeControls({
     const yearLabel = isHistorical ? "Historical Year" : "Forecast Year"
 
     return (
-        <div className={cn("flex flex-col gap-2 p-3 bg-card/95 backdrop-blur-sm border border-border rounded-lg shadow-lg w-[320px]", className)}>
+        <div className={cn("flex flex-col gap-2 p-3 glass-panel rounded-lg shadow-lg w-[320px]", className)}>
             <div className="flex items-center justify-between mb-1">
                 <div className="flex items-center gap-1.5 text-sm font-semibold">
                     <Calendar className="h-4 w-4 text-muted-foreground" />
