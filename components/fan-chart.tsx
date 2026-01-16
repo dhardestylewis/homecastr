@@ -10,7 +10,7 @@ interface FanChartProps {
   historicalValues?: number[] // Actual values for 2019-2025 (7 values)
   childLines?: number[][] // Optional: Timelines for child hexes (spaghetti plot)
 }
-}
+
 
 // Fixed timeline: 2019-2032 (14 years)
 const TIMELINE_START = 2019
@@ -72,7 +72,8 @@ export function FanChart({
   data,
   height = 180,
   currentYear = 2026,
-  historicalValues
+  historicalValues,
+  childLines
 }: FanChartProps) {
   const { p10, p50, p90, y_med } = data
 

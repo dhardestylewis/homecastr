@@ -18,6 +18,18 @@ const getTrendIcon = (trend: "up" | "down" | "stable" | undefined) => {
     if (trend === "up") return <TrendingUp className="h-3 w-3 text-green-500" />
     if (trend === "down") return <TrendingDown className="h-3 w-3 text-red-500" />
     return <Minus className="h-3 w-3 text-muted-foreground" />
+    return <Minus className="h-3 w-3 text-muted-foreground" />
+}
+
+function useIsMobile() {
+    const [isMobile, setIsMobile] = useState(false)
+    useEffect(() => {
+        const check = () => setIsMobile(window.innerWidth < 768)
+        check()
+        window.addEventListener('resize', check)
+        return () => window.removeEventListener('resize', check)
+    }, [])
+    return isMobile
 }
 
 // MapView Props Interface
@@ -258,6 +270,9 @@ export function MapView({
 
     const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 })
 
+    // Responsive check
+    const isMobile = useIsMobile()
+
     // Initialize transform from mapState (URL/Props)
     const [transform, setTransform] = useState<TransformState>(() => {
         const initialScale = getScaleFromZoom(mapState.zoom)
@@ -326,9 +341,12 @@ export function MapView({
     const [hoveredChildLines, setHoveredChildLines] = useState<number[][] | undefined>(undefined)
     const [isLoadingDetails, setIsLoadingDetails] = useState(false)
 
-    // Fetch detailed data for tooltip when hovering
+    // Determine active hex for details (Hover on Desktop, Selection on Mobile)
+    const activeHex = hoveredHex || (isMobile ? selectedHex : null)
+
+    // Fetch detailed data for tooltip when hovering/selected
     useEffect(() => {
-        if (!hoveredHex) {
+        if (!activeHex) {
             setHoveredDetails(null)
             setHoveredChildLines(undefined)
             return
@@ -337,8 +355,8 @@ export function MapView({
         const timer = setTimeout(() => {
             setIsLoadingDetails(true)
             Promise.all([
-                getH3CellDetails(hoveredHex, year),
-                getH3ChildTimelines(hoveredHex)
+                getH3CellDetails(activeHex, year),
+                getH3ChildTimelines(activeHex)
             ])
                 .then(([details, lines]) => {
                     setHoveredDetails(details)
@@ -349,7 +367,7 @@ export function MapView({
         }, 150) // Small delay to prevent spamming
 
         return () => clearTimeout(timer)
-    }, [hoveredHex, year])
+    }, [activeHex, year])
 
 
     const basemapZoom = useMemo(() => getContinuousBasemapZoom(transform.scale), [transform.scale])
@@ -594,13 +612,17 @@ export function MapView({
         }
     }, [realHexData, transform, canvasSize, basemapCenter, filters])
 
-    // Refresh tooltip when data changes (e.g., during timelapse year change)
+    // Refresh tooltip when data changes or selection updates on mobile
     useEffect(() => {
         if (hoveredHex && hexPropertyMap.current.has(hoveredHex)) {
             const props = hexPropertyMap.current.get(hoveredHex)!
             setTooltipData(prev => prev ? { ...prev, properties: props } : null)
+        } else if (isMobile && selectedHex && hexPropertyMap.current.has(selectedHex)) {
+            // Mobile: Show tooltip for selected hex even if not hovering
+            const props = hexPropertyMap.current.get(selectedHex)!
+            setTooltipData({ x: 0, y: 0, properties: props })
         }
-    }, [realHexData, hoveredHex])
+    }, [realHexData, hoveredHex, selectedHex, isMobile])
 
     useEffect(() => {
         const container = containerRef.current
@@ -1050,12 +1072,15 @@ export function MapView({
 
             {tooltipData && (
                 <div
-                    className="absolute pointer-events-none z-50 bg-card/95 backdrop-blur-md border border-border rounded-xl shadow-2xl overflow-hidden"
-                    style={{
+                    className={cn(
+                        "z-50 bg-card/95 backdrop-blur-md border border-border shadow-2xl overflow-hidden",
+                        isMobile
+                            ? "fixed bottom-0 left-0 right-0 w-full rounded-t-xl rounded-b-none border-t border-x-0 border-b-0"
+                            : "absolute pointer-events-none rounded-xl w-[320px]"
+                    )}
+                    style={isMobile ? undefined : {
                         left: tooltipData.x + 20,
                         top: tooltipData.y + 20,
-                        width: 320,
-                        // Ensure it doesn't go off screen (basic logic)
                         transform: tooltipData.x > canvasSize.width - 340 ? 'translateX(-100%) translateX(-40px)' : 'none'
                     }}
                 >
