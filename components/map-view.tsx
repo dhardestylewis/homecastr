@@ -1144,6 +1144,32 @@ export function MapView({
         setTooltipData(null)
     }
 
+    // Swipe logic for mobile tooltip
+    const [touchStart, setTouchStart] = useState<number | null>(null)
+    const [dragOffset, setDragOffset] = useState(0)
+
+    const handleTooltipTouchStart = (e: React.TouchEvent) => {
+        setTouchStart(e.touches[0].clientY)
+    }
+
+    const handleTooltipTouchMove = (e: React.TouchEvent) => {
+        if (touchStart === null) return
+        const currentY = e.touches[0].clientY
+        const delta = currentY - touchStart
+        // Only allow dragging down
+        if (delta > 0) {
+            setDragOffset(delta)
+        }
+    }
+
+    const handleTooltipTouchEnd = () => {
+        if (dragOffset > 100) {
+            handleReset() // Dismiss
+        }
+        setDragOffset(0)
+        setTouchStart(null)
+    }
+
     return (
         <div ref={containerRef} className={cn("relative w-full h-full overflow-hidden bg-[#0a0f14]", className)}>
             <canvas
@@ -1180,14 +1206,26 @@ export function MapView({
                             ? "fixed bottom-0 left-0 right-0 w-full rounded-t-xl rounded-b-none border-t border-x-0 border-b-0 pointer-events-auto"
                             : "fixed rounded-xl w-[320px]"
                     )}
-                    style={isMobile ? undefined : {
+                    style={isMobile ? {
+                        transform: `translateY(${dragOffset}px)`,
+                        transition: touchStart === null ? 'transform 0.3s ease-out' : 'none'
+                    } : {
                         left: tooltipData.globalX + 20,
                         top: tooltipData.globalY + (tooltipData.globalY > window.innerHeight - 350 ? -20 : 20),
                         transform: `${tooltipData.globalX > window.innerWidth - 340 ? 'translateX(-100%) translateX(-40px)' : ''} ${tooltipData.globalY > window.innerHeight - 350 ? 'translateY(-100%)' : ''}`.trim() || 'none'
                     }}
+                    onTouchStart={isMobile ? handleTooltipTouchStart : undefined}
+                    onTouchMove={isMobile ? handleTooltipTouchMove : undefined}
+                    onTouchEnd={isMobile ? handleTooltipTouchEnd : undefined}
                 >
                     {tooltipData.properties.has_data ? (
                         <div className="flex flex-col">
+                            {/* Mobile Drag Handle */}
+                            {isMobile && (
+                                <div className="w-full flex justify-center py-2 bg-muted/40 backdrop-blur-md border-b-0 cursor-grab active:cursor-grabbing">
+                                    <div className="w-10 h-1 bg-muted-foreground/30 rounded-full" />
+                                </div>
+                            )}
                             {/* Branding Header */}
                             <div className="flex items-center gap-2 px-3 py-2 border-b border-border/50 bg-muted/40 backdrop-blur-md">
                                 <Building2 className="w-3.5 h-3.5 text-primary" />
