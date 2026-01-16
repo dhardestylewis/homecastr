@@ -8,6 +8,8 @@ interface FanChartProps {
   height?: number
   currentYear?: number // The currently selected year (for vertical marker)
   historicalValues?: number[] // Actual values for 2019-2025 (7 values)
+  childLines?: number[][] // Optional: Timelines for child hexes (spaghetti plot)
+}
 }
 
 // Fixed timeline: 2019-2032 (14 years)
@@ -88,6 +90,11 @@ export function FanChart({
     if (p10) allValues.push(...p10.filter(v => Number.isFinite(v)))
     if (p90) allValues.push(...p90.filter(v => Number.isFinite(v)))
     if (p50) allValues.push(...p50.filter(v => Number.isFinite(v)))
+    if (childLines) {
+      childLines.forEach(line => {
+        allValues.push(...line.filter(v => Number.isFinite(v)))
+      })
+    }
 
     // Fallback if no data
     if (allValues.length === 0) {
@@ -196,6 +203,28 @@ export function FanChart({
             strokeOpacity={0.1}
           />
         ))}
+
+        {/* Child Lines (Spaghetti Plot) */}
+        {childLines && childLines.map((line, idx) => {
+          const d = line.map((val, i) => {
+            const year = TIMELINE_START + i;
+            if (!Number.isFinite(val)) return null;
+            return `${i === 0 ? "M" : "L"} ${xScale(year)} ${yScale(val)}`
+          }).filter(Boolean).join(" ");
+
+          if (!d) return null;
+
+          return (
+            <path
+              key={`child-${idx}`}
+              d={d}
+              fill="none"
+              stroke="currentColor"
+              strokeOpacity={0.06}
+              strokeWidth={1}
+            />
+          )
+        })}
 
         {/* Y-axis line */}
         <line
@@ -327,7 +356,7 @@ export function FanChart({
         </g>
       </svg>
     )
-  }, [data, height, currentYear, historicalValues, p10, p50, p90, y_med])
+  }, [data, height, currentYear, historicalValues, p10, p50, p90, y_med, childLines])
 
   return <div className="bg-secondary/30 rounded-lg p-2">{svgContent}</div>
 }

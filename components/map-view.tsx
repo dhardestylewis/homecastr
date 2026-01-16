@@ -10,6 +10,7 @@ import { getOpportunityColor, getValueColor, formatOpportunity, formatCurrency, 
 import { TrendingUp, TrendingDown, Minus } from "lucide-react"
 import type { FilterState, FeatureProperties, MapState, DetailsResponse } from "@/lib/types"
 import { getH3CellDetails } from "@/app/actions/h3-details"
+import { getH3ChildTimelines } from "@/app/actions/h3-children"
 import { FanChart } from "./fan-chart"
 
 // Helper to get trend icon
@@ -322,20 +323,26 @@ export function MapView({
     const [parcels, setParcels] = useState<Array<any>>([])
     const [isParcelsLoading, setIsParcelsLoading] = useState(false)
     const [hoveredDetails, setHoveredDetails] = useState<DetailsResponse | null>(null)
+    const [hoveredChildLines, setHoveredChildLines] = useState<number[][] | undefined>(undefined)
     const [isLoadingDetails, setIsLoadingDetails] = useState(false)
 
     // Fetch detailed data for tooltip when hovering
     useEffect(() => {
         if (!hoveredHex) {
             setHoveredDetails(null)
+            setHoveredChildLines(undefined)
             return
         }
 
         const timer = setTimeout(() => {
             setIsLoadingDetails(true)
-            getH3CellDetails(hoveredHex, year)
-                .then(data => {
-                    setHoveredDetails(data)
+            Promise.all([
+                getH3CellDetails(hoveredHex, year),
+                getH3ChildTimelines(hoveredHex)
+            ])
+                .then(([details, lines]) => {
+                    setHoveredDetails(details)
+                    setHoveredChildLines(lines)
                 })
                 .catch(err => console.error("Failed to load details", err))
                 .finally(() => setIsLoadingDetails(false))
@@ -1093,11 +1100,11 @@ export function MapView({
                                         <div className={cn("text-xl font-bold tracking-tight flex items-center gap-1",
                                             tooltipData.properties.O >= 0 ? "text-green-500" : "text-destructive"
                                         )}>
-                                            {tooltipData.properties.O > 0 ? "+" : ""}{formatOpportunity(tooltipData.properties.O)}
+                                            {formatOpportunity(tooltipData.properties.O)}
                                             {getTrendIcon(tooltipData.properties.O > 0.05 ? "up" : tooltipData.properties.O < -0.02 ? "down" : "stable")}
                                         </div>
                                         <div className="text-[10px] text-muted-foreground mt-1">
-                                            CAGR {year > 2025 ? "Forecast" : "History"}
+                                            Avg. Annual {year > 2025 ? "Forecast" : "History"}
                                         </div>
                                     </div>
                                 </div>
@@ -1115,6 +1122,7 @@ export function MapView({
                                                 currentYear={year}
                                                 height={120}
                                                 historicalValues={hoveredDetails.historicalValues}
+                                                childLines={hoveredChildLines}
                                             />
                                         </div>
                                     </div>
