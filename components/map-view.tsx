@@ -397,6 +397,43 @@ export function MapView({
         return () => clearTimeout(timer)
     }, [activeHex, year])
 
+    // Fetch comparison hex details when hovering a different hex while selected
+    useEffect(() => {
+        if (!comparisonHex || !selectedHex) {
+            setComparisonDetails(null)
+            return
+        }
+
+        const timer = setTimeout(() => {
+            getH3CellDetails(comparisonHex, year)
+                .then(details => setComparisonDetails(details))
+                .catch(err => console.error("Failed to load comparison details", err))
+        }, 150)
+
+        return () => clearTimeout(timer)
+    }, [comparisonHex, selectedHex, year])
+
+    // Tooltip drag handling (window-level events for smooth dragging)
+    useEffect(() => {
+        if (!isTooltipDragging) return
+
+        const handleMouseMove = (e: MouseEvent) => {
+            setFixedTooltipPos({ globalX: e.clientX, globalY: e.clientY })
+        }
+
+        const handleMouseUp = () => {
+            setIsTooltipDragging(false)
+        }
+
+        window.addEventListener('mousemove', handleMouseMove)
+        window.addEventListener('mouseup', handleMouseUp)
+
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove)
+            window.removeEventListener('mouseup', handleMouseUp)
+        }
+    }, [isTooltipDragging])
+
 
     const basemapZoom = useMemo(() => getContinuousBasemapZoom(transform.scale), [transform.scale])
 

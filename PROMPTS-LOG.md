@@ -218,3 +218,19 @@ the first time you use this the tooltip should complete a small gesture to help 
 ### [2026-01-17 15:38]
 
 have you been committing with every prompt, and following your GUIDELINES file every prompt?
+
+### [2026-01-17 15:40]
+
+have you been keeping track of everything ive asked this session? is it all reflected and prioritizted in TODO and can you repeat back in priority order what remains to do in chat?
+
+### [2026-01-17 15:42]
+
+why is the fan chart remaining static after click but the other values changing?
+
+### [2026-01-17 15:42]
+
+all of these should enter comparison mode after clicking
+
+### [2026-01-17 15:43]
+
+[Build Error] Parsing ecmascript source code failed - Expected a semicolon
