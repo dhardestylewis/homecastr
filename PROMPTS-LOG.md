@@ -257,7 +257,61 @@ ensure the lines dont trail below the bottom of the y axis or above the top
 
 ### [2026-01-17 15:49]
 
+### [2026-01-17 15:49]
+
 double clicking should zoom in
+
+### [2026-01-17 15:50]
+
+the dashed line seems to be rendering from a different zoom/resolution level?
+
+### [2026-01-17 15:57]
+
+why is the hex it is pointing to different when i move the tooltip? shouldnt that remain fixed even if at the wrong zoom level?
+
+### [2026-01-17 16:04]
+
+why isnt the comparison mode yet activating after clicking on a hex? still see only one fan chart and likely range and one set of values
+
+### [2026-01-17 16:07]
+
+8a446c326a9ffff
+or similar should never appear in the search bar not even once
+
+### [2026-01-17 16:08]
+
+why does clicking on a tile suddenly move the tooltip to a fixed location in the top middle rather than keeping it fixed wherever it was?
+
+### [2026-01-17 16:09]
+
+The dashed selection outline and the hover outline are being drawn in a *different canvas coordinate system* than the filled H3 tiles.
+[User provided detailed DPR fix instructions]
+
+### [2026-01-17 16:13]
+
+the dashed line should be from the tooltip wherever it is relocated to, not from some other hex. but it should be to the selected hex
+
+### [2026-01-17 16:15]
+
+Comparison should initially be in dynamic mode dynamically updating the value timeline until you click again
+
+### [2026-01-17 16:18]
+
+why is it a dashed line from the initially selecteto the comparison selected not from the tooltip to the initially selected? with the comparison being highlighted a different color? in fact the fan chart line color and the tile highlight color should be the same for both initial and comparison,
+
+### [2026-01-17 16:20]
+
+the tooltip itself is not located right on the selected box, and you should not assume or rely on any relation between the two instead just go from wherever the tooltip is unrelated to the tiles to the tile
+
+what youve got is close bu the dashed line should be from very corner of the tooltip it is currently usually a little off the diagonal from whichever corner it is
+
+### [2026-01-17 16:21]
+
+ensure the fan chart line color for the historical data and the range are on similar color spectra aas for
+
+### [2026-01-17 16:21]
+
+clicking on a second tile instead makes that the primary tile rather than for comparison
 
 ### [2026-01-17 15:50]
 

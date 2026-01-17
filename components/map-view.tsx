@@ -354,6 +354,14 @@ export function MapView({
     const [selectedHexGeoCenter, setSelectedHexGeoCenter] = useState<{ lat: number; lng: number } | null>(null) // Store geo coords for stable connector
     const [comparisonHex, setComparisonHex] = useState<string | null>(null)
     const [comparisonDetails, setComparisonDetails] = useState<DetailsResponse | null>(null)
+
+    // Sync ref for event handlers
+    const selectedHexRef = useRef<string | null>(null)
+
+    // Sync ref for event handlers
+    useEffect(() => {
+        selectedHexRef.current = selectedHex
+    }, [selectedHex])
     const [isTooltipDragging, setIsTooltipDragging] = useState(false)
     const [showDragHint, setShowDragHint] = useState(false)
 
@@ -939,14 +947,20 @@ export function MapView({
             return { x, y }
         }
 
-        // Hovered hex (white outline, but not if it's the selected hex)
+        // Standard Hover (White) - only if nothing is selected or if hovering different hex while selected
         if (hoveredHex && hoveredHex !== selectedHex) {
-            drawOutcome(hoveredHex, "#ffffff", 2)
+            // If locked (selectedHex exists), the hovered hex is the COMPARISON target -> AMBER
+            if (selectedHex) {
+                drawOutcome(hoveredHex, "#f59e0b", 3, true) // Amber-500 dashed
+            } else {
+                // Normal hover -> White
+                drawOutcome(hoveredHex, "#ffffff", 2)
+            }
         }
 
-        // Selected hex: yellow dashed border + connector line
+        // Selected hex: TEAL dashed border (Primary) + connector line
         if (selectedHex) {
-            const hex = drawOutcome(selectedHex, "#fbbf24", 3, true) // yellow-400, dashed
+            drawOutcome(selectedHex, "#14b8a6", 3, true) // Teal-500 (#14b8a6), dashed
 
             // Draw connector line from hex geo center to fixed tooltip position
             // Use selectedHexGeoCenter for stability even if hex is panned out of viewport
@@ -955,13 +969,30 @@ export function MapView({
 
                 ctx.beginPath()
                 ctx.setLineDash([6, 4])
-                ctx.strokeStyle = "#fbbf24"
+                ctx.strokeStyle = "#14b8a6" // Teal-500
                 ctx.lineWidth = 2
                 ctx.moveTo(hexCanvasPos.x, hexCanvasPos.y)
                 // Convert global tooltip pos to canvas pos
                 const rect = canvas.getBoundingClientRect()
-                const tooltipCanvasX = fixedTooltipPos.globalX - rect.left
-                const tooltipCanvasY = fixedTooltipPos.globalY - rect.top
+
+                // Calculate APPROXIMATE CENTER of the tooltip box
+                // Target the center so the line disappears behind the tooltip (looks cleaner)
+                const tooltipWidth = 320
+                const estimatedHeight = 300 // Average height
+
+                const isRight = fixedTooltipPos.globalX > window.innerWidth - 340
+                const isBottom = fixedTooltipPos.globalY > window.innerHeight - 350
+                // Offset to center: Margin (20) + Half Dimension
+                // Y-Target: Fan Chart Center (approx 180px down)
+                const offsetX = isRight ? (-20 - tooltipWidth / 2) : (20 + tooltipWidth / 2)
+                const offsetY = isBottom ? (-20 - (estimatedHeight - 180)) : (20 + 180)
+
+                const tooltipGlobalX = fixedTooltipPos.globalX + offsetX
+                const tooltipGlobalY = fixedTooltipPos.globalY + offsetY
+
+                const tooltipCanvasX = tooltipGlobalX - rect.left
+                const tooltipCanvasY = tooltipGlobalY - rect.top
+
                 ctx.lineTo(tooltipCanvasX, tooltipCanvasY)
                 ctx.stroke()
                 ctx.setLineDash([])
@@ -1365,6 +1396,7 @@ export function MapView({
     // Swipe logic for mobile tooltip
     const [touchStart, setTouchStart] = useState<number | null>(null)
     const [dragOffset, setDragOffset] = useState(0)
+    const [isMinimized, setIsMinimized] = useState(false)
 
     const handleTooltipTouchStart = (e: React.TouchEvent) => {
         setTouchStart(e.touches[0].clientY)
@@ -1374,19 +1406,38 @@ export function MapView({
         if (touchStart === null) return
         const currentY = e.touches[0].clientY
         const delta = currentY - touchStart
-        // Only allow dragging down
-        if (delta > 0) {
-            setDragOffset(delta)
+
+        // If minimized, allow dragging UP (negative delta) to expand
+        // If expanded, allow dragging DOWN (positive delta) to minimize/dismiss
+        if (isMinimized) {
+            // Allow dragging up (negative), clamp dragging down
+            if (delta < 0) setDragOffset(delta)
+        } else {
+            // Allow dragging down (positive), clamp dragging up
+            if (delta > 0) setDragOffset(delta)
         }
     }
 
     const handleTooltipTouchEnd = () => {
-        if (dragOffset > 100) {
-            handleReset() // Dismiss
+        if (isMinimized) {
+            // If minimized and dragged up significantly, expand
+            if (dragOffset < -50) {
+                setIsMinimized(false)
+            }
+        } else {
+            // If expanded and dragged down significantly, minimize
+            if (dragOffset > 100) {
+                setIsMinimized(true)
+            }
         }
         setDragOffset(0)
         setTouchStart(null)
     }
+
+    // Reset minimized state when selection changes
+    useEffect(() => {
+        if (selectedHex) setIsMinimized(false)
+    }, [selectedHex])
 
     return (
         <div ref={containerRef} className={cn("relative w-full h-full overflow-hidden bg-[#0a0f14]", className)}>
@@ -1430,13 +1481,15 @@ export function MapView({
                         className={cn(
                             "z-[9999] glass-panel shadow-2xl overflow-hidden",
                             isMobile
-                                ? "fixed bottom-0 left-0 right-0 w-full rounded-t-xl rounded-b-none border-t border-x-0 border-b-0 pointer-events-auto"
+                                ? "fixed bottom-0 left-0 right-0 w-full rounded-t-xl rounded-b-none border-t border-x-0 border-b-0 pointer-events-auto transition-transform duration-300 ease-out"
                                 : "fixed rounded-xl w-[320px]",
                             lockedMode && !isMobile ? "pointer-events-auto cursor-move" : "pointer-events-none",
                             showDragHint && "animate-pulse"
                         )}
                         style={isMobile ? {
-                            transform: `translateY(${dragOffset}px)`,
+                            // If minimized, translate down to show only handle (approx 24px visible)
+                            // handle is ~20px + padding ~ 8px = 28px
+                            transform: `translateY(calc(${isMinimized ? '100% - 24px' : '0px'} + ${dragOffset}px))`,
                             transition: touchStart === null ? 'transform 0.3s ease-out' : 'none'
                         } : {
                             left: (displayPos?.globalX ?? 0) + 20,
@@ -1459,129 +1512,149 @@ export function MapView({
                                         <div className="w-10 h-1 bg-muted-foreground/30 rounded-full" />
                                     </div>
                                 )}
-                                {/* Branding Header */}
-                                <div className="flex items-center justify-between px-3 py-2 border-b border-border/50 bg-muted/40 backdrop-blur-md">
-                                    <div className="flex items-center gap-2">
-                                        <Building2 className="w-3.5 h-3.5 text-primary" />
-                                        <span className="font-bold text-[10px] tracking-wide text-foreground uppercase">InvestMap</span>
-                                        {/* Locked mode indicator */}
-                                        {lockedMode && (
-                                            <span className="px-1.5 py-0.5 bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 text-[8px] font-semibold uppercase tracking-wider rounded">
-                                                Locked
-                                            </span>
-                                        )}
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        {/* ESC hint (desktop only, locked mode) */}
-                                        {lockedMode && !isMobile && (
-                                            <span className="text-[9px] text-muted-foreground">
-                                                ESC to exit
-                                            </span>
-                                        )}
-                                        {isMobile && (
-                                            <button onClick={handleReset} className="p-1 -mr-1 text-muted-foreground hover:text-foreground">
-                                                <X className="w-4 h-4" />
-                                            </button>
-                                        )}
-                                    </div>
-                                </div>
-                                {/* Scale Header */}
-                                <div className="p-3 border-b border-border/50 bg-muted/30">
-                                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">
-                                        {h3Resolution <= 7 ? "District Scale" :
-                                            h3Resolution <= 9 ? "Neighborhood Scale" :
-                                                h3Resolution <= 10 ? "Block Scale" : "Property Scale"} (Res {h3Resolution})
-                                    </div>
-                                    <div className="font-mono text-xs text-muted-foreground truncate">
-                                        {cellToLatLng(displayProps.id).map((n: number) => n.toFixed(5)).join(", ")}
-                                    </div>
-                                </div>
 
-                                <div className="p-4 space-y-5">
-                                    {/* Top Stats Row */}
-                                    <div className="grid grid-cols-2 gap-3 px-8 md:px-0">
-                                        {/* Value Stat */}
-                                        <div>
-                                            <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">
-                                                {year <= 2025 ? "Actual" : "Predicted"} ({year})
+                                {/* Desktop Headers (Hidden on Mobile) */}
+                                {!isMobile && (
+                                    <>
+                                        <div className="flex items-center justify-between px-3 py-2 border-b border-border/50 bg-muted/40 backdrop-blur-md">
+                                            <div className="flex items-center gap-2">
+                                                <Building2 className="w-3.5 h-3.5 text-primary" />
+                                                <span className="font-bold text-[10px] tracking-wide text-foreground uppercase">InvestMap</span>
+                                                {lockedMode && (
+                                                    <span className="px-1.5 py-0.5 bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 text-[8px] font-semibold uppercase tracking-wider rounded">Locked</span>
+                                                )}
                                             </div>
-                                            <div className="text-xl font-bold text-foreground tracking-tight">
-                                                {displayProps.med_predicted_value
-                                                    ? formatCurrency(displayProps.med_predicted_value)
-                                                    : "N/A"}
+                                            <div className="flex items-center gap-2">
+                                                {lockedMode && <span className="text-[9px] text-muted-foreground">ESC to exit</span>}
                                             </div>
-                                            {/* Current Value Context */}
-                                            {displayDetails?.historicalValues && (
-                                                <div className="text-[10px] text-muted-foreground mt-1">
-                                                    Curr (2025): <span className="text-foreground">{formatCurrency(displayDetails.historicalValues[displayDetails.historicalValues.length - 1])}</span>
+                                        </div>
+                                        <div className="p-3 border-b border-border/50 bg-muted/30">
+                                            <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">
+                                                {h3Resolution <= 7 ? "District Scale" : h3Resolution <= 9 ? "Neighborhood Scale" : h3Resolution <= 10 ? "Block Scale" : "Property Scale"} (Res {h3Resolution})
+                                            </div>
+                                            <div className="font-mono text-xs text-muted-foreground truncate">
+                                                {cellToLatLng(displayProps.id).map((n: number) => n.toFixed(5)).join(", ")}
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+
+                                {/* Content Body */}
+                                {isMobile ? (
+                                    /* Mobile Layout: 2x2 Grid + Chart Side-by-Side */
+                                    <div className="p-3 flex gap-2 items-stretch h-[140px]">
+                                        {/* Left: Stats Grid (45%) */}
+                                        <div className="grid grid-cols-2 gap-x-2 gap-y-1 w-[45%] shrink-0 content-center">
+                                            <div>
+                                                <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold truncate">Val</div>
+                                                <div className="text-sm font-bold text-foreground tracking-tight truncate">
+                                                    {displayProps.med_predicted_value ? formatCurrency(displayProps.med_predicted_value) : "N/A"}
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold truncate">Grwth</div>
+                                                <div className={cn("text-sm font-bold tracking-tight truncate", displayProps.O >= 0 ? "text-green-500" : "text-destructive")}>
+                                                    {formatOpportunity(displayProps.O)}
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold truncate">Props</div>
+                                                <div className="text-sm font-medium text-foreground truncate">{displayProps.n_accts}</div>
+                                            </div>
+                                            <div>
+                                                <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold truncate">Conf</div>
+                                                <div className="text-sm font-medium text-foreground truncate">{formatReliability(displayProps.R)}</div>
+                                            </div>
+                                        </div>
+
+                                        {/* Right: Fan Chart (Remaining) */}
+                                        <div className="flex-1 min-w-0 h-full relative">
+                                            {displayDetails?.fanChart ? (
+                                                <div className="h-full w-full">
+                                                    <FanChart
+                                                        data={displayDetails.fanChart}
+                                                        currentYear={year}
+                                                        height={130}
+                                                        historicalValues={displayDetails.historicalValues}
+                                                        childLines={displayChildLines}
+                                                        comparisonData={comparisonDetails?.fanChart}
+                                                        comparisonHistoricalValues={comparisonDetails?.historicalValues}
+                                                    />
+                                                </div>
+                                            ) : (
+                                                <div className="h-full flex items-center justify-center">
+                                                    {isLoadingDetails && <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />}
                                                 </div>
                                             )}
                                         </div>
+                                    </div>
+                                ) : (
+                                    /* Desktop Layout: Stacked */
+                                    <div className="p-4 space-y-5">
+                                        <div className="grid grid-cols-2 gap-3 px-8 md:px-0">
+                                            <div>
+                                                <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">
+                                                    {year <= 2025 ? "Actual" : "Predicted"} ({year})
+                                                </div>
+                                                <div className="text-xl font-bold text-foreground tracking-tight">
+                                                    {displayProps.med_predicted_value ? formatCurrency(displayProps.med_predicted_value) : "N/A"}
+                                                </div>
+                                                {displayDetails?.historicalValues && (
+                                                    <div className="text-[10px] text-muted-foreground mt-1">
+                                                        Curr (2025): <span className="text-foreground">{formatCurrency(displayDetails.historicalValues[displayDetails.historicalValues.length - 1])}</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div>
+                                                <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Growth</div>
+                                                <div className={cn("text-xl font-bold tracking-tight flex items-center gap-1", displayProps.O >= 0 ? "text-green-500" : "text-destructive")}>
+                                                    {formatOpportunity(displayProps.O)}
+                                                    {getTrendIcon(displayProps.O > 0.05 ? "up" : displayProps.O < -0.02 ? "down" : "stable")}
+                                                </div>
+                                                <div className="text-[10px] text-muted-foreground mt-1">
+                                                    Avg. Annual {year > 2025 ? "Forecast" : "History"}
+                                                </div>
+                                            </div>
+                                        </div>
 
-                                        {/* Growth Stat */}
-                                        <div>
-                                            <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">
-                                                Growth
+                                        {displayDetails?.fanChart ? (
+                                            <div className="space-y-2">
+                                                <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold flex justify-between">
+                                                    <span>Value Timeline</span>
+                                                    <span className="text-primary/70">{year}</span>
+                                                </div>
+                                                <div className="h-32 -mx-2">
+                                                    <FanChart
+                                                        data={displayDetails.fanChart}
+                                                        currentYear={year}
+                                                        height={120}
+                                                        historicalValues={displayDetails.historicalValues}
+                                                        childLines={displayChildLines}
+                                                        comparisonData={comparisonDetails?.fanChart}
+                                                        comparisonHistoricalValues={comparisonDetails?.historicalValues}
+                                                    />
+                                                </div>
                                             </div>
-                                            <div className={cn("text-xl font-bold tracking-tight flex items-center gap-1",
-                                                displayProps.O >= 0 ? "text-green-500" : "text-destructive"
-                                            )}>
-                                                {formatOpportunity(displayProps.O)}
-                                                {getTrendIcon(displayProps.O > 0.05 ? "up" : displayProps.O < -0.02 ? "down" : "stable")}
+                                        ) : (
+                                            isLoadingDetails && (
+                                                <div className="h-32 flex items-center justify-center">
+                                                    <div className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                                                </div>
+                                            )
+                                        )}
+
+                                        <div className="pt-3 border-t border-border/50 grid grid-cols-2 gap-4">
+                                            <div>
+                                                <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">Properties</div>
+                                                <div className="text-sm font-medium text-foreground">{displayProps.n_accts}</div>
                                             </div>
-                                            <div className="text-[10px] text-muted-foreground mt-1">
-                                                Avg. Annual {year > 2025 ? "Forecast" : "History"}
+                                            <div>
+                                                <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">Confidence</div>
+                                                <div className="text-sm font-medium text-foreground">{formatReliability(displayProps.R)}</div>
                                             </div>
                                         </div>
                                     </div>
-
-                                    {/* Mini Chart */}
-                                    {displayDetails?.fanChart ? (
-                                        <div className="space-y-2">
-                                            <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold flex justify-between">
-                                                <span>Value Timeline</span>
-                                                <span className="text-primary/70">{year}</span>
-                                            </div>
-                                            <div className="h-32 -mx-2">
-                                                <FanChart
-                                                    data={displayDetails.fanChart}
-                                                    currentYear={year}
-                                                    height={120}
-                                                    historicalValues={displayDetails.historicalValues}
-                                                    childLines={displayChildLines}
-                                                    comparisonData={comparisonDetails?.fanChart}
-                                                    comparisonHistoricalValues={comparisonDetails?.historicalValues}
-                                                />
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        isLoadingDetails && (
-                                            <div className="h-32 flex items-center justify-center">
-                                                <div className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-                                            </div>
-                                        )
-                                    )}
-
-                                    {/* Footer Stats */}
-                                    <div className="pt-3 border-t border-border/50 grid grid-cols-2 gap-4">
-                                        <div>
-                                            <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">
-                                                Properties
-                                            </div>
-                                            <div className="text-sm font-medium text-foreground">
-                                                {displayProps.n_accts}
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">
-                                                Confidence
-                                            </div>
-                                            <div className="text-sm font-medium text-foreground">
-                                                {formatReliability(displayProps.R)}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
+                                )}
                             </div>
                         ) : (
                             <div className="p-3">

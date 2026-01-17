@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import type { FanChartData } from "@/lib/types"
 
 interface FanChartProps {
@@ -78,9 +78,11 @@ export function FanChart({
   historicalValues,
   childLines,
   comparisonData,
-  comparisonHistoricalValues
-}: FanChartProps) {
+  comparisonHistoricalValues,
+  onYearChange
+}: FanChartProps & { onYearChange?: (year: number) => void }) {
   const { p10, p50, p90, y_med } = data
+  const [hoveredYear, setHoveredYear] = useState<number | null>(null)
 
   const svgContent = useMemo(() => {
     const width = 300
@@ -110,7 +112,7 @@ export function FanChart({
     if (allValues.length === 0) {
       return (
         <div className="text-xs text-muted-foreground text-center p-4">
-          No projection data available
+          No Residential Properties
         </div>
       )
     }
@@ -260,12 +262,36 @@ export function FanChart({
     // X-axis labels - show every 2 years for clarity
     const labelYears = [2019, 2021, 2023, 2025, 2027, 2029]
 
+    const handleMouseMove = (e: React.MouseEvent<SVGSVGElement, MouseEvent>) => {
+      const rect = e.currentTarget.getBoundingClientRect()
+      const x = e.clientX - rect.left
+      // Inverse scale to find year
+      // x = padding.left + ratio * chartWidth
+      // ratio = (x - padding.left) / chartWidth
+      const ratio = (x - padding.left) / chartWidth
+      const yearRaw = TIMELINE_START + ratio * (TIMELINE_END - TIMELINE_START)
+      const year = Math.round(yearRaw)
+
+      // Clamp
+      const clampedYear = Math.max(TIMELINE_START, Math.min(TIMELINE_END, year))
+      setHoveredYear(clampedYear)
+    }
+
+    const handleClick = () => {
+      if (hoveredYear && onYearChange) {
+        onYearChange(hoveredYear)
+      }
+    }
+
     return (
       <svg
         viewBox={`0 0 ${width} ${height}`}
-        className="w-full h-full"
+        className={onYearChange ? "w-full h-full cursor-crosshair" : "w-full h-full"}
         preserveAspectRatio="xMidYMid meet"
         style={{ maxHeight: height }}
+        onMouseMove={onYearChange ? handleMouseMove : undefined}
+        onMouseLeave={onYearChange ? () => setHoveredYear(null) : undefined}
+        onClick={onYearChange ? handleClick : undefined}
       >
         {/* Clip path to prevent lines extending outside chart area */}
         <defs>
@@ -350,6 +376,20 @@ export function FanChart({
           Now
         </text>
 
+        {/* Ghost Line (Hover) */}
+        {hoveredYear !== null && hoveredYear !== currentYear && (
+          <line
+            x1={xScale(hoveredYear)}
+            y1={padding.top}
+            x2={xScale(hoveredYear)}
+            y2={height - padding.bottom}
+            stroke="oklch(0.65 0.2 30)"
+            strokeWidth={2}
+            strokeOpacity={0.4}
+            strokeDasharray="4 2"
+          />
+        )}
+
         {/* Current year marker (vertical line) */}
         {currentYear >= TIMELINE_START && currentYear <= TIMELINE_END && (
           <>
@@ -387,7 +427,7 @@ export function FanChart({
 
         {/* Historical line (solid - actual values) */}
         {histPath && (
-          <path d={histPath} fill="none" stroke="oklch(0.6 0.1 250)" strokeWidth={2} />
+          <path d={histPath} fill="none" stroke="oklch(0.6 0.12 190)" strokeWidth={2} />
         )}
         {comparisonHistPath && (
           <path d={comparisonHistPath} fill="none" stroke="oklch(0.65 0.15 50)" strokeWidth={2} strokeDasharray="3 3" />
@@ -395,7 +435,7 @@ export function FanChart({
 
         {/* Connector from historical to forecast */}
         {connectorPath && (
-          <path d={connectorPath} fill="none" stroke="oklch(0.6 0.08 200)" strokeWidth={1} strokeDasharray="2 2" />
+          <path d={connectorPath} fill="none" stroke="oklch(0.6 0.1 190)" strokeWidth={1} strokeDasharray="2 2" />
         )}
         {comparisonConnectorPath && (
           <path d={comparisonConnectorPath} fill="none" stroke="oklch(0.7 0.1 50)" strokeWidth={1} strokeDasharray="2 2" />
@@ -413,8 +453,9 @@ export function FanChart({
             y={height - padding.bottom + 15}
             textAnchor="middle"
             className="text-[9px] fill-muted-foreground font-mono"
+            style={{ pointerEvents: 'none' }}
           >
-            {year.toString().slice(2)}
+            {'\'' + year.toString().slice(2)}
           </text>
         ))}
 
@@ -426,45 +467,35 @@ export function FanChart({
             y={yScale(tick) + 3}
             textAnchor="end"
             className="text-[10px] fill-muted-foreground font-mono"
+            style={{ pointerEvents: 'none' }}
           >
             {formatYAxisValue(tick)}
           </text>
         ))}
 
-        {/* Legend */}
-        <g transform={`translate(${padding.left}, ${height - 10})`}>
-          {/* Primary */}
-          <line x1={0} y1={-3} x2={12} y2={-3} stroke="oklch(0.6 0.1 250)" strokeWidth={2} />
-          <text x={15} y={0} className="text-[8px] fill-muted-foreground">
-            Actual
-          </text>
+        {/* Legend - Cleaned & Stacked */}
+        <g transform={`translate(${padding.left + 50}, ${height - 15})`} style={{ pointerEvents: 'none' }}>
+          {/* Row 1: Primary Data */}
+          <line x1={0} y1={-8} x2={12} y2={-8} stroke="oklch(0.6 0.12 190)" strokeWidth={2} />
+          <text x={16} y={-5} className="text-[8px] fill-muted-foreground">Actual</text>
 
-          {/* Comparison (Only show if present) */}
+          <line x1={45} y1={-8} x2={57} y2={-8} stroke="oklch(0.65 0.15 180)" strokeWidth={2} />
+          <text x={61} y={-5} className="text-[8px] fill-muted-foreground">Forecast</text>
+
+          <rect x={100} y={-11} width={10} height={6} fill="oklch(0.65 0.15 180 / 0.2)" />
+          <text x={114} y={-5} className="text-[8px] fill-muted-foreground">Range</text>
+
+          {/* Row 2: Comparison (Stacked below) */}
           {comparisonData && (
             <>
-              <line x1={0} y1={-11} x2={12} y2={-11} stroke="oklch(0.65 0.15 50)" strokeWidth={2} strokeDasharray="3 3" />
-              <text x={15} y={-8} className="text-[8px] fill-muted-foreground">
-                Comparison
-              </text>
+              <line x1={0} y1={4} x2={12} y2={4} stroke="oklch(0.65 0.15 50)" strokeWidth={2} strokeDasharray="3 3" />
+              <text x={16} y={7} className="text-[8px] fill-muted-foreground">Comparison</text>
             </>
           )}
-
-          <line x1={50} y1={-3} x2={62} y2={-3} stroke="oklch(0.65 0.15 180)" strokeWidth={2} />
-          <text x={65} y={0} className="text-[8px] fill-muted-foreground">
-            Forecast
-          </text>
-          <line x1={50} y1={-3} x2={62} y2={-3} stroke="oklch(0.65 0.15 180)" strokeWidth={2} />
-          <text x={65} y={0} className="text-[8px] fill-muted-foreground">
-            Forecast
-          </text>
-          <rect x={105} y={-6} width={12} height={6} fill="oklch(0.65 0.15 180 / 0.2)" />
-          <text x={120} y={0} className="text-[8px] fill-muted-foreground">
-            Likely Range
-          </text>
         </g>
       </svg>
     )
-  }, [data, height, currentYear, historicalValues, p10, p50, p90, y_med, childLines])
+  }, [data, height, currentYear, historicalValues, p10, p50, p90, y_med, childLines, comparisonData, comparisonHistoricalValues, hoveredYear, onYearChange])
 
   return <div className="bg-secondary/30 rounded-lg p-2">{svgContent}</div>
 }

@@ -67,64 +67,99 @@ export function TimeControls({
     const yearLabel = isHistorical ? "Historical Year" : "Forecast Year"
 
     return (
-        <div className={cn("flex flex-col gap-2 p-2 md:p-3 glass-panel rounded-lg shadow-lg w-[320px]", className)}>
-            <div className="flex items-center justify-between mb-1">
-                <div className="flex items-center gap-1.5 text-xs md:text-sm font-semibold">
-                    <Calendar className="h-4 w-4 text-muted-foreground" />
-                    <span>{yearLabel}</span>
+        <div className={cn("glass-panel rounded-lg shadow-lg w-full md:w-[320px] transition-all", className)}>
+            {/* Desktop Layout (Hidden on Mobile) */}
+            <div className="hidden md:flex flex-col gap-2 p-3">
+                <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-1.5 text-sm font-semibold">
+                        <Calendar className="h-4 w-4 text-muted-foreground" />
+                        <span>{yearLabel}</span>
+                    </div>
+                    <span className="text-xl font-mono font-bold text-primary">{currentYear}</span>
                 </div>
-                <span className="text-lg md:text-xl font-mono font-bold text-primary">{currentYear}</span>
+
+                <div className="flex items-center gap-2">
+                    <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8 shrink-0"
+                        onClick={() => setIsPlaying(!isPlaying)}
+                    >
+                        {isPlaying ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5 ml-0.5" />}
+                    </Button>
+
+                    <div className="flex-1 px-1">
+                        <Slider
+                            value={[currentYear]}
+                            min={minYear}
+                            max={maxYear}
+                            step={1}
+                            onValueChange={handleSliderChange}
+                            className="cursor-pointer"
+                        />
+                    </div>
+                </div>
+
+                <div className="flex justify-between text-[10px] text-muted-foreground font-mono px-0.5">
+                    <span>{minYear}</span>
+                    <span>{maxYear}</span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 mt-1">
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handlePrevious}
+                        disabled={currentYear <= minYear}
+                        className="h-6 text-xs"
+                    >
+                        <ChevronLeft className="h-3 w-3 mr-1" />
+                        Prev Year
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleNext}
+                        disabled={currentYear >= maxYear}
+                        className="h-6 text-xs"
+                    >
+                        Next Year
+                        <ChevronRight className="h-3 w-3 ml-1" />
+                    </Button>
+                </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            {/* Mobile Layout (Visible ONLY on Mobile) - Single Row */}
+            <div className="md:hidden flex items-center gap-3 p-2 h-12">
                 <Button
-                    variant="outline"
+                    variant="ghost"
                     size="icon"
-                    className="h-8 w-8 shrink-0"
+                    className="h-8 w-8 shrink-0 text-primary"
                     onClick={() => setIsPlaying(!isPlaying)}
                 >
-                    {isPlaying ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5 ml-0.5" />}
+                    {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 ml-0.5" />}
                 </Button>
 
-                <div className="flex-1 px-1">
-                    <Slider
-                        value={[currentYear]}
-                        min={minYear}
-                        max={maxYear}
-                        step={1}
-                        onValueChange={handleSliderChange}
-                        className="cursor-pointer"
-                    />
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <span className="text-base font-mono font-bold text-primary tabular-nums">
+                        {currentYear}
+                    </span>
+
+                    <div className="flex-1 flex flex-col justify-center gap-0.5 relative top-0.5">
+                        <Slider
+                            value={[currentYear]}
+                            min={minYear}
+                            max={maxYear}
+                            step={1}
+                            onValueChange={handleSliderChange}
+                            className="cursor-pointer"
+                        />
+                        <div className="flex justify-between text-[8px] text-muted-foreground font-mono w-full px-0.5">
+                            <span>{minYear}</span>
+                            <span>{maxYear}</span>
+                        </div>
+                    </div>
                 </div>
-            </div>
-
-            <div className="flex justify-between text-[10px] text-muted-foreground font-mono px-0.5">
-                <span>{minYear}</span>
-                <span>{maxYear}</span>
-            </div>
-
-            {/* Step Controls (Hidden on Mobile for compactness) */}
-            <div className="hidden md:grid grid-cols-2 gap-2 mt-1">
-                <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handlePrevious}
-                    disabled={currentYear <= minYear}
-                    className="h-6 text-xs"
-                >
-                    <ChevronLeft className="h-3 w-3 mr-1" />
-                    Prev Year
-                </Button>
-                <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleNext}
-                    disabled={currentYear >= maxYear}
-                    className="h-6 text-xs"
-                >
-                    Next Year
-                    <ChevronRight className="h-3 w-3 ml-1" />
-                </Button>
             </div>
         </div>
     )

@@ -14,7 +14,9 @@ import { TimeControls } from "@/components/time-controls"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { AlertCircle } from "lucide-react"
 import { geocodeAddress, reverseGeocode } from "@/app/actions/geocode"
+
 import { cellToLatLng } from "h3-js"
+import { ExplainerPopup } from "@/components/explainer-popup"
 
 function DashboardContent() {
   const { filters, setFilters, resetFilters } = useFilters()
@@ -164,6 +166,7 @@ function DashboardContent() {
         />
 
 
+        <ExplainerPopup />
       </main>
     </div>
   )

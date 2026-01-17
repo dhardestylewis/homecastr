@@ -26,8 +26,10 @@ export function SearchBox({ onSearch, placeholder = "Search address or ID...", v
   // Assuming we need to implement debounce.
 
   const inputRef = useRef<HTMLInputElement>(null)
-
   const dropdownRef = useRef<HTMLDivElement>(null)
+
+  // Track if update is from user typing
+  const shouldFetchRef = useRef(false)
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -45,12 +47,17 @@ export function SearchBox({ onSearch, placeholder = "Search address or ID...", v
   // Sync with external value (e.g. from map selection)
   useEffect(() => {
     if (value && value !== query) {
+      shouldFetchRef.current = false // Block fetch
       setQuery(value)
+      setIsOpen(false)
     }
   }, [value])
 
   useEffect(() => {
     async function fetchSuggestions() {
+      // Only fetch if initiated by user interaction
+      if (!shouldFetchRef.current) return
+
       if (debouncedQuery.length < 3) {
         setSuggestions([])
         setIsOpen(false)
@@ -117,6 +124,7 @@ export function SearchBox({ onSearch, placeholder = "Search address or ID...", v
               type="search"
               value={query}
               onChange={(e) => {
+                shouldFetchRef.current = true // Allow fetch
                 setQuery(e.target.value)
                 if (!isOpen && e.target.value.length >= 3) setIsOpen(true)
               }}

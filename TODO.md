@@ -27,7 +27,12 @@
 - [x] **Double-click to zoom**: Double-click zooms in centered on click point [Added: 2026-01-17 15:49]
 - [x] **Fan chart clipPath**: Lines no longer extend outside chart bounds [Added: 2026-01-17 15:49]
 - [x] **Homeowner-friendly legend**: "P10-P90" changed to "Likely Range" [Added: 2026-01-17 15:49]
-- [ ] **Comparison fan chart**: Hovering another tile while one selected shows combined overlay [Added: 2026-01-17 15:34]
+- [x] **Comparison fan chart**: Hovering another tile while one selected shows combined overlay [Added: 2026-01-17 15:34]
+- [x] **Visual Consistency**: Map highlights (Teal/Amber) match fan chart line colors for Primary/Comparison [Added: 2026-01-17 16:18]
+- [ ] **Multi-Select Aggregation**:
+  - [ ] Ctrl+Click/Shift+Click to select multiple comparisons.
+  - [ ] Map highlights all selected tiles with "Comparison" color (Amber).
+  - [ ] Chart displays ONE aggregate line (Avg/Median) for the entire comparison group, not individual lines.
 
 ### P2 - Feature Gaps (Existing)
 - [ ] **Fan chart missing**: Investigate if DB has fan chart columns populated
@@ -43,6 +48,10 @@
 - [x] **Property lot lines at max zoom**: Implemented logic (requires `get_parcels_in_bounds` RPC to function)
 - [ ] **Label aggregated metrics**: At outer zoom levels, clarify that metrics are aggregated across properties in hex
 - [x] **Address search autocomplete**: Show suggestions dropdown (limited to Harris County)
+- [x] **Mobile Tooltip Compaction**: Side-by-side layout (Stats + Chart), removed headers, swipe-to-minimize [Added: 2026-01-17]
+- [x] **Search Box Fix**: Prevent suggestions popup on map click [Added: 2026-01-17]
+- [x] **Mobile Time Controls**: Compact single-row layout [Added: 2026-01-17]
+- [ ] **Interactive Fan Chart**: Click fan to scrub timeline/change year [Added: 2026-01-17]
 
 ---
 
