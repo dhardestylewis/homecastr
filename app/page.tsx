@@ -32,8 +32,8 @@ function DashboardContent() {
       return
     }
 
-    // Optimistic update to ID while loading
-    setSearchBarValue(mapState.selectedId)
+    // Do NOT show raw ID. Show "..." or nothing while loading.
+    setSearchBarValue("Loading location...")
 
     const fetchAddress = async () => {
       try {
@@ -41,9 +41,12 @@ function DashboardContent() {
         const address = await reverseGeocode(lat, lng)
         if (address) {
           setSearchBarValue(address)
+        } else {
+          setSearchBarValue("Unknown Location")
         }
       } catch (e) {
         console.error("Reverse geocode failed", e)
+        setSearchBarValue("")
       }
     }
     fetchAddress()
@@ -131,7 +134,7 @@ function DashboardContent() {
         )}
 
         {/* Floating Search Bar - Top Left */}
-        <div className="absolute top-4 left-4 right-4 md:right-auto md:w-auto z-50">
+        <div className="absolute top-4 left-4 right-4 md:right-auto md:w-auto z-[60]">
           <SearchBox
             onSearch={handleSearch}
             placeholder="Search address or ID..."

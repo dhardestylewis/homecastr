@@ -739,7 +739,9 @@ export function MapView({
         const dpr = window.devicePixelRatio || 1
         basemapCanvas.width = canvasSize.width * dpr
         basemapCanvas.height = canvasSize.height * dpr
-        ctx.scale(dpr, dpr)
+
+        // Reset and set DPR transform in one call
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
 
         ctx.fillStyle = "#ffffff"
         ctx.fillRect(0, 0, canvasSize.width, canvasSize.height)
@@ -831,6 +833,7 @@ export function MapView({
         drawHexagons()
     }, [canvasSize.width, canvasSize.height])
 
+
     // Redraw hexes when data, transform, or selection changes
     useEffect(() => {
         drawHexagons()
@@ -844,7 +847,8 @@ export function MapView({
         const ctx = canvas.getContext("2d", { alpha: true })
         if (!ctx) return
 
-        ctx.clearRect(0, 0, canvas.width, canvas.height)
+        // Clear using CSS pixels (viewport size), as the context is scaled by DPR
+        ctx.clearRect(0, 0, canvasSize.width, canvasSize.height)
 
         // Coverage Layer & Data Layer combined loop
         for (const hex of filteredHexes) {
@@ -897,7 +901,8 @@ export function MapView({
         const ctx = canvas.getContext("2d", { alpha: true })
         if (!ctx) return
 
-        ctx.clearRect(0, 0, canvas.width, canvas.height)
+        // Clear using CSS pixels (viewport size), as the context is scaled by DPR
+        ctx.clearRect(0, 0, canvasSize.width, canvasSize.height)
 
         const drawOutcome = (id: string, color: string, width: number, dashed: boolean = false): HexagonData | undefined => {
             const hex = filteredHexes.find(h => h.id === id)
@@ -996,9 +1001,22 @@ export function MapView({
         drawHexagons()
     }, [drawHexagons])
 
+    // DPR-size the highlight canvas (must match hex canvas) & Trigger Redraw
     useEffect(() => {
+        const canvas = highlightCanvasRef.current
+        if (!canvas) return
+
+        const dpr = window.devicePixelRatio || 1
+        // Only set width/height if they differ to avoid clearing canvas unnecessarily
+        // But here we want to ensure it matches always.
+        canvas.width = Math.round(canvasSize.width * dpr)
+        canvas.height = Math.round(canvasSize.height * dpr)
+
+        const ctx = canvas.getContext("2d")
+        if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+
         drawHighlights()
-    }, [drawHighlights])
+    }, [canvasSize.width, canvasSize.height, drawHighlights])
 
 
     // Track if user actually dragged (moved more than a few pixels)
@@ -1531,6 +1549,8 @@ export function MapView({
                                                     height={120}
                                                     historicalValues={displayDetails.historicalValues}
                                                     childLines={displayChildLines}
+                                                    comparisonData={comparisonDetails?.fanChart}
+                                                    comparisonHistoricalValues={comparisonDetails?.historicalValues}
                                                 />
                                             </div>
                                         </div>

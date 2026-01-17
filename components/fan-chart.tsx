@@ -9,6 +9,9 @@ interface FanChartProps {
   currentYear?: number // The currently selected year (for vertical marker)
   historicalValues?: number[] // Actual values for 2019-2025 (7 values)
   childLines?: number[][] // Optional: Timelines for child hexes (spaghetti plot)
+  // Comparison mode: overlay second hex's data
+  comparisonData?: FanChartData | null
+  comparisonHistoricalValues?: number[] | null
 }
 
 
@@ -73,7 +76,9 @@ export function FanChart({
   height = 180,
   currentYear = 2026,
   historicalValues,
-  childLines
+  childLines,
+  comparisonData,
+  comparisonHistoricalValues
 }: FanChartProps) {
   const { p10, p50, p90, y_med } = data
 
@@ -91,6 +96,14 @@ export function FanChart({
     if (p10) allValues.push(...p10.filter(v => Number.isFinite(v)))
     if (p90) allValues.push(...p90.filter(v => Number.isFinite(v)))
     if (p50) allValues.push(...p50.filter(v => Number.isFinite(v)))
+
+    // Include comparison data in Y range
+    if (comparisonHistoricalValues) {
+      allValues.push(...comparisonHistoricalValues.filter(v => Number.isFinite(v)))
+    }
+    if (comparisonData?.p10) allValues.push(...comparisonData.p10.filter(v => Number.isFinite(v)))
+    if (comparisonData?.p90) allValues.push(...comparisonData.p90.filter(v => Number.isFinite(v)))
+    if (comparisonData?.p50) allValues.push(...comparisonData.p50.filter(v => Number.isFinite(v)))
 
 
     // Fallback if no data
@@ -182,6 +195,67 @@ export function FanChart({
     if (histPath && p50Line && historicalValues?.[6] && p50?.[0]) {
       connectorPath = `M ${xScale(2025)} ${yScale(historicalValues[6])} L ${xScale(2026)} ${yScale(p50[0])}`
     }
+
+    // --- COMPARISON DATA PATHS --- //
+    // Build Comparison Historical line
+    let comparisonHistPath = ""
+    if (comparisonHistoricalValues && comparisonHistoricalValues.length > 0) {
+      const histYears = [2019, 2020, 2021, 2022, 2023, 2024, 2025]
+      comparisonHistPath = histYears
+        .map((year, i) => {
+          if (!Number.isFinite(comparisonHistoricalValues[i])) return null
+          return `${i === 0 ? "M" : "L"} ${xScale(year)} ${yScale(comparisonHistoricalValues[i])}`
+        })
+        .filter(Boolean)
+        .join(" ")
+    }
+
+    // Build Comparison Forecast fan
+    let comparisonFanPath = ""
+    let comparisonP50Line = ""
+
+    if (comparisonData && comparisonData.p10 && comparisonData.p90 && comparisonData.p50) {
+      const p90Comp = comparisonData.p90
+      const p10Comp = comparisonData.p10
+      const p50Comp = comparisonData.p50
+
+      const compP90Path = forecastYears
+        .map((year, i) => {
+          if (!Number.isFinite(p90Comp[i])) return null
+          return `${i === 0 ? "M" : "L"} ${xScale(year)} ${yScale(p90Comp[i])}`
+        })
+        .filter(Boolean)
+        .join(" ")
+
+      const compP10PathReverse = [...forecastYears]
+        .reverse()
+        .map((year, i) => {
+          const idx = forecastYears.length - 1 - i
+          if (!Number.isFinite(p10Comp[idx])) return null
+          return `L ${xScale(year)} ${yScale(p10Comp[idx])}`
+        })
+        .filter(Boolean)
+        .join(" ")
+
+      if (compP90Path && compP10PathReverse) {
+        comparisonFanPath = `${compP90Path} ${compP10PathReverse} Z`
+      }
+
+      comparisonP50Line = forecastYears
+        .map((year, i) => {
+          if (!Number.isFinite(p50Comp[i])) return null
+          return `${i === 0 ? "M" : "L"} ${xScale(year)} ${yScale(p50Comp[i])}`
+        })
+        .filter(Boolean)
+        .join(" ")
+    }
+
+    // Comparison connector
+    let comparisonConnectorPath = ""
+    if (comparisonHistPath && comparisonP50Line && comparisonHistoricalValues?.[6] && comparisonData?.p50?.[0]) {
+      comparisonConnectorPath = `M ${xScale(2025)} ${yScale(comparisonHistoricalValues[6])} L ${xScale(2026)} ${yScale(comparisonData.p50[0])}`
+    }
+
 
     // X-axis labels - show every 2 years for clarity
     const labelYears = [2019, 2021, 2023, 2025, 2027, 2029]
@@ -309,19 +383,27 @@ export function FanChart({
 
         {/* Fan area (forecast uncertainty) */}
         {fanPath && <path d={fanPath} fill="oklch(0.65 0.15 180 / 0.2)" />}
+        {comparisonFanPath && <path d={comparisonFanPath} fill="oklch(0.7 0.15 50 / 0.15)" />}
 
         {/* Historical line (solid - actual values) */}
         {histPath && (
           <path d={histPath} fill="none" stroke="oklch(0.6 0.1 250)" strokeWidth={2} />
+        )}
+        {comparisonHistPath && (
+          <path d={comparisonHistPath} fill="none" stroke="oklch(0.65 0.15 50)" strokeWidth={2} strokeDasharray="3 3" />
         )}
 
         {/* Connector from historical to forecast */}
         {connectorPath && (
           <path d={connectorPath} fill="none" stroke="oklch(0.6 0.08 200)" strokeWidth={1} strokeDasharray="2 2" />
         )}
+        {comparisonConnectorPath && (
+          <path d={comparisonConnectorPath} fill="none" stroke="oklch(0.7 0.1 50)" strokeWidth={1} strokeDasharray="2 2" />
+        )}
 
         {/* P50 forecast line */}
         {p50Line && <path d={p50Line} fill="none" stroke="oklch(0.65 0.15 180)" strokeWidth={2} />}
+        {comparisonP50Line && <path d={comparisonP50Line} fill="none" stroke="oklch(0.7 0.15 50)" strokeWidth={2} />}
 
         {/* X-axis labels */}
         {labelYears.map((year) => (
@@ -351,9 +433,25 @@ export function FanChart({
 
         {/* Legend */}
         <g transform={`translate(${padding.left}, ${height - 10})`}>
+          {/* Primary */}
           <line x1={0} y1={-3} x2={12} y2={-3} stroke="oklch(0.6 0.1 250)" strokeWidth={2} />
           <text x={15} y={0} className="text-[8px] fill-muted-foreground">
             Actual
+          </text>
+
+          {/* Comparison (Only show if present) */}
+          {comparisonData && (
+            <>
+              <line x1={0} y1={-11} x2={12} y2={-11} stroke="oklch(0.65 0.15 50)" strokeWidth={2} strokeDasharray="3 3" />
+              <text x={15} y={-8} className="text-[8px] fill-muted-foreground">
+                Comparison
+              </text>
+            </>
+          )}
+
+          <line x1={50} y1={-3} x2={62} y2={-3} stroke="oklch(0.65 0.15 180)" strokeWidth={2} />
+          <text x={65} y={0} className="text-[8px] fill-muted-foreground">
+            Forecast
           </text>
           <line x1={50} y1={-3} x2={62} y2={-3} stroke="oklch(0.65 0.15 180)" strokeWidth={2} />
           <text x={65} y={0} className="text-[8px] fill-muted-foreground">
