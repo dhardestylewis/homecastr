@@ -22,8 +22,12 @@
 - [x] **Draggable tooltip**: User can drag locked tooltip anywhere [Added: 2026-01-17 15:35]
 - [x] **ESC to unlock**: Pressing ESC exits static mode back to dynamic tooltip [Added: 2026-01-17 15:35]
 - [x] **First-time gesture hint**: Small animation to indicate tooltip is draggable [Added: 2026-01-17 15:35] - localStorage + animate-pulse
-- [ ] **Comparison fan chart**: Hovering another tile while one selected shows combined chart [Added: 2026-01-17 15:34]
 - [x] **"Actual" vs "Predicted" label**: Show "Actual" for historical years ≤2025 [Added: 2026-01-17 15:28]
+- [x] **Resolution mismatch fix**: Selection clears when zoom changes resolution [Added: 2026-01-17 15:50]
+- [x] **Double-click to zoom**: Double-click zooms in centered on click point [Added: 2026-01-17 15:49]
+- [x] **Fan chart clipPath**: Lines no longer extend outside chart bounds [Added: 2026-01-17 15:49]
+- [x] **Homeowner-friendly legend**: "P10-P90" changed to "Likely Range" [Added: 2026-01-17 15:49]
+- [ ] **Comparison fan chart**: Hovering another tile while one selected shows combined overlay [Added: 2026-01-17 15:34]
 
 ### P2 - Feature Gaps (Existing)
 - [ ] **Fan chart missing**: Investigate if DB has fan chart columns populated

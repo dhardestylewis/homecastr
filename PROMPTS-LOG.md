@@ -234,3 +234,31 @@ all of these should enter comparison mode after clicking
 ### [2026-01-17 15:43]
 
 [Build Error] Parsing ecmascript source code failed - Expected a semicolon
+
+### [2026-01-17 15:47]
+
+have you visually indicated you can hit ESC to go back? or written anywhere if necessary the mode you are in?
+
+### [2026-01-17 15:47]
+
+yes continue but that is not a comparison chart it is a comparison made within the same chart
+
+### [2026-01-17 15:47]
+
+also still not seeing the hex highlighted or pointed to
+
+### [2026-01-17 15:49]
+
+instead of saying "P10-P90" say that in homeowner legible terms
+
+### [2026-01-17 15:49]
+
+ensure the lines dont trail below the bottom of the y axis or above the top
+
+### [2026-01-17 15:49]
+
+double clicking should zoom in
+
+### [2026-01-17 15:50]
+
+the dashed line seems to be rendering from a different zoom/resolution level?
