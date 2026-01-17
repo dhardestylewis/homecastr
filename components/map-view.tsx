@@ -42,6 +42,7 @@ interface MapViewProps {
     year?: number
     className?: string
     onMockDataDetected?: () => void
+    onYearChange?: (year: number) => void
 }
 
 const HARRIS_COUNTY_CENTER = { lng: -95.3698, lat: 29.7604 }
@@ -256,7 +257,8 @@ export function MapView({
     onFeatureHover,
     year = 2026,
     className,
-    onMockDataDetected
+    onMockDataDetected,
+    onYearChange
 }: MapViewProps) {
     const basemapCenter = useMemo(() => ({ lng: -95.3698, lat: 29.7604 }), [])
     const [h3Resolution, setH3Resolution] = useState<number>(0)
@@ -1426,7 +1428,7 @@ export function MapView({
             }
         } else {
             // If expanded and dragged down significantly, minimize
-            if (dragOffset > 100) {
+            if (dragOffset > 50) {
                 setIsMinimized(true)
             }
         }
@@ -1543,27 +1545,29 @@ export function MapView({
                                 {isMobile ? (
                                     /* Mobile Layout: 2x2 Grid + Chart Side-by-Side */
                                     <div className="p-3 flex gap-2 items-stretch h-[140px]">
-                                        {/* Left: Stats Grid (45%) */}
-                                        <div className="grid grid-cols-2 gap-x-2 gap-y-1 w-[45%] shrink-0 content-center">
-                                            <div>
-                                                <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold truncate">Val</div>
-                                                <div className="text-sm font-bold text-foreground tracking-tight truncate">
-                                                    {displayProps.med_predicted_value ? formatCurrency(displayProps.med_predicted_value) : "N/A"}
+                                        {/* Left: Stats Grid (45%) - Centered */}
+                                        <div className="flex flex-col justify-center items-center w-[45%] shrink-0">
+                                            <div className="grid grid-cols-2 gap-x-2 gap-y-1 w-full text-center">
+                                                <div>
+                                                    <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold truncate">Val</div>
+                                                    <div className="text-sm font-bold text-foreground tracking-tight truncate">
+                                                        {displayProps.med_predicted_value ? formatCurrency(displayProps.med_predicted_value) : "N/A"}
+                                                    </div>
                                                 </div>
-                                            </div>
-                                            <div>
-                                                <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold truncate">Grwth</div>
-                                                <div className={cn("text-sm font-bold tracking-tight truncate", displayProps.O >= 0 ? "text-green-500" : "text-destructive")}>
-                                                    {formatOpportunity(displayProps.O)}
+                                                <div>
+                                                    <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold truncate">Grwth</div>
+                                                    <div className={cn("text-sm font-bold tracking-tight truncate", displayProps.O >= 0 ? "text-green-500" : "text-destructive")}>
+                                                        {formatOpportunity(displayProps.O)}
+                                                    </div>
                                                 </div>
-                                            </div>
-                                            <div>
-                                                <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold truncate">Props</div>
-                                                <div className="text-sm font-medium text-foreground truncate">{displayProps.n_accts}</div>
-                                            </div>
-                                            <div>
-                                                <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold truncate">Conf</div>
-                                                <div className="text-sm font-medium text-foreground truncate">{formatReliability(displayProps.R)}</div>
+                                                <div>
+                                                    <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold truncate">Props</div>
+                                                    <div className="text-sm font-medium text-foreground truncate">{displayProps.n_accts}</div>
+                                                </div>
+                                                <div>
+                                                    <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold truncate">Conf</div>
+                                                    <div className="text-sm font-medium text-foreground truncate">{formatReliability(displayProps.R)}</div>
+                                                </div>
                                             </div>
                                         </div>
 
@@ -1579,6 +1583,7 @@ export function MapView({
                                                         childLines={displayChildLines}
                                                         comparisonData={comparisonDetails?.fanChart}
                                                         comparisonHistoricalValues={comparisonDetails?.historicalValues}
+                                                        onYearChange={onYearChange}
                                                     />
                                                 </div>
                                             ) : (
@@ -1632,6 +1637,7 @@ export function MapView({
                                                         childLines={displayChildLines}
                                                         comparisonData={comparisonDetails?.fanChart}
                                                         comparisonHistoricalValues={comparisonDetails?.historicalValues}
+                                                        onYearChange={onYearChange}
                                                     />
                                                 </div>
                                             </div>
@@ -1658,7 +1664,7 @@ export function MapView({
                             </div>
                         ) : (
                             <div className="p-3">
-                                <div className="font-medium text-muted-foreground text-xs">No data available</div>
+                                <div className="font-medium text-muted-foreground text-xs">No Residential Properties</div>
                             </div>
                         )}
                     </div>,
@@ -1666,7 +1672,7 @@ export function MapView({
                 )
             })()}
 
-            <div className="absolute bottom-24 right-4 md:bottom-4 flex flex-col gap-2 z-30">
+            <div className="absolute top-24 right-4 md:top-auto md:bottom-4 flex flex-col gap-2 z-30">
                 <button
                     onClick={handleZoomIn}
                     className="w-10 h-10 glass-panel rounded-lg flex items-center justify-center text-foreground hover:bg-accent transition-colors shadow-lg"

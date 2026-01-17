@@ -47,11 +47,12 @@
 - [ ] **Auto-scaling min accounts by zoom**: Consider adjusting threshold based on H3 resolution
 - [x] **Property lot lines at max zoom**: Implemented logic (requires `get_parcels_in_bounds` RPC to function)
 - [ ] **Label aggregated metrics**: At outer zoom levels, clarify that metrics are aggregated across properties in hex
-- [x] **Address search autocomplete**: Show suggestions dropdown (limited to Harris County)
 - [x] **Mobile Tooltip Compaction**: Side-by-side layout (Stats + Chart), removed headers, swipe-to-minimize [Added: 2026-01-17]
 - [x] **Search Box Fix**: Prevent suggestions popup on map click [Added: 2026-01-17]
 - [x] **Mobile Time Controls**: Compact single-row layout [Added: 2026-01-17]
-- [ ] **Interactive Fan Chart**: Click fan to scrub timeline/change year [Added: 2026-01-17]
+- [x] **Interactive Fan Chart**: Click fan to scrub timeline/change year [Added: 2026-01-17]
+- [x] **Mobile Controls Layout**: Repositioned Zoom/Legend/Display controls to avoid tooltip overlap [Added: 2026-01-17]
+- [x] **Swipe Threshold**: Relaxed to 50px for easier minimization [Added: 2026-01-17]
 
 ---
 

@@ -132,6 +132,7 @@ function DashboardContent() {
             onFeatureHover={hoverFeature}
             year={currentYear}
             onMockDataDetected={handleMockDataDetected}
+            onYearChange={setCurrentYear}
           />
         )}
 
@@ -158,9 +159,9 @@ function DashboardContent() {
           />
         </div>
 
-        {/* Legend with Color Mode Toggle - Bottom Left */}
+        {/* Legend with Color Mode Toggle - Bottom Left (Desktop) / Top Left (Mobile) */}
         <Legend
-          className="absolute bottom-24 left-4 md:bottom-4 z-50"
+          className="absolute top-[130px] left-4 md:top-auto md:bottom-4 z-50"
           colorMode={filters.colorMode}
           onColorModeChange={handleColorModeChange}
         />
