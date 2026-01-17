@@ -13,6 +13,7 @@ import type { FilterState, FeatureProperties, MapState, DetailsResponse } from "
 import { getH3CellDetails } from "@/app/actions/h3-details"
 import { getH3ChildTimelines } from "@/app/actions/h3-children"
 import { FanChart } from "./fan-chart"
+import { aggregateProperties, aggregateDetails } from "@/lib/utils/aggregation"
 
 // Helper to get trend icon
 const getTrendIcon = (trend: "up" | "down" | "stable" | undefined) => {
@@ -346,26 +347,87 @@ export function MapView({
     const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
 
     const [hoveredHex, setHoveredHex] = useState<string | null>(null)
-    const [selectedHex, setSelectedHex] = useState<string | null>(null)
+    const [selectedHexes, setSelectedHexes] = useState<string[]>([])
+    const [selectionDetails, setSelectionDetails] = useState<DetailsResponse | null>(null)
+    const [hoveredDetails, setHoveredDetails] = useState<DetailsResponse | null>(null)
+    const [hoveredChildLines, setHoveredChildLines] = useState<any[] | undefined>(undefined)
 
+    // Derived State
     const [tooltipData, setTooltipData] = useState<{ x: number; y: number; globalX: number; globalY: number; properties: FeatureProperties } | null>(null)
-
-    // Locked tooltip mode state
     const [fixedTooltipPos, setFixedTooltipPos] = useState<{ globalX: number; globalY: number } | null>(null)
-    const [selectedHexData, setSelectedHexData] = useState<{ properties: FeatureProperties; details: DetailsResponse | null; childLines: number[][] | undefined } | null>(null)
-    const [selectedHexGeoCenter, setSelectedHexGeoCenter] = useState<{ lat: number; lng: number } | null>(null) // Store geo coords for stable connector
+    const [selectedHexGeoCenter, setSelectedHexGeoCenter] = useState<{ lat: number; lng: number } | null>(null)
     const [comparisonHex, setComparisonHex] = useState<string | null>(null)
     const [comparisonDetails, setComparisonDetails] = useState<DetailsResponse | null>(null)
-
-    // Sync ref for event handlers
+    const [isTooltipDragging, setIsTooltipDragging] = useState(false)
+    const [showDragHint, setShowDragHint] = useState(false)
+    const selectedHex = selectedHexes.length > 0 ? selectedHexes[selectedHexes.length - 1] : null
     const selectedHexRef = useRef<string | null>(null)
 
-    // Sync ref for event handlers
+    // Sync ref
     useEffect(() => {
         selectedHexRef.current = selectedHex
     }, [selectedHex])
-    const [isTooltipDragging, setIsTooltipDragging] = useState(false)
-    const [showDragHint, setShowDragHint] = useState(false)
+
+    // Compute Display Properties (Aggregate)
+    const displayProperties = useMemo(() => {
+        if (selectedHexes.length > 0) {
+            // Aggregate from hexPropertyMap
+            const props = selectedHexes
+                .map(id => hexPropertyMap.current.get(id))
+                .filter(p => p !== undefined) as FeatureProperties[]
+
+            if (props.length > 0) return aggregateProperties(props)
+            return null
+        }
+        if (hoveredHex && tooltipData) return tooltipData.properties
+        return null
+    }, [selectedHexes, hoveredHex, tooltipData])
+
+    // Fetch Logic
+    useEffect(() => {
+        // Cancel previous if needed?
+
+        const targets = selectedHexes.length > 0 ? selectedHexes : (hoveredHex ? [hoveredHex] : [])
+
+        if (targets.length === 0) {
+            setHoveredDetails(null)
+            setSelectionDetails(null)
+            setHoveredChildLines(undefined)
+            return
+        }
+
+        const timer = setTimeout(() => {
+            setIsLoadingDetails(true)
+            Promise.all(targets.map(id =>
+                Promise.all([
+                    getH3CellDetails(id, year),
+                    getH3ChildTimelines(id)
+                ])
+            ))
+                .then(results => {
+                    const details = results.map(r => r[0])
+                    const lines = results.map(r => r[1])
+
+                    if (selectedHexes.length > 0) {
+                        // Aggregate Selection
+                        setSelectionDetails(aggregateDetails(details))
+                        // Lines? Only show for single selection or none?
+                        // If single, show lines. If multi, maybe too messy?
+                        // For now, only show lines if 1 selected
+                        // But we don't have a state for "selectionChildLines".
+                    } else {
+                        // Hover
+                        setHoveredDetails(details[0])
+                        setHoveredChildLines(lines[0])
+                    }
+                })
+                .catch(e => console.error(e))
+                .finally(() => setIsLoadingDetails(false))
+        }, 150)
+        return () => clearTimeout(timer)
+    }, [selectedHexes, hoveredHex, year])
+
+
 
     const [mounted, setMounted] = useState(false)
 
@@ -376,15 +438,13 @@ export function MapView({
     const [isLoadingData, setIsLoadingData] = useState(false)
     const [parcels, setParcels] = useState<Array<any>>([])
     const [isParcelsLoading, setIsParcelsLoading] = useState(false)
-    const [hoveredDetails, setHoveredDetails] = useState<DetailsResponse | null>(null)
-    const [hoveredChildLines, setHoveredChildLines] = useState<number[][] | undefined>(undefined)
     const [isLoadingDetails, setIsLoadingDetails] = useState(false)
     const [selectedHexResolution, setSelectedHexResolution] = useState<number | null>(null)
 
     // Clear selection when H3 resolution changes (prevents stale highlight at wrong scale)
     useEffect(() => {
         if (selectedHex && selectedHexResolution !== null && h3Resolution !== selectedHexResolution) {
-            setSelectedHex(null)
+            setSelectedHexes([]) // Changed from setSelectedHex(null)
             setFixedTooltipPos(null)
             setSelectedHexData(null)
             setSelectedHexGeoCenter(null)
@@ -393,33 +453,7 @@ export function MapView({
         }
     }, [h3Resolution, selectedHex, selectedHexResolution])
 
-    // Determine active hex for details: selected takes priority
-    const activeHex = selectedHex || hoveredHex || (isMobile ? selectedHex : null)
 
-    // Fetch detailed data for tooltip when hovering/selected
-    useEffect(() => {
-        if (!activeHex) {
-            setHoveredDetails(null)
-            setHoveredChildLines(undefined)
-            return
-        }
-
-        const timer = setTimeout(() => {
-            setIsLoadingDetails(true)
-            Promise.all([
-                getH3CellDetails(activeHex, year),
-                getH3ChildTimelines(activeHex)
-            ])
-                .then(([details, lines]) => {
-                    setHoveredDetails(details)
-                    setHoveredChildLines(lines)
-                })
-                .catch(err => console.error("Failed to load details", err))
-                .finally(() => setIsLoadingDetails(false))
-        }, 150) // Small delay to prevent spamming
-
-        return () => clearTimeout(timer)
-    }, [activeHex, year])
 
     // Fetch comparison hex details when hovering a different hex while selected
     useEffect(() => {
@@ -643,7 +677,7 @@ export function MapView({
             // Reset selection if resolution changes to avoid ghost highlights
             if (lastResolutionRef.current !== currentH3Res) {
                 setHoveredHex(null)
-                setSelectedHex(null)
+                setSelectedHexes([]) // Changed from setSelectedHex(null)
                 setTooltipData(null)
                 onFeatureSelect(null)
                 onFeatureHover(null)
@@ -960,46 +994,27 @@ export function MapView({
             }
         }
 
-        // Selected hex: TEAL dashed border (Primary) + connector line
-        if (selectedHex) {
-            drawOutcome(selectedHex, "#14b8a6", 3, true) // Teal-500 (#14b8a6), dashed
+        // Draw Highlights (Yellow for Selection)
+        ctx.lineJoin = 'round'
 
-            // Draw connector line from hex geo center to fixed tooltip position
-            // Use selectedHexGeoCenter for stability even if hex is panned out of viewport
-            if (selectedHexGeoCenter && fixedTooltipPos && !isMobile) {
-                const hexCanvasPos = geoToCanvasCoords(selectedHexGeoCenter.lat, selectedHexGeoCenter.lng)
+        if (selectedHexes.length > 0) {
+            ctx.strokeStyle = '#14b8a6' // Teal (Matches Fan Chart Primary)
+            ctx.lineWidth = 3
+            ctx.setLineDash([]) // Solid line (No dash)
 
+            selectedHexes.forEach(h => {
+                const vertices = getH3CellCanvasVertices(h, canvasSize.width, canvasSize.height, transform, basemapCenter)
                 ctx.beginPath()
-                ctx.setLineDash([6, 4])
-                ctx.strokeStyle = "#14b8a6" // Teal-500
-                ctx.lineWidth = 2
-                ctx.moveTo(hexCanvasPos.x, hexCanvasPos.y)
-                // Convert global tooltip pos to canvas pos
-                const rect = canvas.getBoundingClientRect()
-
-                // Calculate APPROXIMATE CENTER of the tooltip box
-                // Target the center so the line disappears behind the tooltip (looks cleaner)
-                const tooltipWidth = 320
-                const estimatedHeight = 300 // Average height
-
-                const isRight = fixedTooltipPos.globalX > window.innerWidth - 340
-                const isBottom = fixedTooltipPos.globalY > window.innerHeight - 350
-                // Offset to center: Margin (20) + Half Dimension
-                // Y-Target: Fan Chart Center (approx 180px down)
-                const offsetX = isRight ? (-20 - tooltipWidth / 2) : (20 + tooltipWidth / 2)
-                const offsetY = isBottom ? (-20 - (estimatedHeight - 180)) : (20 + 180)
-
-                const tooltipGlobalX = fixedTooltipPos.globalX + offsetX
-                const tooltipGlobalY = fixedTooltipPos.globalY + offsetY
-
-                const tooltipCanvasX = tooltipGlobalX - rect.left
-                const tooltipCanvasY = tooltipGlobalY - rect.top
-
-                ctx.lineTo(tooltipCanvasX, tooltipCanvasY)
+                vertices.forEach((v, i) => {
+                    if (i === 0) ctx.moveTo(v[0], v[1])
+                    else ctx.lineTo(v[0], v[1])
+                })
+                ctx.closePath()
                 ctx.stroke()
-                ctx.setLineDash([])
-            }
+            })
         }
+
+
 
     }, [filteredHexes, hoveredHex, selectedHex, fixedTooltipPos, isMobile, transform, selectedHexGeoCenter, canvasSize, basemapCenter])
 
@@ -1156,38 +1171,58 @@ export function MapView({
     }
 
     const handleCanvasClick = (e: React.MouseEvent) => {
-        // Don't trigger selection if user was dragging
-        if (hasDraggedRef.current) {
-            return
-        }
+        if (hasDraggedRef.current) return
 
         if (hoveredHex) {
-            // Lock the tooltip
-            setSelectedHex(hoveredHex)
-            setSelectedHexResolution(h3Resolution) // Track resolution at selection time
-            onFeatureSelect(hoveredHex)
-            if (tooltipData) {
-                setFixedTooltipPos({ globalX: tooltipData.globalX, globalY: tooltipData.globalY })
-                setSelectedHexData({
-                    properties: tooltipData.properties,
-                    details: hoveredDetails,
-                    childLines: hoveredChildLines
-                })
-                // Show drag hint on first selection (check localStorage)
-                if (typeof window !== 'undefined' && !localStorage.getItem('tooltipDragHintShown')) {
-                    setShowDragHint(true)
-                    localStorage.setItem('tooltipDragHintShown', 'true')
-                    setTimeout(() => setShowDragHint(false), 2000)
+            const isMulti = e.ctrlKey || e.shiftKey || e.metaKey
+            let newSet: string[]
+
+            if (isMulti) {
+                if (selectedHexes.includes(hoveredHex)) {
+                    newSet = selectedHexes.filter(h => h !== hoveredHex)
+                } else {
+                    newSet = [...selectedHexes, hoveredHex]
                 }
+            } else {
+                newSet = [hoveredHex]
             }
-            // Store geo center for stable connector line
-            const [lat, lng] = cellToLatLng(hoveredHex)
-            setSelectedHexGeoCenter({ lat, lng })
+
+            setSelectedHexes(newSet)
+
+            // Update Primary & Tooltip Pos
+            if (newSet.length > 0) {
+                const primary = newSet[newSet.length - 1]
+                onFeatureSelect(primary)
+                // Update Geo Center for connector
+                const [lat, lng] = cellToLatLng(primary)
+                setSelectedHexGeoCenter({ lat, lng })
+
+                // If single click (replace), update tooltip pos
+                if (!isMulti && tooltipData) {
+                    setFixedTooltipPos({ globalX: tooltipData.globalX, globalY: tooltipData.globalY })
+                }
+                if (newSet.length === 1 && !fixedTooltipPos && tooltipData) {
+                    // First select
+                    setFixedTooltipPos({ globalX: tooltipData.globalX, globalY: tooltipData.globalY })
+                }
+            } else {
+                // Cleared
+                setFixedTooltipPos(null)
+                setSelectedHexGeoCenter(null)
+                onFeatureSelect(null)
+            }
+
+            // Show drag hint
+            if (newSet.length > 0 && typeof window !== 'undefined' && !localStorage.getItem('tooltipDragHintShown')) {
+                setShowDragHint(true)
+                localStorage.setItem('tooltipDragHintShown', 'true')
+                setTimeout(() => setShowDragHint(false), 2000)
+            }
+
         } else {
-            // Clear selection
-            setSelectedHex(null)
+            // Clicked background -> Clear
+            setSelectedHexes([])
             setFixedTooltipPos(null)
-            setSelectedHexData(null)
             setSelectedHexGeoCenter(null)
             setComparisonHex(null)
             setComparisonDetails(null)
@@ -1470,10 +1505,11 @@ export function MapView({
 
             {/* Compute display data: locked mode uses selectedHexData, otherwise dynamic */}
             {(() => {
-                const lockedMode = !!(selectedHex && selectedHexData)
-                const displayProps = lockedMode ? selectedHexData!.properties : tooltipData?.properties
-                const displayDetails = lockedMode ? selectedHexData!.details : hoveredDetails
-                const displayChildLines = lockedMode ? selectedHexData!.childLines : hoveredChildLines
+                const lockedMode = selectedHexes.length > 0
+                const displayProps = lockedMode ? displayProperties : tooltipData?.properties
+                const displayDetails = lockedMode ? selectionDetails : hoveredDetails
+                // Lines: unused in aggregation for now
+                const displayChildLines = hoveredChildLines
                 const displayPos = lockedMode && fixedTooltipPos ? fixedTooltipPos : tooltipData
 
                 if (!mounted || !tooltipData || !displayProps) return null
@@ -1483,7 +1519,7 @@ export function MapView({
                         className={cn(
                             "z-[9999] glass-panel shadow-2xl overflow-hidden",
                             isMobile
-                                ? "fixed bottom-0 left-0 right-0 w-full rounded-t-xl rounded-b-none border-t border-x-0 border-b-0 pointer-events-auto transition-transform duration-300 ease-out"
+                                ? "fixed bottom-0 left-0 right-0 w-full rounded-t-xl rounded-b-none border-t border-x-0 border-b-0 pointer-events-auto transition-transform duration-300 ease-out touch-none"
                                 : "fixed rounded-xl w-[320px]",
                             lockedMode && !isMobile ? "pointer-events-auto cursor-move" : "pointer-events-none",
                             showDragHint && "animate-pulse"
@@ -1549,23 +1585,23 @@ export function MapView({
                                         <div className="flex flex-col justify-center items-center w-[45%] shrink-0">
                                             <div className="grid grid-cols-2 gap-x-2 gap-y-1 w-full text-center">
                                                 <div>
-                                                    <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold truncate">Val</div>
+                                                    <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold truncate">Value</div>
                                                     <div className="text-sm font-bold text-foreground tracking-tight truncate">
                                                         {displayProps.med_predicted_value ? formatCurrency(displayProps.med_predicted_value) : "N/A"}
                                                     </div>
                                                 </div>
                                                 <div>
-                                                    <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold truncate">Grwth</div>
+                                                    <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold truncate">Growth</div>
                                                     <div className={cn("text-sm font-bold tracking-tight truncate", displayProps.O >= 0 ? "text-green-500" : "text-destructive")}>
                                                         {formatOpportunity(displayProps.O)}
                                                     </div>
                                                 </div>
                                                 <div>
-                                                    <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold truncate">Props</div>
+                                                    <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold truncate">Properties</div>
                                                     <div className="text-sm font-medium text-foreground truncate">{displayProps.n_accts}</div>
                                                 </div>
                                                 <div>
-                                                    <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold truncate">Conf</div>
+                                                    <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold truncate">Confidence</div>
                                                     <div className="text-sm font-medium text-foreground truncate">{formatReliability(displayProps.R)}</div>
                                                 </div>
                                             </div>
@@ -1596,8 +1632,8 @@ export function MapView({
                                 ) : (
                                     /* Desktop Layout: Stacked */
                                     <div className="p-4 space-y-5">
-                                        <div className="grid grid-cols-2 gap-3 px-8 md:px-0">
-                                            <div>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="text-center pl-6">
                                                 <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">
                                                     {year <= 2025 ? "Actual" : "Predicted"} ({year})
                                                 </div>
@@ -1610,11 +1646,11 @@ export function MapView({
                                                     </div>
                                                 )}
                                             </div>
-                                            <div>
+                                            <div className="text-center pr-6">
                                                 <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Growth</div>
-                                                <div className={cn("text-xl font-bold tracking-tight flex items-center gap-1", displayProps.O >= 0 ? "text-green-500" : "text-destructive")}>
+                                                <div className={cn("text-xl font-bold tracking-tight flex items-center justify-center gap-1", displayProps.O >= 0 ? "text-green-500" : "text-destructive")}>
                                                     {formatOpportunity(displayProps.O)}
-                                                    {getTrendIcon(displayProps.O > 0.05 ? "up" : displayProps.O < -0.02 ? "down" : "stable")}
+                                                    {getTrendIcon(displayProps.O >= 0 ? "up" : "down")}
                                                 </div>
                                                 <div className="text-[10px] text-muted-foreground mt-1">
                                                     Avg. Annual {year > 2025 ? "Forecast" : "History"}
@@ -1672,7 +1708,7 @@ export function MapView({
                 )
             })()}
 
-            <div className="absolute top-24 right-4 md:top-auto md:bottom-4 flex flex-col gap-2 z-30">
+            <div className="absolute top-[104px] right-4 md:top-auto md:bottom-4 flex flex-row md:flex-col gap-2 z-30">
                 <button
                     onClick={handleZoomIn}
                     className="w-10 h-10 glass-panel rounded-lg flex items-center justify-center text-foreground hover:bg-accent transition-colors shadow-lg"

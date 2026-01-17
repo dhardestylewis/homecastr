@@ -137,7 +137,7 @@ function DashboardContent() {
         )}
 
         {/* Floating Search Bar - Top Left */}
-        <div className="absolute top-4 left-4 right-4 md:right-auto md:w-auto z-[60]">
+        <div className="absolute top-2 left-4 right-4 md:right-auto md:w-auto z-[60]">
           <SearchBox
             onSearch={handleSearch}
             placeholder="Search address or ID..."
@@ -146,7 +146,7 @@ function DashboardContent() {
         </div>
 
         {/* Time Controls - Top Right */}
-        <div className="absolute top-[70px] left-4 right-4 md:top-4 md:right-4 md:left-auto md:w-auto z-50">
+        <div className="absolute top-[56px] left-4 right-4 md:top-4 md:right-4 md:left-auto md:w-auto z-50">
           <TimeControls
             minYear={2019}
             maxYear={2030}
@@ -159,9 +159,8 @@ function DashboardContent() {
           />
         </div>
 
-        {/* Legend with Color Mode Toggle - Bottom Left (Desktop) / Top Left (Mobile) */}
         <Legend
-          className="absolute top-[130px] left-4 md:top-auto md:bottom-4 z-50"
+          className="absolute top-[104px] left-4 md:top-auto md:bottom-4 z-50"
           colorMode={filters.colorMode}
           onColorModeChange={handleColorModeChange}
         />
