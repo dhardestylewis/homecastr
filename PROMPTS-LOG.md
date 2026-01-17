@@ -181,5 +181,40 @@ reload the webserver? i am still not seeing any colors visualized even for histo
 
 http://localhost:3000/?underperf=false&mode=value
 
+## 2026-01-17T15:25 - Tooltip Lock & Comparison Mode Session
 
+### [2026-01-17 15:25]
 
+Next.js 16.0.10 (stale) Turbopack Console Error Server {message: ..., details: ..., hint: "", code: ...}
+
+### [2026-01-17 15:27]
+
+after clicking a tile a yellow dashed line should extend from the hovering tooltip to that tile and that tile should be highlighted in dashed yellow. the tooltip should then remain fixed in place rather than moving around
+
+### [2026-01-17 15:28]
+
+on mobile version, the list of suggested addresses is hidden behind the year element
+
+### [2026-01-17 15:28]
+
+within the tooltip the word "PREDICTED" is used even for historical years
+
+### [2026-01-17 15:29]
+
+http://localhost:3000/?id=88446c32ddfffff Internal Server Error - clicking a tile caused the above. on the mobile version similarly crashes
+
+### [2026-01-17 15:34]
+
+after youve clicked on a single tile it should remain fixed on that hex no matter what else you hover over, i still dont see the yellow dashed line extending from the then-fixed tooltip to the hex or a yellow dashed highlighted hex, continuing to hover over other tiles after selecting one should then display a single combined fan charts comparing the two
+
+### [2026-01-17 15:35]
+
+you should be able to move the tooltip out of the way or wherever you want wants it is in static mode. hitting ESC should esc out back to the original dynamic tooltip mode
+
+### [2026-01-17 15:35]
+
+the first time you use this the tooltip should complete a small gesture to help indicate to the user they can move it around
+
+### [2026-01-17 15:38]
+
+have you been committing with every prompt, and following your GUIDELINES file every prompt?

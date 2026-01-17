@@ -13,8 +13,19 @@
 - [x] **Med Years filter broken**: Hidden (no column exists in DB)
 - [ ] **Zoom/cell loading issue**: Only cells on right side load at some zoom levels
 - [ ] **Timelapse rendering slow**: Consider MVT tiles, WebGL (Deck.gl), or pre-caching all years
+- [x] **Mobile z-index**: Address suggestions dropdown hidden behind year element → Fixed z-[200] [Added: 2026-01-17 15:28]
 
-### P2 - Feature Gaps
+### P2 - Feature Gaps (Tooltip Lock & Comparison Mode) [Added: 2026-01-17]
+- [ ] **Locked tooltip on click**: Clicking tile should lock tooltip to that hex, ignore hover [Added: 2026-01-17 15:27]
+- [ ] **Yellow dashed connector line**: Line from fixed tooltip to selected hex [Added: 2026-01-17 15:27]
+- [ ] **Yellow dashed hex border**: Selected hex has yellow dashed border [Added: 2026-01-17 15:27]
+- [ ] **Draggable tooltip**: User can drag locked tooltip anywhere [Added: 2026-01-17 15:35]
+- [ ] **ESC to unlock**: Pressing ESC exits static mode back to dynamic tooltip [Added: 2026-01-17 15:35]
+- [ ] **First-time gesture hint**: Small animation to indicate tooltip is draggable [Added: 2026-01-17 15:35]
+- [ ] **Comparison fan chart**: Hovering another tile while one selected shows combined chart [Added: 2026-01-17 15:34]
+- [ ] **"Actual" vs "Predicted" label**: Show "Actual" for historical years ≤2025 [Added: 2026-01-17 15:28]
+
+### P2 - Feature Gaps (Existing)
 - [ ] **Fan chart missing**: Investigate if DB has fan chart columns populated
 - [ ] **Predicted value alongside current value**: Add current value display
 - [ ] **Natural boundary aggregation**: Consider using lot lines + organic aggregates (blocks, neighborhoods, school districts, zip codes) instead of H3 hexes - more intuitive for users

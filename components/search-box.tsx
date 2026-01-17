@@ -143,7 +143,7 @@ export function SearchBox({ onSearch, placeholder = "Search address or ID...", v
       </form>
 
       {isOpen && suggestions.length > 0 && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-card/95 backdrop-blur-md border border-border rounded-md shadow-lg z-[100] max-h-60 overflow-y-auto">
+        <div className="absolute top-full left-0 right-0 mt-1 bg-card/95 backdrop-blur-md border border-border rounded-md shadow-lg z-[200] max-h-60 overflow-y-auto">
           {suggestions.map((item, index) => (
             <button
               key={`${item.lat}-${item.lng}-${index}`}
