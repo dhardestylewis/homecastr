@@ -351,6 +351,7 @@ export function MapView({
     // Locked tooltip mode state
     const [fixedTooltipPos, setFixedTooltipPos] = useState<{ globalX: number; globalY: number } | null>(null)
     const [selectedHexData, setSelectedHexData] = useState<{ properties: FeatureProperties; details: DetailsResponse | null; childLines: number[][] | undefined } | null>(null)
+    const [selectedHexGeoCenter, setSelectedHexGeoCenter] = useState<{ lat: number; lng: number } | null>(null) // Store geo coords for stable connector
     const [comparisonHex, setComparisonHex] = useState<string | null>(null)
     const [comparisonDetails, setComparisonDetails] = useState<DetailsResponse | null>(null)
     const [isTooltipDragging, setIsTooltipDragging] = useState(false)
@@ -376,6 +377,7 @@ export function MapView({
             setSelectedHex(null)
             setFixedTooltipPos(null)
             setSelectedHexData(null)
+            setSelectedHexGeoCenter(null)
             setComparisonHex(null)
             setComparisonDetails(null)
         }
@@ -916,6 +918,22 @@ export function MapView({
             return hex
         }
 
+        // Helper: convert lat/lng to canvas coordinates
+        const geoToCanvasCoords = (lat: number, lng: number): { x: number; y: number } => {
+            const { worldSize, tileScale } = getZoomConstants(transform.scale)
+            const centerMerc = latLngToMercator(basemapCenter.lng, basemapCenter.lat)
+            const pointMerc = latLngToMercator(lng, lat)
+
+            const centerPixelX = centerMerc.x * worldSize - transform.offsetX
+            const centerPixelY = centerMerc.y * worldSize - transform.offsetY
+            const pointPixelX = pointMerc.x * worldSize
+            const pointPixelY = pointMerc.y * worldSize
+
+            const x = (pointPixelX - centerPixelX) * tileScale + canvasSize.width / 2
+            const y = (pointPixelY - centerPixelY) * tileScale + canvasSize.height / 2
+            return { x, y }
+        }
+
         // Hovered hex (white outline, but not if it's the selected hex)
         if (hoveredHex && hoveredHex !== selectedHex) {
             drawOutcome(hoveredHex, "#ffffff", 2)
@@ -925,13 +943,16 @@ export function MapView({
         if (selectedHex) {
             const hex = drawOutcome(selectedHex, "#fbbf24", 3, true) // yellow-400, dashed
 
-            // Draw connector line from hex center to fixed tooltip position
-            if (hex && fixedTooltipPos && !isMobile) {
+            // Draw connector line from hex geo center to fixed tooltip position
+            // Use selectedHexGeoCenter for stability even if hex is panned out of viewport
+            if (selectedHexGeoCenter && fixedTooltipPos && !isMobile) {
+                const hexCanvasPos = geoToCanvasCoords(selectedHexGeoCenter.lat, selectedHexGeoCenter.lng)
+
                 ctx.beginPath()
                 ctx.setLineDash([6, 4])
                 ctx.strokeStyle = "#fbbf24"
                 ctx.lineWidth = 2
-                ctx.moveTo(hex.centerX, hex.centerY)
+                ctx.moveTo(hexCanvasPos.x, hexCanvasPos.y)
                 // Convert global tooltip pos to canvas pos
                 const rect = canvas.getBoundingClientRect()
                 const tooltipCanvasX = fixedTooltipPos.globalX - rect.left
@@ -942,7 +963,7 @@ export function MapView({
             }
         }
 
-    }, [filteredHexes, hoveredHex, selectedHex, fixedTooltipPos, isMobile, transform])
+    }, [filteredHexes, hoveredHex, selectedHex, fixedTooltipPos, isMobile, transform, selectedHexGeoCenter, canvasSize, basemapCenter])
 
 
     // Helper: Canvas X/Y -> Lat/Lng for O(1) Lookup
@@ -1108,11 +1129,15 @@ export function MapView({
                     setTimeout(() => setShowDragHint(false), 2000)
                 }
             }
+            // Store geo center for stable connector line
+            const [lat, lng] = cellToLatLng(hoveredHex)
+            setSelectedHexGeoCenter({ lat, lng })
         } else {
             // Clear selection
             setSelectedHex(null)
             setFixedTooltipPos(null)
             setSelectedHexData(null)
+            setSelectedHexGeoCenter(null)
             setComparisonHex(null)
             setComparisonDetails(null)
             onFeatureSelect(null)
@@ -1297,6 +1322,7 @@ export function MapView({
         setTooltipData(null)
         setFixedTooltipPos(null)
         setSelectedHexData(null)
+        setSelectedHexGeoCenter(null)
         setComparisonHex(null)
         setComparisonDetails(null)
     }
@@ -1308,6 +1334,7 @@ export function MapView({
                 setSelectedHex(null)
                 setFixedTooltipPos(null)
                 setSelectedHexData(null)
+                setSelectedHexGeoCenter(null)
                 setComparisonHex(null)
                 setComparisonDetails(null)
                 onFeatureSelect(null)
