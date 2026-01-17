@@ -347,6 +347,15 @@ export function MapView({
     const [selectedHex, setSelectedHex] = useState<string | null>(null)
 
     const [tooltipData, setTooltipData] = useState<{ x: number; y: number; globalX: number; globalY: number; properties: FeatureProperties } | null>(null)
+
+    // Locked tooltip mode state
+    const [fixedTooltipPos, setFixedTooltipPos] = useState<{ globalX: number; globalY: number } | null>(null)
+    const [selectedHexData, setSelectedHexData] = useState<{ properties: FeatureProperties; details: DetailsResponse | null; childLines: number[][] | undefined } | null>(null)
+    const [comparisonHex, setComparisonHex] = useState<string | null>(null)
+    const [comparisonDetails, setComparisonDetails] = useState<DetailsResponse | null>(null)
+    const [isTooltipDragging, setIsTooltipDragging] = useState(false)
+    const [showDragHint, setShowDragHint] = useState(false)
+
     const [mounted, setMounted] = useState(false)
 
     useEffect(() => setMounted(true), [])
@@ -360,8 +369,8 @@ export function MapView({
     const [hoveredChildLines, setHoveredChildLines] = useState<number[][] | undefined>(undefined)
     const [isLoadingDetails, setIsLoadingDetails] = useState(false)
 
-    // Determine active hex for details (Hover on Desktop, Selection on Mobile)
-    const activeHex = hoveredHex || (isMobile ? selectedHex : null)
+    // Determine active hex for details: selected takes priority
+    const activeHex = selectedHex || hoveredHex || (isMobile ? selectedHex : null)
 
     // Fetch detailed data for tooltip when hovering/selected
     useEffect(() => {
@@ -839,13 +848,9 @@ export function MapView({
 
         ctx.clearRect(0, 0, canvas.width, canvas.height)
 
-        const drawOutcome = (id: string, color: string, width: number) => {
-            // We need vertices. Since we have filteredHexes (which has vertices pre-calculated), 
-            // we can find it there. For O(1) vertex lookup we could cache vertices in a Map too, 
-            // but finding in array of ~1000 visible hexes is fast enough for just 1-2 items 
-            // compared to O(N) hit testing every pixel.
+        const drawOutcome = (id: string, color: string, width: number, dashed: boolean = false): HexagonData | undefined => {
             const hex = filteredHexes.find(h => h.id === id)
-            if (!hex) return
+            if (!hex) return undefined
 
             ctx.beginPath()
             ctx.moveTo(hex.vertices[0][0], hex.vertices[0][1])
@@ -855,13 +860,40 @@ export function MapView({
             ctx.closePath()
             ctx.strokeStyle = color
             ctx.lineWidth = width
+            if (dashed) ctx.setLineDash([8, 4])
+            else ctx.setLineDash([])
             ctx.stroke()
+            ctx.setLineDash([])
+            return hex
         }
 
-        if (hoveredHex) drawOutcome(hoveredHex, "#ffffff", 2)
-        if (selectedHex) drawOutcome(selectedHex, "#ffffff", 3)
+        // Hovered hex (white outline, but not if it's the selected hex)
+        if (hoveredHex && hoveredHex !== selectedHex) {
+            drawOutcome(hoveredHex, "#ffffff", 2)
+        }
 
-    }, [filteredHexes, hoveredHex, selectedHex])
+        // Selected hex: yellow dashed border + connector line
+        if (selectedHex) {
+            const hex = drawOutcome(selectedHex, "#fbbf24", 3, true) // yellow-400, dashed
+
+            // Draw connector line from hex center to fixed tooltip position
+            if (hex && fixedTooltipPos && !isMobile) {
+                ctx.beginPath()
+                ctx.setLineDash([6, 4])
+                ctx.strokeStyle = "#fbbf24"
+                ctx.lineWidth = 2
+                ctx.moveTo(hex.centerX, hex.centerY)
+                // Convert global tooltip pos to canvas pos
+                const rect = canvas.getBoundingClientRect()
+                const tooltipCanvasX = fixedTooltipPos.globalX - rect.left
+                const tooltipCanvasY = fixedTooltipPos.globalY - rect.top
+                ctx.lineTo(tooltipCanvasX, tooltipCanvasY)
+                ctx.stroke()
+                ctx.setLineDash([])
+            }
+        }
+
+    }, [filteredHexes, hoveredHex, selectedHex, fixedTooltipPos, isMobile])
 
 
     // Helper: Canvas X/Y -> Lat/Lng for O(1) Lookup
@@ -938,20 +970,32 @@ export function MapView({
 
             // Check if this cell is in our data
             if (hexPropertyMap.current.has(cellId)) {
-                if (hoveredHex !== cellId) {
-                    setHoveredHex(cellId)
-                    const props = hexPropertyMap.current.get(cellId)!
-                    setTooltipData({ x: canvasX, y: canvasY, globalX: e.clientX, globalY: e.clientY, properties: props })
-                    onFeatureHover(cellId)
-                } else {
-                    // Update tooltip pos even if hex didn't change
-                    setTooltipData(prev => prev ? { ...prev, x: canvasX, y: canvasY, globalX: e.clientX, globalY: e.clientY } : null)
+                // If we have a selection, track this as comparison hex
+                if (selectedHex && cellId !== selectedHex) {
+                    if (comparisonHex !== cellId) {
+                        setComparisonHex(cellId)
+                        setHoveredHex(cellId) // For highlight
+                    }
+                } else if (!selectedHex) {
+                    // No selection - normal hover behavior
+                    if (hoveredHex !== cellId) {
+                        setHoveredHex(cellId)
+                        const props = hexPropertyMap.current.get(cellId)!
+                        setTooltipData({ x: canvasX, y: canvasY, globalX: e.clientX, globalY: e.clientY, properties: props })
+                        onFeatureHover(cellId)
+                    } else {
+                        // Update tooltip pos even if hex didn't change
+                        setTooltipData(prev => prev ? { ...prev, x: canvasX, y: canvasY, globalX: e.clientX, globalY: e.clientY } : null)
+                    }
                 }
             } else {
-                if (hoveredHex) {
+                if (hoveredHex && !selectedHex) {
                     setHoveredHex(null)
                     setTooltipData(null)
                     onFeatureHover(null)
+                } else if (comparisonHex) {
+                    setComparisonHex(null)
+                    setHoveredHex(null)
                 }
             }
         }
@@ -964,10 +1008,30 @@ export function MapView({
         }
 
         if (hoveredHex) {
+            // Lock the tooltip
             setSelectedHex(hoveredHex)
             onFeatureSelect(hoveredHex)
+            if (tooltipData) {
+                setFixedTooltipPos({ globalX: tooltipData.globalX, globalY: tooltipData.globalY })
+                setSelectedHexData({
+                    properties: tooltipData.properties,
+                    details: hoveredDetails,
+                    childLines: hoveredChildLines
+                })
+                // Show drag hint on first selection (check localStorage)
+                if (typeof window !== 'undefined' && !localStorage.getItem('tooltipDragHintShown')) {
+                    setShowDragHint(true)
+                    localStorage.setItem('tooltipDragHintShown', 'true')
+                    setTimeout(() => setShowDragHint(false), 2000)
+                }
+            }
         } else {
+            // Clear selection
             setSelectedHex(null)
+            setFixedTooltipPos(null)
+            setSelectedHexData(null)
+            setComparisonHex(null)
+            setComparisonDetails(null)
             onFeatureSelect(null)
         }
     }
@@ -978,9 +1042,15 @@ export function MapView({
 
     const handleMouseLeave = () => {
         setIsDragging(false)
-        setHoveredHex(null)
-        setTooltipData(null)
-        onFeatureHover(null)
+        // Only clear hover if no selection
+        if (!selectedHex) {
+            setHoveredHex(null)
+            setTooltipData(null)
+            onFeatureHover(null)
+        } else {
+            setComparisonHex(null)
+            setHoveredHex(null)
+        }
     }
 
 
@@ -1142,7 +1212,27 @@ export function MapView({
         setSelectedHex(null)
         setHoveredHex(null)
         setTooltipData(null)
+        setFixedTooltipPos(null)
+        setSelectedHexData(null)
+        setComparisonHex(null)
+        setComparisonDetails(null)
     }
+
+    // ESC key to exit static tooltip mode
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape' && selectedHex) {
+                setSelectedHex(null)
+                setFixedTooltipPos(null)
+                setSelectedHexData(null)
+                setComparisonHex(null)
+                setComparisonDetails(null)
+                onFeatureSelect(null)
+            }
+        }
+        window.addEventListener('keydown', handleKeyDown)
+        return () => window.removeEventListener('keydown', handleKeyDown)
+    }, [selectedHex, onFeatureSelect])
 
     // Swipe logic for mobile tooltip
     const [touchStart, setTouchStart] = useState<number | null>(null)
@@ -1196,152 +1286,167 @@ export function MapView({
                 onClick={handleCanvasClick}
             />
 
+            {/* Compute display data: locked mode uses selectedHexData, otherwise dynamic */}
+            {(() => {
+                const lockedMode = !!(selectedHex && selectedHexData)
+                const displayProps = lockedMode ? selectedHexData!.properties : tooltipData?.properties
+                const displayDetails = lockedMode ? selectedHexData!.details : hoveredDetails
+                const displayChildLines = lockedMode ? selectedHexData!.childLines : hoveredChildLines
+                const displayPos = lockedMode && fixedTooltipPos ? fixedTooltipPos : tooltipData
 
+                if (!mounted || !tooltipData || !displayProps) return null
 
-            {mounted && tooltipData && createPortal(
-                <div
-                    className={cn(
-                        "z-[9999] glass-panel shadow-2xl overflow-hidden pointer-events-none",
-                        isMobile
-                            ? "fixed bottom-0 left-0 right-0 w-full rounded-t-xl rounded-b-none border-t border-x-0 border-b-0 pointer-events-auto"
-                            : "fixed rounded-xl w-[320px]"
-                    )}
-                    style={isMobile ? {
-                        transform: `translateY(${dragOffset}px)`,
-                        transition: touchStart === null ? 'transform 0.3s ease-out' : 'none'
-                    } : {
-                        left: tooltipData.globalX + 20,
-                        top: tooltipData.globalY + (tooltipData.globalY > window.innerHeight - 350 ? -20 : 20),
-                        transform: `${tooltipData.globalX > window.innerWidth - 340 ? 'translateX(-100%) translateX(-40px)' : ''} ${tooltipData.globalY > window.innerHeight - 350 ? 'translateY(-100%)' : ''}`.trim() || 'none'
-                    }}
-                    onTouchStart={isMobile ? handleTooltipTouchStart : undefined}
-                    onTouchMove={isMobile ? handleTooltipTouchMove : undefined}
-                    onTouchEnd={isMobile ? handleTooltipTouchEnd : undefined}
-                >
-                    {tooltipData.properties.has_data ? (
-                        <div className="flex flex-col">
-                            {/* Mobile Drag Handle */}
-                            {isMobile && (
-                                <div className="w-full flex justify-center py-2 bg-muted/40 backdrop-blur-md border-b-0 cursor-grab active:cursor-grabbing">
-                                    <div className="w-10 h-1 bg-muted-foreground/30 rounded-full" />
-                                </div>
-                            )}
-                            {/* Branding Header */}
-                            <div className="flex items-center justify-between px-3 py-2 border-b border-border/50 bg-muted/40 backdrop-blur-md">
-                                <div className="flex items-center gap-2">
-                                    <Building2 className="w-3.5 h-3.5 text-primary" />
-                                    <span className="font-bold text-[10px] tracking-wide text-foreground uppercase">InvestMap</span>
-                                </div>
+                return createPortal(
+                    <div
+                        className={cn(
+                            "z-[9999] glass-panel shadow-2xl overflow-hidden",
+                            isMobile
+                                ? "fixed bottom-0 left-0 right-0 w-full rounded-t-xl rounded-b-none border-t border-x-0 border-b-0 pointer-events-auto"
+                                : "fixed rounded-xl w-[320px]",
+                            lockedMode && !isMobile ? "pointer-events-auto cursor-move" : "pointer-events-none",
+                            showDragHint && "animate-pulse"
+                        )}
+                        style={isMobile ? {
+                            transform: `translateY(${dragOffset}px)`,
+                            transition: touchStart === null ? 'transform 0.3s ease-out' : 'none'
+                        } : {
+                            left: (displayPos?.globalX ?? 0) + 20,
+                            top: (displayPos?.globalY ?? 0) + ((displayPos?.globalY ?? 0) > window.innerHeight - 350 ? -20 : 20),
+                            transform: `${(displayPos?.globalX ?? 0) > window.innerWidth - 340 ? 'translateX(-100%) translateX(-40px)' : ''} ${(displayPos?.globalY ?? 0) > window.innerHeight - 350 ? 'translateY(-100%)' : ''}`.trim() || 'none'
+                        }}
+                        onMouseDown={lockedMode && !isMobile ? (e) => {
+                            setIsTooltipDragging(true)
+                            e.preventDefault()
+                        } : undefined}
+                        onTouchStart={isMobile ? handleTooltipTouchStart : undefined}
+                        onTouchMove={isMobile ? handleTooltipTouchMove : undefined}
+                        onTouchEnd={isMobile ? handleTooltipTouchEnd : undefined}
+                    >
+                        {displayProps.has_data ? (
+                            <div className="flex flex-col">
+                                {/* Mobile Drag Handle */}
                                 {isMobile && (
-                                    <button onClick={handleReset} className="p-1 -mr-1 text-muted-foreground hover:text-foreground">
-                                        <X className="w-4 h-4" />
-                                    </button>
+                                    <div className="w-full flex justify-center py-2 bg-muted/40 backdrop-blur-md border-b-0 cursor-grab active:cursor-grabbing">
+                                        <div className="w-10 h-1 bg-muted-foreground/30 rounded-full" />
+                                    </div>
                                 )}
-                            </div>
-                            {/* Scale Header */}
-                            <div className="p-3 border-b border-border/50 bg-muted/30">
-                                <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">
-                                    {h3Resolution <= 7 ? "District Scale" :
-                                        h3Resolution <= 9 ? "Neighborhood Scale" :
-                                            h3Resolution <= 10 ? "Block Scale" : "Property Scale"} (Res {h3Resolution})
+                                {/* Branding Header */}
+                                <div className="flex items-center justify-between px-3 py-2 border-b border-border/50 bg-muted/40 backdrop-blur-md">
+                                    <div className="flex items-center gap-2">
+                                        <Building2 className="w-3.5 h-3.5 text-primary" />
+                                        <span className="font-bold text-[10px] tracking-wide text-foreground uppercase">InvestMap</span>
+                                    </div>
+                                    {isMobile && (
+                                        <button onClick={handleReset} className="p-1 -mr-1 text-muted-foreground hover:text-foreground">
+                                            <X className="w-4 h-4" />
+                                        </button>
+                                    )}
                                 </div>
-                                <div className="font-mono text-xs text-muted-foreground truncate">
-                                    {cellToLatLng(tooltipData.properties.id).map((n: number) => n.toFixed(5)).join(", ")}
+                                {/* Scale Header */}
+                                <div className="p-3 border-b border-border/50 bg-muted/30">
+                                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">
+                                        {h3Resolution <= 7 ? "District Scale" :
+                                            h3Resolution <= 9 ? "Neighborhood Scale" :
+                                                h3Resolution <= 10 ? "Block Scale" : "Property Scale"} (Res {h3Resolution})
+                                    </div>
+                                    <div className="font-mono text-xs text-muted-foreground truncate">
+                                        {cellToLatLng(displayProps.id).map((n: number) => n.toFixed(5)).join(", ")}
+                                    </div>
                                 </div>
-                            </div>
 
-                            <div className="p-4 space-y-5">
-                                {/* Top Stats Row */}
-                                <div className="grid grid-cols-2 gap-3 px-8 md:px-0">
-                                    {/* Value Stat */}
-                                    <div>
-                                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">
-                                            Predicted ({year})
-                                        </div>
-                                        <div className="text-xl font-bold text-foreground tracking-tight">
-                                            {tooltipData.properties.med_predicted_value
-                                                ? formatCurrency(tooltipData.properties.med_predicted_value)
-                                                : "N/A"}
-                                        </div>
-                                        {/* Current Value Context */}
-                                        {hoveredDetails?.historicalValues && (
-                                            <div className="text-[10px] text-muted-foreground mt-1">
-                                                Curr (2025): <span className="text-foreground">{formatCurrency(hoveredDetails.historicalValues[hoveredDetails.historicalValues.length - 1])}</span>
+                                <div className="p-4 space-y-5">
+                                    {/* Top Stats Row */}
+                                    <div className="grid grid-cols-2 gap-3 px-8 md:px-0">
+                                        {/* Value Stat */}
+                                        <div>
+                                            <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">
+                                                {year <= 2025 ? "Actual" : "Predicted"} ({year})
                                             </div>
-                                        )}
+                                            <div className="text-xl font-bold text-foreground tracking-tight">
+                                                {displayProps.med_predicted_value
+                                                    ? formatCurrency(displayProps.med_predicted_value)
+                                                    : "N/A"}
+                                            </div>
+                                            {/* Current Value Context */}
+                                            {displayDetails?.historicalValues && (
+                                                <div className="text-[10px] text-muted-foreground mt-1">
+                                                    Curr (2025): <span className="text-foreground">{formatCurrency(displayDetails.historicalValues[displayDetails.historicalValues.length - 1])}</span>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Growth Stat */}
+                                        <div>
+                                            <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">
+                                                Growth
+                                            </div>
+                                            <div className={cn("text-xl font-bold tracking-tight flex items-center gap-1",
+                                                displayProps.O >= 0 ? "text-green-500" : "text-destructive"
+                                            )}>
+                                                {formatOpportunity(displayProps.O)}
+                                                {getTrendIcon(displayProps.O > 0.05 ? "up" : displayProps.O < -0.02 ? "down" : "stable")}
+                                            </div>
+                                            <div className="text-[10px] text-muted-foreground mt-1">
+                                                Avg. Annual {year > 2025 ? "Forecast" : "History"}
+                                            </div>
+                                        </div>
                                     </div>
 
-                                    {/* Growth Stat */}
-                                    <div>
-                                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">
-                                            Growth
+                                    {/* Mini Chart */}
+                                    {displayDetails?.fanChart ? (
+                                        <div className="space-y-2">
+                                            <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold flex justify-between">
+                                                <span>Value Timeline</span>
+                                                <span className="text-primary/70">{year}</span>
+                                            </div>
+                                            <div className="h-32 -mx-2">
+                                                <FanChart
+                                                    data={displayDetails.fanChart}
+                                                    currentYear={year}
+                                                    height={120}
+                                                    historicalValues={displayDetails.historicalValues}
+                                                    childLines={displayChildLines}
+                                                />
+                                            </div>
                                         </div>
-                                        <div className={cn("text-xl font-bold tracking-tight flex items-center gap-1",
-                                            tooltipData.properties.O >= 0 ? "text-green-500" : "text-destructive"
-                                        )}>
-                                            {formatOpportunity(tooltipData.properties.O)}
-                                            {getTrendIcon(tooltipData.properties.O > 0.05 ? "up" : tooltipData.properties.O < -0.02 ? "down" : "stable")}
-                                        </div>
-                                        <div className="text-[10px] text-muted-foreground mt-1">
-                                            Avg. Annual {year > 2025 ? "Forecast" : "History"}
-                                        </div>
-                                    </div>
-                                </div>
+                                    ) : (
+                                        isLoadingDetails && (
+                                            <div className="h-32 flex items-center justify-center">
+                                                <div className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                                            </div>
+                                        )
+                                    )}
 
-                                {/* Mini Chart */}
-                                {hoveredDetails?.fanChart ? (
-                                    <div className="space-y-2">
-                                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold flex justify-between">
-                                            <span>Value Timeline</span>
-                                            <span className="text-primary/70">{year}</span>
+                                    {/* Footer Stats */}
+                                    <div className="pt-3 border-t border-border/50 grid grid-cols-2 gap-4">
+                                        <div>
+                                            <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">
+                                                Properties
+                                            </div>
+                                            <div className="text-sm font-medium text-foreground">
+                                                {displayProps.n_accts}
+                                            </div>
                                         </div>
-                                        <div className="h-32 -mx-2">
-                                            <FanChart
-                                                data={hoveredDetails.fanChart}
-                                                currentYear={year}
-                                                height={120}
-                                                historicalValues={hoveredDetails.historicalValues}
-                                                childLines={hoveredChildLines}
-                                            />
-                                        </div>
-                                    </div>
-                                ) : (
-                                    isLoadingDetails && (
-                                        <div className="h-32 flex items-center justify-center">
-                                            <div className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-                                        </div>
-                                    )
-                                )}
-
-                                {/* Footer Stats */}
-                                <div className="pt-3 border-t border-border/50 grid grid-cols-2 gap-4">
-                                    <div>
-                                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">
-                                            Properties
-                                        </div>
-                                        <div className="text-sm font-medium text-foreground">
-                                            {tooltipData.properties.n_accts}
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">
-                                            Confidence
-                                        </div>
-                                        <div className="text-sm font-medium text-foreground">
-                                            {formatReliability(tooltipData.properties.R)}
+                                        <div>
+                                            <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">
+                                                Confidence
+                                            </div>
+                                            <div className="text-sm font-medium text-foreground">
+                                                {formatReliability(displayProps.R)}
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                    ) : (
-                        <div className="p-3">
-                            <div className="font-medium text-muted-foreground text-xs">No data available</div>
-                        </div>
-                    )}
-                </div>,
-                document.body
-            )}
+                        ) : (
+                            <div className="p-3">
+                                <div className="font-medium text-muted-foreground text-xs">No data available</div>
+                            </div>
+                        )}
+                    </div>,
+                    document.body
+                )
+            })()}
 
             <div className="absolute bottom-24 right-4 md:bottom-4 flex flex-col gap-2 z-30">
                 <button
