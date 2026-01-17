@@ -368,6 +368,18 @@ export function MapView({
     const [hoveredDetails, setHoveredDetails] = useState<DetailsResponse | null>(null)
     const [hoveredChildLines, setHoveredChildLines] = useState<number[][] | undefined>(undefined)
     const [isLoadingDetails, setIsLoadingDetails] = useState(false)
+    const [selectedHexResolution, setSelectedHexResolution] = useState<number | null>(null)
+
+    // Clear selection when H3 resolution changes (prevents stale highlight at wrong scale)
+    useEffect(() => {
+        if (selectedHex && selectedHexResolution !== null && h3Resolution !== selectedHexResolution) {
+            setSelectedHex(null)
+            setFixedTooltipPos(null)
+            setSelectedHexData(null)
+            setComparisonHex(null)
+            setComparisonDetails(null)
+        }
+    }, [h3Resolution, selectedHex, selectedHexResolution])
 
     // Determine active hex for details: selected takes priority
     const activeHex = selectedHex || hoveredHex || (isMobile ? selectedHex : null)
@@ -930,7 +942,7 @@ export function MapView({
             }
         }
 
-    }, [filteredHexes, hoveredHex, selectedHex, fixedTooltipPos, isMobile])
+    }, [filteredHexes, hoveredHex, selectedHex, fixedTooltipPos, isMobile, transform])
 
 
     // Helper: Canvas X/Y -> Lat/Lng for O(1) Lookup
@@ -975,6 +987,39 @@ export function MapView({
         setIsDragging(true)
         hasDraggedRef.current = false // Reset on new drag start
         setDragStart({ x: e.clientX, y: e.clientY })
+    }
+
+    // Double-click to zoom in
+    const handleDoubleClick = (e: React.MouseEvent) => {
+        const rect = containerRef.current?.getBoundingClientRect()
+        if (!rect) return
+
+        const mouseX = e.clientX - rect.left
+        const mouseY = e.clientY - rect.top
+
+        setTransform(prev => {
+            const { worldSize: w1, tileScale: s1 } = getZoomConstants(prev.scale)
+            const centerMerc = latLngToMercator(basemapCenter.lng, basemapCenter.lat)
+
+            const centerWorldPixelX = centerMerc.x * w1 - prev.offsetX
+            const centerWorldPixelY = centerMerc.y * w1 - prev.offsetY
+
+            const mouseWorldPixelX = (mouseX - canvasSize.width / 2) / s1 + centerWorldPixelX
+            const mouseWorldPixelY = (mouseY - canvasSize.height / 2) / s1 + centerWorldPixelY
+            const mouseMercX = mouseWorldPixelX / w1
+            const mouseMercY = mouseWorldPixelY / w1
+
+            const newScale = Math.min(50000, prev.scale * 2) // Zoom in 2x
+            const { worldSize: w2, tileScale: s2 } = getZoomConstants(newScale)
+
+            const newCenterWorldPixelX = mouseMercX * w2 - (mouseX - canvasSize.width / 2) / s2
+            const newCenterWorldPixelY = mouseMercY * w2 - (mouseY - canvasSize.height / 2) / s2
+
+            const newOffsetX = centerMerc.x * w2 - newCenterWorldPixelX
+            const newOffsetY = centerMerc.y * w2 - newCenterWorldPixelY
+
+            return { scale: newScale, offsetX: newOffsetX, offsetY: newOffsetY }
+        })
     }
 
     // Handler: Mouse Move with O(1) Lookup
@@ -1047,6 +1092,7 @@ export function MapView({
         if (hoveredHex) {
             // Lock the tooltip
             setSelectedHex(hoveredHex)
+            setSelectedHexResolution(h3Resolution) // Track resolution at selection time
             onFeatureSelect(hoveredHex)
             if (tooltipData) {
                 setFixedTooltipPos({ globalX: tooltipData.globalX, globalY: tooltipData.globalY })
@@ -1321,6 +1367,7 @@ export function MapView({
                 onMouseUp={handleMouseUp}
                 onMouseLeave={handleMouseLeave}
                 onClick={handleCanvasClick}
+                onDoubleClick={handleDoubleClick}
             />
 
             {/* Compute display data: locked mode uses selectedHexData, otherwise dynamic */}

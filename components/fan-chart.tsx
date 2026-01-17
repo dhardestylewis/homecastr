@@ -193,6 +193,12 @@ export function FanChart({
         preserveAspectRatio="xMidYMid meet"
         style={{ maxHeight: height }}
       >
+        {/* Clip path to prevent lines extending outside chart area */}
+        <defs>
+          <clipPath id="chart-area">
+            <rect x={padding.left} y={padding.top} width={chartWidth} height={chartHeight} />
+          </clipPath>
+        </defs>
         {/* Grid lines */}
         {yTicks.map((tick) => (
           <line
@@ -206,27 +212,29 @@ export function FanChart({
           />
         ))}
 
-        {/* Child Lines (Spaghetti Plot) */}
-        {childLines && childLines.map((line, idx) => {
-          const d = line.map((val, i) => {
-            const year = TIMELINE_START + i;
-            if (!Number.isFinite(val)) return null;
-            return `${i === 0 ? "M" : "L"} ${xScale(year)} ${yScale(val)}`
-          }).filter(Boolean).join(" ");
+        {/* Child Lines (Spaghetti Plot) - clipped */}
+        <g clipPath="url(#chart-area)">
+          {childLines && childLines.map((line, idx) => {
+            const d = line.map((val, i) => {
+              const year = TIMELINE_START + i;
+              if (!Number.isFinite(val)) return null;
+              return `${i === 0 ? "M" : "L"} ${xScale(year)} ${yScale(val)}`
+            }).filter(Boolean).join(" ");
 
-          if (!d) return null;
+            if (!d) return null;
 
-          return (
-            <path
-              key={`child-${idx}`}
-              d={d}
-              fill="none"
-              stroke="currentColor"
-              strokeOpacity={0.06}
-              strokeWidth={1}
-            />
-          )
-        })}
+            return (
+              <path
+                key={`child-${idx}`}
+                d={d}
+                fill="none"
+                stroke="currentColor"
+                strokeOpacity={0.06}
+                strokeWidth={1}
+              />
+            )
+          })}
+        </g>
 
         {/* Y-axis line */}
         <line
@@ -353,7 +361,7 @@ export function FanChart({
           </text>
           <rect x={105} y={-6} width={12} height={6} fill="oklch(0.65 0.15 180 / 0.2)" />
           <text x={120} y={0} className="text-[8px] fill-muted-foreground">
-            Range (P10-P90)
+            Likely Range
           </text>
         </g>
       </svg>
