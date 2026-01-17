@@ -1372,12 +1372,26 @@ export function MapView({
                                     <div className="flex items-center gap-2">
                                         <Building2 className="w-3.5 h-3.5 text-primary" />
                                         <span className="font-bold text-[10px] tracking-wide text-foreground uppercase">InvestMap</span>
+                                        {/* Locked mode indicator */}
+                                        {lockedMode && (
+                                            <span className="px-1.5 py-0.5 bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 text-[8px] font-semibold uppercase tracking-wider rounded">
+                                                Locked
+                                            </span>
+                                        )}
                                     </div>
-                                    {isMobile && (
-                                        <button onClick={handleReset} className="p-1 -mr-1 text-muted-foreground hover:text-foreground">
-                                            <X className="w-4 h-4" />
-                                        </button>
-                                    )}
+                                    <div className="flex items-center gap-2">
+                                        {/* ESC hint (desktop only, locked mode) */}
+                                        {lockedMode && !isMobile && (
+                                            <span className="text-[9px] text-muted-foreground">
+                                                ESC to exit
+                                            </span>
+                                        )}
+                                        {isMobile && (
+                                            <button onClick={handleReset} className="p-1 -mr-1 text-muted-foreground hover:text-foreground">
+                                                <X className="w-4 h-4" />
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
                                 {/* Scale Header */}
                                 <div className="p-3 border-b border-border/50 bg-muted/30">
