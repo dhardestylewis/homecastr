@@ -12,6 +12,7 @@ import { TrendingUp, TrendingDown, Minus, Building2, X } from "lucide-react"
 import type { FilterState, FeatureProperties, MapState, DetailsResponse } from "@/lib/types"
 import { getH3CellDetails } from "@/app/actions/h3-details"
 import { getH3ChildTimelines } from "@/app/actions/h3-children"
+import { getH3DataBatch } from "@/app/actions/h3-data-batch"
 import { FanChart } from "./fan-chart"
 import { aggregateProperties, aggregateDetails } from "@/lib/utils/aggregation"
 
@@ -32,6 +33,22 @@ function useIsMobile() {
         return () => window.removeEventListener('resize', check)
     }, [])
     return isMobile
+}
+
+// Helper: Ensure tooltip stays within bounds
+function clampTooltipPos(x: number, y: number, width: number = 320, height: number = 400) {
+    if (typeof window === 'undefined') return { x, y }
+
+    const margin = 20
+    const maxX = window.innerWidth - width - margin
+    const maxY = window.innerHeight - height - margin
+    const minX = margin
+    const minY = margin // Allow top placement for now, maybe check header?
+
+    return {
+        x: Math.max(minX, Math.min(x, maxX)),
+        y: Math.max(minY, Math.min(y, maxY))
+    }
 }
 
 // MapView Props Interface
@@ -350,7 +367,6 @@ export function MapView({
     const [selectedHexes, setSelectedHexes] = useState<string[]>([])
     const [selectionDetails, setSelectionDetails] = useState<DetailsResponse | null>(null)
     const [hoveredDetails, setHoveredDetails] = useState<DetailsResponse | null>(null)
-    const [hoveredChildLines, setHoveredChildLines] = useState<any[] | undefined>(undefined)
 
     // Derived State
     const [tooltipData, setTooltipData] = useState<{ x: number; y: number; globalX: number; globalY: number; properties: FeatureProperties } | null>(null)
@@ -358,8 +374,17 @@ export function MapView({
     const [selectedHexGeoCenter, setSelectedHexGeoCenter] = useState<{ lat: number; lng: number } | null>(null)
     const [comparisonHex, setComparisonHex] = useState<string | null>(null)
     const [comparisonDetails, setComparisonDetails] = useState<DetailsResponse | null>(null)
+    const [primaryDetails, setPrimaryDetails] = useState<DetailsResponse | null>(null) // Line 1: Anchor
     const [isTooltipDragging, setIsTooltipDragging] = useState(false)
     const [showDragHint, setShowDragHint] = useState(false)
+
+    // Client-side cache for details to prevent lag
+    const detailsCache = useRef<Map<string, DetailsResponse>>(new Map())
+    // Shift preview state - show which hexes would be selected on Shift+click
+    const [isShiftHeld, setIsShiftHeld] = useState(false)
+    const [shiftPreviewHexes, setShiftPreviewHexes] = useState<string[]>([])
+    const [shiftPreviewDetails, setShiftPreviewDetails] = useState<DetailsResponse | null>(null)
+    const [mobileSelectionMode, setMobileSelectionMode] = useState<'replace' | 'add' | 'range'>('replace')
     const selectedHex = selectedHexes.length > 0 ? selectedHexes[selectedHexes.length - 1] : null
     const selectedHexRef = useRef<string | null>(null)
 
@@ -385,40 +410,45 @@ export function MapView({
 
     // Fetch Logic
     useEffect(() => {
-        // Cancel previous if needed?
-
         const targets = selectedHexes.length > 0 ? selectedHexes : (hoveredHex ? [hoveredHex] : [])
 
         if (targets.length === 0) {
             setHoveredDetails(null)
             setSelectionDetails(null)
-            setHoveredChildLines(undefined)
+            setPrimaryDetails(null)
             return
+        }
+
+        // Helper to fetch with cache
+        const fetchWithCache = async (id: string, y: number) => {
+            const key = `${id}-${y}`
+            if (detailsCache.current.has(key)) return detailsCache.current.get(key)!
+
+            const data = await getH3CellDetails(id, y)
+            if (data) detailsCache.current.set(key, data)
+            return data
         }
 
         const timer = setTimeout(() => {
             setIsLoadingDetails(true)
-            Promise.all(targets.map(id =>
-                Promise.all([
-                    getH3CellDetails(id, year),
-                    getH3ChildTimelines(id)
-                ])
-            ))
-                .then(results => {
-                    const details = results.map(r => r[0])
-                    const lines = results.map(r => r[1])
+
+            Promise.all(targets.map(id => fetchWithCache(id, year)))
+                .then(details => {
+                    const validDetails = details.filter((d): d is DetailsResponse => d !== null)
 
                     if (selectedHexes.length > 0) {
-                        // Aggregate Selection
-                        setSelectionDetails(aggregateDetails(details))
-                        // Lines? Only show for single selection or none?
-                        // If single, show lines. If multi, maybe too messy?
-                        // For now, only show lines if 1 selected
-                        // But we don't have a state for "selectionChildLines".
-                    } else {
-                        // Hover
-                        setHoveredDetails(details[0])
-                        setHoveredChildLines(lines[0])
+                        if (validDetails.length > 0) {
+                            // Aggregate Selection (Line 2: Orange)
+                            setSelectionDetails(aggregateDetails(validDetails))
+
+                            // Fetch Primary (Line 1: Teal) - Always the first selected hex
+                            const primaryId = selectedHexes[0]
+                            fetchWithCache(primaryId, year).then(d => d && setPrimaryDetails(d))
+                        }
+                    } else if (validDetails.length > 0) {
+                        // Hover (Line 1: Teal - acts as primary when no selection)
+                        setHoveredDetails(validDetails[0])
+                        setPrimaryDetails(validDetails[0]) // Show hover as primary
                     }
                 })
                 .catch(e => console.error(e))
@@ -426,6 +456,8 @@ export function MapView({
         }, 150)
         return () => clearTimeout(timer)
     }, [selectedHexes, hoveredHex, year])
+
+
 
 
 
@@ -446,7 +478,6 @@ export function MapView({
         if (selectedHex && selectedHexResolution !== null && h3Resolution !== selectedHexResolution) {
             setSelectedHexes([]) // Changed from setSelectedHex(null)
             setFixedTooltipPos(null)
-            setSelectedHexData(null)
             setSelectedHexGeoCenter(null)
             setComparisonHex(null)
             setComparisonDetails(null)
@@ -454,29 +485,131 @@ export function MapView({
     }, [h3Resolution, selectedHex, selectedHexResolution])
 
 
+    // --- COMPARISON & PREVIEW LOGIC ---
 
-    // Fetch comparison hex details when hovering a different hex while selected
+    // 1. Comparison Hex: The "Established" comparison (Blue line)
+    // Updates when hovering a new hex, UNLESS Shift is held (Freeze behavior)
     useEffect(() => {
-        if (!comparisonHex || !selectedHex) {
-            setComparisonDetails(null)
+        if (selectedHexes.length === 0) {
+            setComparisonHex(null)
             return
         }
 
+        // If Shift is held (or Mobile Range Mode), DO NOT update comparison (Freeze)
+        // Unless we have NO comparison yet, then take the current hover
+        const isFreezeMode = isShiftHeld || (isMobile && mobileSelectionMode === 'range')
+
+        if (isFreezeMode && comparisonHex) return
+
+        if (hoveredHex && !selectedHexes.includes(hoveredHex)) {
+            setComparisonHex(hoveredHex)
+        } else if (!isFreezeMode) {
+            // Only clear if not frozen
+            // If we leave the hex, we might want to keep the last one?
+            // User behavior: "hovering over already selected" -> Comparison should probably clear?
+            // Current logic: clear if hovering selected or nothing
+            setComparisonHex(null)
+        }
+    }, [hoveredHex, selectedHexes, isShiftHeld, isMobile, mobileSelectionMode])
+
+    // 2. Fetch Comparison Details
+    useEffect(() => {
+        if (!comparisonHex) {
+            setComparisonDetails(null)
+            return
+        }
         const timer = setTimeout(() => {
             getH3CellDetails(comparisonHex, year)
                 .then(details => setComparisonDetails(details))
                 .catch(err => console.error("Failed to load comparison details", err))
         }, 150)
-
         return () => clearTimeout(timer)
-    }, [comparisonHex, selectedHex, year])
+    }, [comparisonHex, year])
+
+
+    // 3. Hover Details: Always fetch the details of what we are currently hovering (for Preview calculation)
+    // This is distinct from 'hoveredDetails' state which drives the Main tooltip when no selection.
+    // We need a subtle distinct state or reuse hoveredDetails?
+    // 'hoveredDetails' is set in the main fetch effect above (lines 390-417). 
+    // BUT! That effect only only runs if `targets` changes. 
+    // If selectedHexes > 0, `targets` = selectedHexes. It IGNORES hoveredHex!
+    // So `hoveredDetails` is NOT updated when we have a selection.
+    // We need a separate fetch for the ephemeral hover target during selection.
+
+    const [ephemeralHoverDetails, setEphemeralHoverDetails] = useState<DetailsResponse | null>(null)
+
+    useEffect(() => {
+        if (!hoveredHex || selectedHexes.length === 0) {
+            setEphemeralHoverDetails(null)
+            return
+        }
+
+        // Optimize: If hoveredHex == comparisonHex, we already have it in comparisonDetails
+        if (hoveredHex === comparisonHex && comparisonDetails) {
+            setEphemeralHoverDetails(comparisonDetails)
+            return
+        }
+
+        const timer = setTimeout(() => {
+            getH3CellDetails(hoveredHex, year)
+                .then(d => setEphemeralHoverDetails(d))
+        }, 150)
+        return () => clearTimeout(timer)
+    }, [hoveredHex, selectedHexes.length, comparisonHex, comparisonDetails, year])
+
+
+    // 4. Compute Preview (Green/Purple line)
+    const previewDetails = useMemo(() => {
+        // Only show preview if Shift is held (Preview Mode) OR if we are hovering a selected hex (Removal Preview)
+        // Logic:
+        // A. Shift Held (Add/Range Mode):
+        //    Preview = Selection + EphemeralHover (Approximation of range add)
+        //    Ideally: Selection + ShiftPreviewHexes.
+        //    Perf compromise: Selection + EphemeralHover.
+
+        // B. Hovering Selected (Removal Mode):
+        //    Preview = Selection - EphemeralHover
+
+        if (!selectionDetails) return null
+        if (!ephemeralHoverDetails && !comparisonDetails) return null
+
+        // Use the details of what we are interacting with (Ephemeral / Hover)
+        // If we are frozen (Shift), we use Ephemeral. If we are just hovering, Ephemeral should match Comparison.
+        const interactionDetails = ephemeralHoverDetails
+
+        if (!interactionDetails) return null
+
+        if (selectedHexes.includes(interactionDetails.h3_id)) {
+            // REMOVAL PREVIEW: "What if I remove this hex?"
+            // Aggregate = Selection - Interaction
+            // Note: aggregateDetails might not support subtraction easily if it just averages.
+            // If it averages properties, removing one from the set changes the average.
+            // We can't "subtract" from the aggregate result. We need the raw list to re-aggregate.
+            // Limitation: We don't have the raw list of all selected details here.
+            // Fallback: Just show the interaction hex itself as "This is what you are removing"?
+            // Or null? User request: "preview what you would remove".
+            // Since we can't easily re-aggregate (we don't keep all N details in memory), maybe we skip Removal Preview for now?
+            // OR: We interpret "preview what you would remove" as "Show me the line for the thing being removed".
+            // Let's return the interactionDetails as the preview (to show "This is the outlier you are removing").
+            return interactionDetails
+        } else if (isShiftHeld || (isMobile && mobileSelectionMode === 'range')) {
+            // ADD PREVIEW: Selection + Interaction
+            try {
+                return aggregateDetails([selectionDetails, interactionDetails])
+            } catch { return null }
+        }
+
+        return null
+    }, [selectionDetails, ephemeralHoverDetails, selectedHexes, isShiftHeld, isMobile, mobileSelectionMode])
 
     // Tooltip drag handling (window-level events for smooth dragging)
     useEffect(() => {
         if (!isTooltipDragging) return
 
         const handleMouseMove = (e: MouseEvent) => {
-            setFixedTooltipPos({ globalX: e.clientX, globalY: e.clientY })
+            // Apply clamping
+            const docked = clampTooltipPos(e.clientX, e.clientY)
+            setFixedTooltipPos({ globalX: docked.x, globalY: docked.y })
         }
 
         const handleMouseUp = () => {
@@ -492,6 +625,25 @@ export function MapView({
         }
     }, [isTooltipDragging])
 
+    // Track Shift key state for selection preview
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Shift') setIsShiftHeld(true)
+        }
+        const handleKeyUp = (e: KeyboardEvent) => {
+            if (e.key === 'Shift') {
+                setIsShiftHeld(false)
+                setShiftPreviewHexes([])
+                setShiftPreviewDetails(null)
+            }
+        }
+        window.addEventListener('keydown', handleKeyDown)
+        window.addEventListener('keyup', handleKeyUp)
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown)
+            window.removeEventListener('keyup', handleKeyUp)
+        }
+    }, [])
 
     const basemapZoom = useMemo(() => getContinuousBasemapZoom(transform.scale), [transform.scale])
 
@@ -512,14 +664,29 @@ export function MapView({
     const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
     const abortControllerRef = useRef<AbortController | null>(null)
 
+    // Track last values to determine debounce strategy
+    const lastYearRef = useRef<number>(year)
+    const lastTransformRef = useRef(transform)
+
     useEffect(() => {
         // Clear any pending fetch
         if (fetchTimeoutRef.current) {
             clearTimeout(fetchTimeoutRef.current)
         }
 
-        // Debounce: wait 500ms after user stops moving before fetching
-        // This prevents intermediate viewport states from triggering loads
+        // SMART DEBOUNCE:
+        // If year changed but viewport is stable -> Instant (0ms)
+        // If viewport changed -> Debounce (200ms)
+        const isYearChangeOnly = year !== lastYearRef.current &&
+            transform.x === lastTransformRef.current.x &&
+            transform.y === lastTransformRef.current.y &&
+            transform.scale === lastTransformRef.current.scale
+
+        const delay = isYearChangeOnly ? 0 : 200
+
+        lastYearRef.current = year
+        lastTransformRef.current = transform
+
         fetchTimeoutRef.current = setTimeout(() => {
             const currentH3Res = getH3ResolutionFromScale(transform.scale, filters.layerOverride)
 
@@ -546,16 +713,6 @@ export function MapView({
                 return
             }
 
-            // CACHE MISS: Need to fetch new data
-            // Clear old data ONLY when resolution changes to avoid hex-within-hex
-            if (currentH3Res !== lastResolutionRef.current) {
-                console.log(`[RES] Resolution changed: ${lastResolutionRef.current} ΓåÆ ${currentH3Res}, clearing old data`)
-                setRealHexData([])
-                lastResolutionRef.current = currentH3Res
-            }
-
-            console.log(`[CACHE] MISS - fetching new data for res ${currentH3Res}`)
-
             // Cancel any in-flight request
             if (abortControllerRef.current) {
                 abortControllerRef.current.abort()
@@ -563,6 +720,9 @@ export function MapView({
             abortControllerRef.current = new AbortController()
 
             setIsLoadingData(true)
+
+            // OPTIMIZATION: Do NOT clear old data until new data arrives to prevent flashing.
+            // setRealHexData([]) <--- Removed
 
             getH3DataV2(currentH3Res, year, bounds)
                 .then((data) => {
@@ -584,28 +744,31 @@ export function MapView({
                     setRealHexData(validData)
                     setIsLoadingData(false)
 
-                    // BACKGROUND PREFETCH: DISABLE TO PREVENT DB OVERLOAD
-                    // The aggressive prefetching of 14 years (28+ SQL queries) was causing timeouts
-                    // and connection limits, leading to flickering/missing hexes.
-                    /* 
-                    const allYears = [2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026, 2027, 2028, 2029, 2030, 2031, 2032]
-                    const otherYears = allYears.filter(y => y !== year)
-
-                    otherYears.forEach(otherYear => {
-                        const otherCacheKey = `${currentH3Res}-${otherYear}-${bounds.minLat.toFixed(2)}-${bounds.maxLat.toFixed(2)}-${bounds.minLng.toFixed(2)}-${bounds.maxLng.toFixed(2)}`
-                        if (!h3DataCache.current.has(otherCacheKey)) {
-                            getH3DataForResolution(currentH3Res, otherYear, bounds)
-                                .then(otherData => {
-                                    const otherValid = otherData.filter(h =>
-                                        !isNaN(h.reliability) && !isNaN(h.opportunity) && h.h3_id
-                                    )
-                                    h3DataCache.current.set(otherCacheKey, otherValid)
-                                    console.log(`[PREFETCH] Cached year ${otherYear}: ${otherValid.length} rows`)
-                                })
-                                .catch(() => { }) 
+                    // BATCH PREFETCHING (Aggressive: ALL Future Years)
+                    // Fetch ALL remaining years in a single batch to make timelapse instant
+                    // Browser memory is plentiful (5MB total for all years), so we cache everything.
+                    const yearsToFetch: number[] = []
+                    // Iterate from next year up to 2032
+                    for (let targetYear = year + 1; targetYear <= 2032; targetYear++) {
+                        const targetKey = `v${CACHE_VERSION}-${currentH3Res}-${targetYear}-${bounds.minLat.toFixed(2)}-${bounds.maxLat.toFixed(2)}-${bounds.minLng.toFixed(2)}-${bounds.maxLng.toFixed(2)}`
+                        if (!h3DataCache.current.has(targetKey)) {
+                            yearsToFetch.push(targetYear)
                         }
-                    })
-                    */
+                    }
+
+                    if (yearsToFetch.length > 0) {
+                        getH3DataBatch(currentH3Res, yearsToFetch, bounds)
+                            .then(batchResults => {
+                                Object.entries(batchResults).forEach(([yStr, resultData]) => {
+                                    const y = parseInt(yStr)
+                                    const key = `v${CACHE_VERSION}-${currentH3Res}-${y}-${bounds.minLat.toFixed(2)}-${bounds.maxLat.toFixed(2)}-${bounds.minLng.toFixed(2)}-${bounds.maxLng.toFixed(2)}`
+                                    h3DataCache.current.set(key, resultData)
+                                    console.log(`[BATCH-PREFETCH] Cached year ${y}: ${resultData.length} rows`)
+                                })
+                            })
+                            .catch(err => console.error("[BATCH-PREFETCH] Failed", err))
+                    }
+
                 })
                 .catch((err) => {
                     if (err.name !== 'AbortError') {
@@ -615,7 +778,7 @@ export function MapView({
                     }
                     setIsLoadingData(false)
                 })
-        }, 500) // 500ms debounce - wait for user to stop moving
+        }, delay)
 
         return () => {
             if (fetchTimeoutRef.current) {
@@ -630,7 +793,7 @@ export function MapView({
         const ZOOM_THRESHOLD = 14.5
 
         if (mapState.zoom < ZOOM_THRESHOLD) {
-            setParcels([])
+            if (parcels.length > 0) setParcels([])
             return
         }
 
@@ -736,7 +899,17 @@ export function MapView({
                 })
 
             setFilteredHexes(hexagons)
-            setH3Resolution(currentH3Res)
+            setFilteredHexes(hexagons)
+            // setH3Resolution(currentH3Res) // This might be redundant or causing loops if it updates mapState -> transform -> effect
+            // If we need to sync resolution, do it only if changed?
+            // Actually, setH3Resolution is likely updating a ref or state that triggers this?
+            // checking usage: const [h3Resolution, setH3Resolution] = useState(6)
+            // It is NOT in dependency array of this effect.
+            // But if it causes a re-render, does it change `transform`? No.
+            // However, let's play safe.
+            if (h3Resolution !== currentH3Res) {
+                setH3Resolution(currentH3Res)
+            }
         })
 
         return () => {
@@ -994,15 +1167,19 @@ export function MapView({
             }
         }
 
-        // Draw Highlights (Yellow for Selection)
+        // Draw Highlights for Multi-Select
         ctx.lineJoin = 'round'
+        ctx.setLineDash([]) // Solid line
 
         if (selectedHexes.length > 0) {
-            ctx.strokeStyle = '#14b8a6' // Teal (Matches Fan Chart Primary)
-            ctx.lineWidth = 3
-            ctx.setLineDash([]) // Solid line (No dash)
+            // Draw non-primary hexes first (amber), then primary last (teal on top)
+            const primaryHex = selectedHexes[0]
+            const nonPrimaryHexes = selectedHexes.slice(1)
 
-            selectedHexes.forEach(h => {
+            // Draw non-primary first (amber)
+            ctx.strokeStyle = '#f59e0b' // Amber
+            ctx.lineWidth = 2.5
+            nonPrimaryHexes.forEach(h => {
                 const vertices = getH3CellCanvasVertices(h, canvasSize.width, canvasSize.height, transform, basemapCenter)
                 ctx.beginPath()
                 vertices.forEach((v, i) => {
@@ -1012,11 +1189,45 @@ export function MapView({
                 ctx.closePath()
                 ctx.stroke()
             })
+
+            // Draw primary LAST (teal on top)
+            ctx.strokeStyle = '#14b8a6' // Teal
+            ctx.lineWidth = 3
+            const vertices = getH3CellCanvasVertices(primaryHex, canvasSize.width, canvasSize.height, transform, basemapCenter)
+            ctx.beginPath()
+            vertices.forEach((v, i) => {
+                if (i === 0) ctx.moveTo(v[0], v[1])
+                else ctx.lineTo(v[0], v[1])
+            })
+            ctx.closePath()
+            ctx.stroke()
+            ctx.stroke()
         }
 
+        // Draw Shift Preview Hexes (Dashed Amber)
+        if (shiftPreviewHexes.length > 0) {
+            ctx.strokeStyle = '#f59e0b'
+            ctx.lineWidth = 2
+            ctx.setLineDash([5, 5])
+            shiftPreviewHexes.forEach(h => {
+                // Don't draw over existing selection if we are adding (approx)
+                // Actually, if we are subtracting, we might want to draw over? 
+                // For now, just draw all preview hexes to show extent.
+                if (selectedHexes.includes(h) && selectedHexes.length > 0 && selectedHexes[0] === h) return // Don't cover primary
 
+                const vertices = getH3CellCanvasVertices(h, canvasSize.width, canvasSize.height, transform, basemapCenter)
+                ctx.beginPath()
+                vertices.forEach((v, i) => {
+                    if (i === 0) ctx.moveTo(v[0], v[1])
+                    else ctx.lineTo(v[0], v[1])
+                })
+                ctx.closePath()
+                ctx.stroke()
+            })
+            ctx.setLineDash([])
+        }
 
-    }, [filteredHexes, hoveredHex, selectedHex, fixedTooltipPos, isMobile, transform, selectedHexGeoCenter, canvasSize, basemapCenter])
+    }, [filteredHexes, hoveredHex, selectedHex, fixedTooltipPos, isMobile, transform, selectedHexGeoCenter, canvasSize, basemapCenter, shiftPreviewHexes, selectedHexes])
 
 
     // Helper: Canvas X/Y -> Lat/Lng for O(1) Lookup
@@ -1025,7 +1236,7 @@ export function MapView({
 
         // Inverse of geoToCanvas logic
         // canvasX = (pointPixelX - centerPixelX) * tileScale + canvasWidth/2
-        // pointPixelX = (canvasX - canvasWidth/2)/tileScale + centerPixelX
+        // pointPixelX = (canvasX - canvasWidth/2)/tileScale + centerWorldPixelX
 
         const centerMerc = latLngToMercator(basemapCenter.lng, basemapCenter.lat)
         const centerPixelX = centerMerc.x * worldSize - transform.offsetX
@@ -1121,6 +1332,9 @@ export function MapView({
             const dx = e.clientX - dragStart.x
             const dy = e.clientY - dragStart.y
 
+            // Only update if there's actual movement to prevent infinite re-renders
+            if (dx === 0 && dy === 0) return
+
             // Mark as dragged if moved more than 5 pixels
             if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
                 hasDraggedRef.current = true
@@ -1139,32 +1353,66 @@ export function MapView({
 
             // Check if this cell is in our data
             if (hexPropertyMap.current.has(cellId)) {
-                // If we have a selection, track this as comparison hex
-                if (selectedHex && cellId !== selectedHex) {
-                    if (comparisonHex !== cellId) {
-                        setComparisonHex(cellId)
-                        setHoveredHex(cellId) // For highlight
-                    }
-                } else if (!selectedHex) {
-                    // No selection - normal hover behavior
-                    if (hoveredHex !== cellId) {
-                        setHoveredHex(cellId)
-                        const props = hexPropertyMap.current.get(cellId)!
-                        setTooltipData({ x: canvasX, y: canvasY, globalX: e.clientX, globalY: e.clientY, properties: props })
-                        onFeatureHover(cellId)
+                // Always track hoveredHex for click detection
+                if (hoveredHex !== cellId) {
+                    setHoveredHex(cellId)
+                }
+
+                // Track comparison hex when we have any selection (single or multi)
+                if (selectedHexes.length > 0) {
+                    // Only show comparison for hexes NOT in selection
+                    if (!selectedHexes.includes(cellId)) {
+                        // Hovering a non-selected hex -> show comparison
+                        if (comparisonHex !== cellId) {
+                            setComparisonHex(cellId)
+                        }
+
+                        // Shift Preview Logic
+                        if ((e.shiftKey || (isMobile && mobileSelectionMode === 'range')) && selectedHexes.length > 0) {
+                            const anchorHex = selectedHexes[selectedHexes.length - 1]
+                            const [lat1, lng1] = cellToLatLng(anchorHex)
+                            const [lat2, lng2] = cellToLatLng(cellId)
+
+                            const minLat = Math.min(lat1, lat2)
+                            const maxLat = Math.max(lat1, lat2)
+                            const minLng = Math.min(lng1, lng2)
+                            const maxLng = Math.max(lng1, lng2)
+
+                            const hexesInRange = filteredHexes
+                                .filter(hex => {
+                                    const [hLat, hLng] = cellToLatLng(hex.id)
+                                    return hLat >= minLat && hLat <= maxLat && hLng >= minLng && hLng <= maxLng
+                                })
+                                .map(hex => hex.id)
+
+                            // Only update if different (avoid loops)
+                            if (hexesInRange.length !== shiftPreviewHexes.length || !hexesInRange.every((h, i) => h === shiftPreviewHexes[i])) {
+                                setShiftPreviewHexes(hexesInRange)
+                            }
+                        } else {
+                            if (shiftPreviewHexes.length > 0) setShiftPreviewHexes([])
+                        }
                     } else {
-                        // Update tooltip pos even if hex didn't change
-                        setTooltipData(prev => prev ? { ...prev, x: canvasX, y: canvasY, globalX: e.clientX, globalY: e.clientY } : null)
+                        // Hovering a selected hex -> clear comparison
+                        if (comparisonHex) {
+                            setComparisonHex(null)
+                        }
                     }
+                } else {
+                    // No selection - normal hover behavior with tooltip
+                    const props = hexPropertyMap.current.get(cellId)!
+                    setTooltipData({ x: canvasX, y: canvasY, globalX: e.clientX, globalY: e.clientY, properties: props })
+                    onFeatureHover(cellId)
                 }
             } else {
-                if (hoveredHex && !selectedHex) {
+                if (hoveredHex) {
                     setHoveredHex(null)
+                }
+                if (selectedHexes.length === 0) {
                     setTooltipData(null)
                     onFeatureHover(null)
                 } else if (comparisonHex) {
                     setComparisonHex(null)
-                    setHoveredHex(null)
                 }
             }
         }
@@ -1174,17 +1422,57 @@ export function MapView({
         if (hasDraggedRef.current) return
 
         if (hoveredHex) {
-            const isMulti = e.ctrlKey || e.shiftKey || e.metaKey
+            const isShift = e.shiftKey || (isMobile && mobileSelectionMode === 'range')
+            const isMulti = e.ctrlKey || e.metaKey || (isMobile && mobileSelectionMode === 'add')
+
             let newSet: string[]
 
-            if (isMulti) {
+            if (isShift && selectedHexes.length > 0) {
+                // SHIFT-CLICK: Range selection (bounding box between most recent selection and click)
+                const anchorHex = selectedHexes[selectedHexes.length - 1] // Most recently clicked
+                const [lat1, lng1] = cellToLatLng(anchorHex)
+                const [lat2, lng2] = cellToLatLng(hoveredHex)
+
+                // Calculate bounding box
+                const minLat = Math.min(lat1, lat2)
+                const maxLat = Math.max(lat1, lat2)
+                const minLng = Math.min(lng1, lng2)
+                const maxLng = Math.max(lng1, lng2)
+
+                // Find all visible hexes within bounding box
+                const hexesInRange = filteredHexes
+                    .filter(hex => {
+                        const [hLat, hLng] = cellToLatLng(hex.id)
+                        return hLat >= minLat && hLat <= maxLat && hLng >= minLng && hLng <= maxLng
+                    })
+                    .map(hex => hex.id)
+
+                // If clicked hex is already selected -> SUBTRACT range
+                // Otherwise -> EXPAND (add range to existing selection)
+                const primaryHex = selectedHexes[0] // Always protect primary
+                if (selectedHexes.includes(hoveredHex)) {
+                    // Subtract: remove all hexes in range from selection EXCEPT primary
+                    const toRemove = new Set(hexesInRange)
+                    toRemove.delete(primaryHex) // Never remove primary
+                    newSet = selectedHexes.filter(h => !toRemove.has(h))
+                } else {
+                    // Expand: add all hexes in range to existing selection
+                    // Ensure primary stays first
+                    const uniqueHexes = new Set([...selectedHexes, ...hexesInRange])
+                    newSet = [primaryHex, ...Array.from(uniqueHexes).filter(h => h !== primaryHex)]
+                }
+            } else if (isMulti) {
+                // CTRL/CMD-CLICK: Toggle individual hex
                 if (selectedHexes.includes(hoveredHex)) {
                     newSet = selectedHexes.filter(h => h !== hoveredHex)
                 } else {
                     newSet = [...selectedHexes, hoveredHex]
                 }
             } else {
+                // Simple click: Replace selection and clear any comparison
                 newSet = [hoveredHex]
+                setComparisonHex(null)
+                setComparisonDetails(null)
             }
 
             setSelectedHexes(newSet)
@@ -1198,27 +1486,11 @@ export function MapView({
                 setSelectedHexGeoCenter({ lat, lng })
 
                 // If single click (replace), update tooltip pos
-                if (!isMulti && tooltipData) {
-                    setFixedTooltipPos({ globalX: tooltipData.globalX, globalY: tooltipData.globalY })
-                }
-                if (newSet.length === 1 && !fixedTooltipPos && tooltipData) {
-                    // First select
-                    setFixedTooltipPos({ globalX: tooltipData.globalX, globalY: tooltipData.globalY })
-                }
-            } else {
-                // Cleared
-                setFixedTooltipPos(null)
-                setSelectedHexGeoCenter(null)
-                onFeatureSelect(null)
+                // Use click coordinates directly for instant locking
+                // This prevents jumping if tooltipData is stale or null
+                const clamped = clampTooltipPos(e.clientX, e.clientY)
+                setFixedTooltipPos({ globalX: clamped.x, globalY: clamped.y })
             }
-
-            // Show drag hint
-            if (newSet.length > 0 && typeof window !== 'undefined' && !localStorage.getItem('tooltipDragHintShown')) {
-                setShowDragHint(true)
-                localStorage.setItem('tooltipDragHintShown', 'true')
-                setTimeout(() => setShowDragHint(false), 2000)
-            }
-
         } else {
             // Clicked background -> Clear
             setSelectedHexes([])
@@ -1403,11 +1675,10 @@ export function MapView({
 
     const handleReset = () => {
         setTransform({ offsetX: 0, offsetY: 0, scale: 3000 }) // Match initial zoomed out view
-        setSelectedHex(null)
+        setSelectedHexes([])
         setHoveredHex(null)
         setTooltipData(null)
         setFixedTooltipPos(null)
-        setSelectedHexData(null)
         setSelectedHexGeoCenter(null)
         setComparisonHex(null)
         setComparisonDetails(null)
@@ -1417,9 +1688,8 @@ export function MapView({
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'Escape' && selectedHex) {
-                setSelectedHex(null)
+                setSelectedHexes([])
                 setFixedTooltipPos(null)
-                setSelectedHexData(null)
                 setSelectedHexGeoCenter(null)
                 setComparisonHex(null)
                 setComparisonDetails(null)
@@ -1506,13 +1776,17 @@ export function MapView({
             {/* Compute display data: locked mode uses selectedHexData, otherwise dynamic */}
             {(() => {
                 const lockedMode = selectedHexes.length > 0
-                const displayProps = lockedMode ? displayProperties : tooltipData?.properties
+                // We need to look up properties for the selected hex if we are in locked mode
+                // This might have been missing or relied on tooltipData?
+                const selectedProps = selectedHex ? hexPropertyMap.current.get(selectedHex) : null
+
+                const displayProps = lockedMode ? selectedProps : tooltipData?.properties
                 const displayDetails = lockedMode ? selectionDetails : hoveredDetails
-                // Lines: unused in aggregation for now
-                const displayChildLines = hoveredChildLines
                 const displayPos = lockedMode && fixedTooltipPos ? fixedTooltipPos : tooltipData
 
-                if (!mounted || !tooltipData || !displayProps) return null
+                // FIX: Check displayPos instead of tooltipData. 
+                // In locked mode, tooltipData is null (if not hovering), but displayPos is set.
+                if (!mounted || !displayPos || !displayProps) return null
 
                 return createPortal(
                     <div
@@ -1616,9 +1890,8 @@ export function MapView({
                                                         currentYear={year}
                                                         height={130}
                                                         historicalValues={displayDetails.historicalValues}
-                                                        childLines={displayChildLines}
-                                                        comparisonData={comparisonDetails?.fanChart}
-                                                        comparisonHistoricalValues={comparisonDetails?.historicalValues}
+                                                        comparisonData={selectedHexes.length > 1 ? previewDetails?.fanChart : comparisonDetails?.fanChart}
+                                                        comparisonHistoricalValues={selectedHexes.length > 1 ? previewDetails?.historicalValues : comparisonDetails?.historicalValues}
                                                         onYearChange={onYearChange}
                                                     />
                                                 </div>
@@ -1658,21 +1931,29 @@ export function MapView({
                                             </div>
                                         </div>
 
-                                        {displayDetails?.fanChart ? (
+                                        {displayDetails?.fanChart || primaryDetails ? (
                                             <div className="space-y-2">
                                                 <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold flex justify-between">
                                                     <span>Value Timeline</span>
                                                     <span className="text-primary/70">{year}</span>
                                                 </div>
-                                                <div className="h-32 -mx-2">
+                                                <div className="h-44 -mx-2 mb-2">
                                                     <FanChart
-                                                        data={displayDetails.fanChart}
+                                                        // Line 1: Primary (Anchor) - always first hex's data
+                                                        // Fallback to displayDetails (hovered) if no primary (i.e. no selection)
+                                                        data={primaryDetails?.fanChart || displayDetails?.fanChart}
                                                         currentYear={year}
-                                                        height={120}
-                                                        historicalValues={displayDetails.historicalValues}
-                                                        childLines={displayChildLines}
-                                                        comparisonData={comparisonDetails?.fanChart}
-                                                        comparisonHistoricalValues={comparisonDetails?.historicalValues}
+                                                        height={160}
+                                                        historicalValues={primaryDetails?.historicalValues || displayDetails?.historicalValues}
+
+                                                        // Line 2: Selection Aggregate (Orange)
+                                                        comparisonData={selectedHexes.length > 1 ? selectionDetails?.fanChart : null}
+                                                        comparisonHistoricalValues={selectedHexes.length > 1 ? selectionDetails?.historicalValues : null}
+
+                                                        // Line 3: Preview (Fuchsia) - Aggregate of Selection + Candidate
+                                                        previewData={previewDetails?.fanChart}
+                                                        previewHistoricalValues={previewDetails?.historicalValues}
+
                                                         onYearChange={onYearChange}
                                                     />
                                                 </div>
@@ -1685,30 +1966,69 @@ export function MapView({
                                             )
                                         )}
 
-                                        <div className="pt-3 border-t border-border/50 grid grid-cols-2 gap-4">
+                                        <div className="pt-2 mt-1 border-t border-border/50 grid grid-cols-2 gap-4 text-center">
                                             <div>
-                                                <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">Properties</div>
-                                                <div className="text-sm font-medium text-foreground">{displayProps.n_accts}</div>
+                                                <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold">Properties</div>
+                                                <div className="text-xs font-medium text-foreground">{displayProps.n_accts}</div>
                                             </div>
                                             <div>
-                                                <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">Confidence</div>
-                                                <div className="text-sm font-medium text-foreground">{formatReliability(displayProps.R)}</div>
+                                                <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold">Confidence</div>
+                                                <div className="text-xs font-medium text-foreground">{formatReliability(displayProps.R)}</div>
                                             </div>
                                         </div>
                                     </div>
-                                )}
+                                )
+                                }
                             </div>
                         ) : (
                             <div className="p-3">
                                 <div className="font-medium text-muted-foreground text-xs">No Residential Properties</div>
                             </div>
-                        )}
-                    </div>,
+                        )
+                        }
+                    </div >,
                     document.body
                 )
             })()}
 
-            <div className="absolute top-[104px] right-4 md:top-auto md:bottom-4 flex flex-row md:flex-col gap-2 z-30">
+            <div className="absolute top-[120px] right-4 md:top-auto md:bottom-4 flex flex-row md:flex-col gap-2 z-30">
+                {/* Mobile Selection Mode Toggles */}
+                {isMobile && (
+                    <>
+                        <button
+                            onClick={() => setMobileSelectionMode('replace')}
+                            className={cn(
+                                "w-10 h-10 rounded-lg flex items-center justify-center transition-colors shadow-lg font-bold text-xs",
+                                mobileSelectionMode === 'replace' ? "bg-primary text-primary-foreground" : "glass-panel text-foreground"
+                            )}
+                            title="Single Select"
+                        >
+                            1
+                        </button>
+                        <button
+                            onClick={() => setMobileSelectionMode('add')}
+                            className={cn(
+                                "w-10 h-10 rounded-lg flex items-center justify-center transition-colors shadow-lg font-bold text-xs",
+                                mobileSelectionMode === 'add' ? "bg-primary text-primary-foreground" : "glass-panel text-foreground"
+                            )}
+                            title="Multi Select (Add)"
+                        >
+                            +
+                        </button>
+                        <button
+                            onClick={() => setMobileSelectionMode('range')}
+                            className={cn(
+                                "w-10 h-10 rounded-lg flex items-center justify-center transition-colors shadow-lg font-bold text-xs",
+                                mobileSelectionMode === 'range' ? "bg-primary text-primary-foreground" : "glass-panel text-foreground"
+                            )}
+                            title="Range Select"
+                        >
+                            ↔
+                        </button>
+                        <div className="w-2 md:h-2" /> {/* Spacer */}
+                    </>
+                )}
+
                 <button
                     onClick={handleZoomIn}
                     className="w-10 h-10 glass-panel rounded-lg flex items-center justify-center text-foreground hover:bg-accent transition-colors shadow-lg"

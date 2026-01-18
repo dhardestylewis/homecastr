@@ -12,6 +12,9 @@ interface FanChartProps {
   // Comparison mode: overlay second hex's data
   comparisonData?: FanChartData | null
   comparisonHistoricalValues?: number[] | null
+  // Preview mode: overlay shift-select aggregation
+  previewData?: FanChartData | null
+  previewHistoricalValues?: number[] | null
 }
 
 
@@ -79,6 +82,8 @@ export function FanChart({
   childLines,
   comparisonData,
   comparisonHistoricalValues,
+  previewData,
+  previewHistoricalValues,
   onYearChange
 }: FanChartProps & { onYearChange?: (year: number) => void }) {
   const { p10, p50, p90, y_med } = data
@@ -106,6 +111,14 @@ export function FanChart({
     if (comparisonData?.p10) allValues.push(...comparisonData.p10.filter(v => Number.isFinite(v)))
     if (comparisonData?.p90) allValues.push(...comparisonData.p90.filter(v => Number.isFinite(v)))
     if (comparisonData?.p50) allValues.push(...comparisonData.p50.filter(v => Number.isFinite(v)))
+
+    // Include preview data in Y range
+    if (previewHistoricalValues) {
+      allValues.push(...previewHistoricalValues.filter(v => Number.isFinite(v)))
+    }
+    if (previewData?.p10) allValues.push(...previewData.p10.filter(v => Number.isFinite(v)))
+    if (previewData?.p90) allValues.push(...previewData.p90.filter(v => Number.isFinite(v)))
+    if (previewData?.p50) allValues.push(...previewData.p50.filter(v => Number.isFinite(v)))
 
 
     // Fallback if no data
@@ -256,6 +269,66 @@ export function FanChart({
     let comparisonConnectorPath = ""
     if (comparisonHistPath && comparisonP50Line && comparisonHistoricalValues?.[6] && comparisonData?.p50?.[0]) {
       comparisonConnectorPath = `M ${xScale(2025)} ${yScale(comparisonHistoricalValues[6])} L ${xScale(2026)} ${yScale(comparisonData.p50[0])}`
+    }
+
+    // --- PREVIEW DATA PATHS --- //
+    // Build Preview Historical line
+    let previewHistPath = ""
+    if (previewHistoricalValues && previewHistoricalValues.length > 0) {
+      const histYears = [2019, 2020, 2021, 2022, 2023, 2024, 2025]
+      previewHistPath = histYears
+        .map((year, i) => {
+          if (!Number.isFinite(previewHistoricalValues[i])) return null
+          return `${i === 0 ? "M" : "L"} ${xScale(year)} ${yScale(previewHistoricalValues[i])}`
+        })
+        .filter(Boolean)
+        .join(" ")
+    }
+
+    // Build Preview Forecast fan
+    let previewFanPath = ""
+    let previewP50Line = ""
+
+    if (previewData && previewData.p10 && previewData.p90 && previewData.p50) {
+      const p90Prev = previewData.p90
+      const p10Prev = previewData.p10
+      const p50Prev = previewData.p50
+
+      const p90Path = forecastYears
+        .map((year, i) => {
+          if (!Number.isFinite(p90Prev[i])) return null
+          return `${i === 0 ? "M" : "L"} ${xScale(year)} ${yScale(p90Prev[i])}`
+        })
+        .filter(Boolean)
+        .join(" ")
+
+      const p10PathReverse = [...forecastYears]
+        .reverse()
+        .map((year, i) => {
+          const idx = forecastYears.length - 1 - i
+          if (!Number.isFinite(p10Prev[idx])) return null
+          return `L ${xScale(year)} ${yScale(p10Prev[idx])}`
+        })
+        .filter(Boolean)
+        .join(" ")
+
+      if (p90Path && p10PathReverse) {
+        previewFanPath = `${p90Path} ${p10PathReverse} Z`
+      }
+
+      previewP50Line = forecastYears
+        .map((year, i) => {
+          if (!Number.isFinite(p50Prev[i])) return null
+          return `${i === 0 ? "M" : "L"} ${xScale(year)} ${yScale(p50Prev[i])}`
+        })
+        .filter(Boolean)
+        .join(" ")
+    }
+
+    // Preview connector
+    let previewConnectorPath = ""
+    if (previewHistPath && previewP50Line && previewHistoricalValues?.[6] && previewData?.p50?.[0]) {
+      previewConnectorPath = `M ${xScale(2025)} ${yScale(previewHistoricalValues[6])} L ${xScale(2026)} ${yScale(previewData.p50[0])}`
     }
 
 
@@ -422,28 +495,38 @@ export function FanChart({
         />
 
         {/* Fan area (forecast uncertainty) */}
-        {fanPath && <path d={fanPath} fill="oklch(0.65 0.15 180 / 0.2)" />}
-        {comparisonFanPath && <path d={comparisonFanPath} fill="oklch(0.7 0.15 50 / 0.15)" />}
+        {fanPath && <path d={fanPath} fill="#14b8a6" fillOpacity={0.2} />}
+        {comparisonFanPath && <path d={comparisonFanPath} fill="#f97316" fillOpacity={0.15} />}
 
         {/* Historical line (solid - actual values) */}
         {histPath && (
-          <path d={histPath} fill="none" stroke="oklch(0.6 0.12 190)" strokeWidth={2} />
+          <path d={histPath} fill="none" stroke="#14b8a6" strokeWidth={2} />
         )}
         {comparisonHistPath && (
-          <path d={comparisonHistPath} fill="none" stroke="oklch(0.65 0.15 50)" strokeWidth={2} strokeDasharray="3 3" />
+          <path d={comparisonHistPath} fill="none" stroke="#f97316" strokeWidth={2} strokeDasharray="3 3" />
         )}
 
         {/* Connector from historical to forecast */}
         {connectorPath && (
-          <path d={connectorPath} fill="none" stroke="oklch(0.6 0.1 190)" strokeWidth={1} strokeDasharray="2 2" />
+          <path d={connectorPath} fill="none" stroke="#14b8a6" strokeWidth={1} strokeDasharray="2 2" />
         )}
         {comparisonConnectorPath && (
-          <path d={comparisonConnectorPath} fill="none" stroke="oklch(0.7 0.1 50)" strokeWidth={1} strokeDasharray="2 2" />
+          <path d={comparisonConnectorPath} fill="none" stroke="#f97316" strokeWidth={1} strokeDasharray="2 2" />
         )}
 
         {/* P50 forecast line */}
-        {p50Line && <path d={p50Line} fill="none" stroke="oklch(0.65 0.15 180)" strokeWidth={2} />}
-        {comparisonP50Line && <path d={comparisonP50Line} fill="none" stroke="oklch(0.7 0.15 50)" strokeWidth={2} />}
+        {p50Line && <path d={p50Line} fill="none" stroke="#14b8a6" strokeWidth={2} />}
+        {comparisonP50Line && <path d={comparisonP50Line} fill="none" stroke="#f97316" strokeWidth={2} />}
+
+        {/* Preview Layer (Fuchsia for visibility) */}
+        {previewFanPath && <path d={previewFanPath} fill="#d946ef" fillOpacity={0.15} />}
+        {previewHistPath && (
+          <path d={previewHistPath} fill="none" stroke="#d946ef" strokeWidth={2} strokeDasharray="3 3" />
+        )}
+        {previewConnectorPath && (
+          <path d={previewConnectorPath} fill="none" stroke="#d946ef" strokeWidth={1} strokeDasharray="2 2" />
+        )}
+        {previewP50Line && <path d={previewP50Line} fill="none" stroke="#d946ef" strokeWidth={2} />}
 
         {/* X-axis labels */}
         {labelYears.map((year) => (
@@ -474,28 +557,36 @@ export function FanChart({
         ))}
 
         {/* Legend - Cleaned & Stacked */}
-        <g transform={`translate(${padding.left + 50}, ${height - 15})`} style={{ pointerEvents: 'none' }}>
-          {/* Row 1: Primary Data */}
-          <line x1={0} y1={-8} x2={12} y2={-8} stroke="oklch(0.6 0.12 190)" strokeWidth={2} />
-          <text x={16} y={-5} className="text-[8px] fill-muted-foreground">Actual</text>
+        <g transform={`translate(${padding.left + 50}, ${height + 5})`} style={{ pointerEvents: 'none' }}>
+          {/* Row 1: Primary Data (Teal) */}
+          <line x1={0} y1={-8} x2={12} y2={-8} stroke="#14b8a6" strokeWidth={2} />
+          <text x={16} y={-5} className="text-[8px] fill-muted-foreground">Primary</text>
 
-          <line x1={45} y1={-8} x2={57} y2={-8} stroke="oklch(0.65 0.15 180)" strokeWidth={2} />
+          <line x1={45} y1={-8} x2={57} y2={-8} stroke="#14b8a6" strokeWidth={2} />
           <text x={61} y={-5} className="text-[8px] fill-muted-foreground">Forecast</text>
 
-          <rect x={100} y={-11} width={10} height={6} fill="oklch(0.65 0.15 180 / 0.2)" />
+          <rect x={100} y={-11} width={10} height={6} fill="#14b8a6" fillOpacity={0.2} />
           <text x={114} y={-5} className="text-[8px] fill-muted-foreground">Range</text>
 
-          {/* Row 2: Comparison (Stacked below) */}
+          {/* Row 2: Selection (Orange) */}
           {comparisonData && (
             <>
-              <line x1={0} y1={4} x2={12} y2={4} stroke="oklch(0.65 0.15 50)" strokeWidth={2} strokeDasharray="3 3" />
-              <text x={16} y={7} className="text-[8px] fill-muted-foreground">Comparison</text>
+              <line x1={0} y1={4} x2={12} y2={4} stroke="#f97316" strokeWidth={2} strokeDasharray="3 3" />
+              <text x={16} y={7} className="text-[8px] fill-muted-foreground">Selection</text>
             </>
+          )}
+
+          {/* Row 3: Preview (Fuchsia) */}
+          {previewData && (
+            <g transform="translate(60, 12)">
+              <line x1={0} y1={0} x2={12} y2={0} stroke="#d946ef" strokeWidth={2} strokeDasharray="3 3" />
+              <text x={16} y={3} className="text-[8px] fill-muted-foreground">Preview</text>
+            </g>
           )}
         </g>
       </svg>
     )
-  }, [data, height, currentYear, historicalValues, p10, p50, p90, y_med, childLines, comparisonData, comparisonHistoricalValues, hoveredYear, onYearChange])
+  }, [data, height, currentYear, historicalValues, p10, p50, p90, y_med, childLines, comparisonData, comparisonHistoricalValues, previewData, previewHistoricalValues, hoveredYear, onYearChange])
 
   return <div className="bg-secondary/30 rounded-lg p-2">{svgContent}</div>
 }

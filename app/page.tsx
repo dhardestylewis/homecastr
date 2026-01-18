@@ -160,7 +160,7 @@ function DashboardContent() {
         </div>
 
         <Legend
-          className="absolute top-[104px] left-4 md:top-auto md:bottom-4 z-50"
+          className="absolute top-[120px] left-4 md:top-auto md:bottom-4 z-50"
           colorMode={filters.colorMode}
           onColorModeChange={handleColorModeChange}
         />
