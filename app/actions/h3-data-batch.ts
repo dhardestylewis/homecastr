@@ -89,8 +89,9 @@ export async function getH3DataBatch(
                     .select("h3_id, property_count, opportunity, reliability, sample_accuracy, alert_pct, med_predicted_value, forecast_year")
                     .in("forecast_year", years) // Batch Years
                     .eq("h3_res", res)
-                    .in("h3_id", idChunk)
-                    .limit(10000), // High limit for batch
+                    .in("h3_id", idChunk),
+                // Removed .limit() - Supabase has its own max (1MB response size)
+                // With 13 years × ~2000 cells, we need ~26k rows, 10k limit was dropping years
 
                 supabase
                     .from("h3_precomputed_hex_details")
@@ -98,7 +99,7 @@ export async function getH3DataBatch(
                     .in("forecast_year", years) // Batch Years
                     .eq("h3_res", res)
                     .in("h3_id", idChunk)
-                    .limit(10000)
+                // Removed .limit() - same reasoning as above
             ])
 
             if (rowsResult.data) rows_all.push(...rowsResult.data)
