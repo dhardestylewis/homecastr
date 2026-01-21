@@ -845,9 +845,18 @@ export function MapView({
                 return
             }
 
-            // Cancel any in-flight request
-            if (abortControllerRef.current) {
+            // Smart abort strategy for timelapse:
+            // - If we have a cache MISS for the new year, DON'T abort previous fetch
+            //   (let it complete and populate cache for next timelapse loop)
+            // - Only abort if we have a cache HIT (switching to already-loaded data)
+            // This prevents rapid year changes (timelapse) from cancelling fetches
+            const willUseCacheForNewYear = h3DataCache.current.has(cacheKey)
+
+            if (abortControllerRef.current && willUseCacheForNewYear) {
+                console.log('[FETCH] Aborting previous fetch (new year has cached data)')
                 abortControllerRef.current.abort()
+            } else if (abortControllerRef.current) {
+                console.log('[FETCH] Keeping previous fetch alive (new year needs data)')
             }
             abortControllerRef.current = new AbortController()
 
