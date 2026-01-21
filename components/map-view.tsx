@@ -791,6 +791,9 @@ export function MapView({
     // Debounced data fetching to prevent request spam
     const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
     const abortControllerRef = useRef<AbortController | null>(null)
+    // Separate abort controller for batch prefetch - should not be cancelled when user scrubs
+    const batchPrefetchAbortRef = useRef<AbortController | null>(null)
+    const batchPrefetchInProgressRef = useRef(false)
 
     // Track last values to determine debounce strategy
     const lastYearRef = useRef<number>(year)
@@ -872,32 +875,7 @@ export function MapView({
                     setRealHexData(validData)
                     setIsLoadingData(false)
 
-                    // BATCH PREFETCHING (Aggressive: ALL Years - Past & Future)
-                    // Fetch ALL years (2019-2032) to ensure instant scrubbing/timelapse in both directions
-                    const yearsToFetch: number[] = []
-                    // Iterate all supporting years
-                    for (let targetYear = 2019; targetYear <= 2032; targetYear++) {
-                        // Skip current year (fetched individually)
-                        if (targetYear === year) continue
-
-                        const targetKey = `v${CACHE_VERSION}-${currentH3Res}-${targetYear}-${bounds.minLat.toFixed(2)}-${bounds.maxLat.toFixed(2)}-${bounds.minLng.toFixed(2)}-${bounds.maxLng.toFixed(2)}`
-                        if (!h3DataCache.current.has(targetKey)) {
-                            yearsToFetch.push(targetYear)
-                        }
-                    }
-
-                    if (yearsToFetch.length > 0) {
-                        getH3DataBatch(currentH3Res, yearsToFetch, bounds)
-                            .then(batchResults => {
-                                Object.entries(batchResults).forEach(([yStr, resultData]) => {
-                                    const y = parseInt(yStr)
-                                    const key = `v${CACHE_VERSION}-${currentH3Res}-${y}-${bounds.minLat.toFixed(2)}-${bounds.maxLat.toFixed(2)}-${bounds.minLng.toFixed(2)}-${bounds.maxLng.toFixed(2)}`
-                                    h3DataCache.current.set(key, resultData)
-                                    console.log(`[BATCH-PREFETCH] Cached year ${y}: ${resultData.length} rows`)
-                                })
-                            })
-                            .catch(err => console.error("[BATCH-PREFETCH] Failed", err))
-                    }
+                    // NOTE: Batch prefetch is now handled in a separate useEffect below
 
                 })
                 .catch((err) => {
@@ -915,6 +893,75 @@ export function MapView({
                 clearTimeout(fetchTimeoutRef.current)
             }
         }
+    }, [transform.scale, transform.offsetX, transform.offsetY, filters.layerOverride, year, canvasSize.width, canvasSize.height, basemapCenter])
+
+    // BATCH PREFETCH - Independent effect that warms the cache for all years
+    // Triggers on viewport/resolution changes, runs independently of current year
+    useEffect(() => {
+        // Debounce to avoid spamming during pan/zoom
+        // But if year changed, prefetch immediately (0ms) to warm cache for timelapse
+        const isYearChange = year !== lastYearRef.current
+        const delay = isYearChange ? 0 : 1000 // 1s debounce for viewport changes, instant for year
+
+        const timer = setTimeout(() => {
+            // Skip if already in progress
+            if (batchPrefetchInProgressRef.current) {
+                console.log('[BATCH-PREFETCH] Skipping - already in progress')
+                return
+            }
+
+            const currentH3Res = getH3ResolutionFromScale(transform.scale, filters.layerOverride)
+            const bounds = getViewportBoundsAccurate(
+                canvasSize.width,
+                canvasSize.height,
+                transform,
+                basemapCenter
+            )
+
+            // Build list of years that need prefetching
+            const yearsToFetch: number[] = []
+            for (let targetYear = 2019; targetYear <= 2032; targetYear++) {
+                if (targetYear === year) continue // Skip current year (fetched by main effect)
+
+                const targetKey = `v${CACHE_VERSION}-${currentH3Res}-${targetYear}-${bounds.minLat.toFixed(2)}-${bounds.maxLat.toFixed(2)}-${bounds.minLng.toFixed(2)}-${bounds.maxLng.toFixed(2)}`
+                if (!h3DataCache.current.has(targetKey)) {
+                    yearsToFetch.push(targetYear)
+                }
+            }
+
+            if (yearsToFetch.length === 0) {
+                console.log('[BATCH-PREFETCH] All years cached, skipping')
+                return
+            }
+
+            console.log(`[BATCH-PREFETCH] Fetching ${yearsToFetch.length} years: ${yearsToFetch.join(', ')}`)
+
+            // Cancel previous batch prefetch if still running
+            if (batchPrefetchAbortRef.current) {
+                batchPrefetchAbortRef.current.abort()
+            }
+            batchPrefetchAbortRef.current = new AbortController()
+            batchPrefetchInProgressRef.current = true
+
+            getH3DataBatch(currentH3Res, yearsToFetch, bounds)
+                .then(batchResults => {
+                    Object.entries(batchResults).forEach(([yStr, resultData]) => {
+                        const y = parseInt(yStr)
+                        const key = `v${CACHE_VERSION}-${currentH3Res}-${y}-${bounds.minLat.toFixed(2)}-${bounds.maxLat.toFixed(2)}-${bounds.minLng.toFixed(2)}-${bounds.maxLng.toFixed(2)}`
+                        h3DataCache.current.set(key, resultData)
+                        console.log(`[BATCH-PREFETCH] ✓ Cached year ${y}: ${resultData.length} rows`)
+                    })
+                    batchPrefetchInProgressRef.current = false
+                })
+                .catch(err => {
+                    if (err.name !== 'AbortError') {
+                        console.error('[BATCH-PREFETCH] Failed:', err)
+                    }
+                    batchPrefetchInProgressRef.current = false
+                })
+        }, delay)
+
+        return () => clearTimeout(timer)
     }, [transform.scale, transform.offsetX, transform.offsetY, filters.layerOverride, year, canvasSize.width, canvasSize.height, basemapCenter])
 
     useEffect(() => {
