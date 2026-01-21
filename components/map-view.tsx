@@ -788,13 +788,15 @@ export function MapView({
         [filteredHexes],
     )
 
-    // Debounced data fetching to prevent request spam
     const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
     const abortControllerRef = useRef<AbortController | null>(null)
     // Separate abort controller for batch prefetch - should not be cancelled when user scrubs
     const batchPrefetchAbortRef = useRef<AbortController | null>(null)
     const batchPrefetchInProgressRef = useRef(false)
     const hasRunFirstPrefetchRef = useRef(false) // Track if initial prefetch has completed
+
+    // Offscreen canvas for double buffering to prevent flicker
+    const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null)
 
     // Track last values to determine debounce strategy
     const lastYearRef = useRef<number>(year)
@@ -1255,8 +1257,23 @@ export function MapView({
         const ctx = canvas.getContext("2d", { alpha: true })
         if (!ctx) return
 
-        // Clear using CSS pixels (viewport size), as the context is scaled by DPR
-        ctx.clearRect(0, 0, canvasSize.width, canvasSize.height)
+        // DOUBLE BUFFERING: Render to offscreen canvas first
+        if (!offscreenCanvasRef.current) {
+            offscreenCanvasRef.current = document.createElement("canvas")
+        }
+        const offCanvas = offscreenCanvasRef.current
+
+        // Ensure offscreen canvas matches size
+        if (offCanvas.width !== canvasSize.width || offCanvas.height !== canvasSize.height) {
+            offCanvas.width = canvasSize.width
+            offCanvas.height = canvasSize.height
+        }
+
+        const offCtx = offCanvas.getContext("2d", { alpha: true })
+        if (!offCtx) return
+
+        // Clear offscreen canvas
+        offCtx.clearRect(0, 0, canvasSize.width, canvasSize.height)
 
         // Coverage Layer & Data Layer combined loop
         for (const hex of filteredHexes) {
@@ -1276,29 +1293,35 @@ export function MapView({
                 : "rgba(128, 128, 128, 0.1)" // Neutral coverage fill
 
             // Draw path
-            ctx.beginPath()
-            ctx.moveTo(vertices[0][0], vertices[0][1])
+            offCtx.beginPath()
+            offCtx.moveTo(vertices[0][0], vertices[0][1])
             for (let i = 1; i < vertices.length; i++) {
-                ctx.lineTo(vertices[i][0], vertices[i][1])
+                offCtx.lineTo(vertices[i][0], vertices[i][1])
             }
-            ctx.closePath()
+            offCtx.closePath()
 
             // Fill
-            ctx.globalAlpha = isDataCell ? 0.5 : 1 // Coverage cells already have low opacity in color string
-            ctx.fillStyle = fillColor
-            ctx.fill()
+            offCtx.globalAlpha = isDataCell ? 0.5 : 1 // Coverage cells already have low opacity in color string
+            offCtx.fillStyle = fillColor
+            offCtx.fill()
 
-            // Stability check
+            // Sustainability check
             const hasStabilityWarning = properties.stability_flag || properties.robustness_flag
             if (filters.highlightWarnings && isDataCell && hasStabilityWarning) {
-                ctx.globalAlpha = 0.8
-                ctx.strokeStyle = "#f59e0b" // Amber warning color
-                ctx.lineWidth = 2
-                ctx.stroke()
+                offCtx.globalAlpha = 0.8
+                offCtx.strokeStyle = "#f59e0b" // Amber warning color
+                offCtx.lineWidth = 2
+                offCtx.stroke()
             }
 
-            ctx.globalAlpha = 1
+            offCtx.globalAlpha = 1
         }
+
+        // SWAP: Clear main canvas and draw the offscreen image
+        // This ensures the user never sees a partially drawn or cleared frame
+        ctx.clearRect(0, 0, canvasSize.width, canvasSize.height)
+        ctx.drawImage(offCanvas, 0, 0)
+
     }, [filteredHexes, transform, filters]) // Re-render when filters change!
 
     // LAYER 2: Highlights (Updates on mousemove)
