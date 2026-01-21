@@ -91,7 +91,7 @@ export function FanChart({
 
   const svgContent = useMemo(() => {
     const width = 300
-    const padding = { top: 20, right: 15, bottom: 35, left: 55 }
+    const padding = { top: 20, right: 15, bottom: 50, left: 55 }
     const chartWidth = width - padding.left - padding.right
     const chartHeight = height - padding.top - padding.bottom
 
@@ -556,33 +556,33 @@ export function FanChart({
           </text>
         ))}
 
-        {/* Legend - Cleaned & Stacked */}
-        <g transform={`translate(${padding.left + 50}, ${height + 5})`} style={{ pointerEvents: 'none' }}>
-          {/* Row 1: Primary Data (Teal) */}
-          <line x1={0} y1={-8} x2={12} y2={-8} stroke="#14b8a6" strokeWidth={2} />
-          <text x={16} y={-5} className="text-[8px] fill-muted-foreground">Primary</text>
+        {/* Legend - Consolidated & Fixed Clipping */}
+        {/* Raised y-position to -35 (from height+5) to fit inside viewbox and avoid clipping */}
+        <g transform={`translate(${padding.left}, ${height - 5})`} style={{ pointerEvents: 'none' }}>
+          {/* Row 1: Lines */}
+          {/* Col 1: Property */}
+          <line x1={0} y1={-18} x2={12} y2={-18} stroke="#14b8a6" strokeWidth={2} />
+          <text x={16} y={-15} className="text-[8px] fill-muted-foreground">Area</text>
 
-          <line x1={45} y1={-8} x2={57} y2={-8} stroke="#14b8a6" strokeWidth={2} />
-          <text x={61} y={-5} className="text-[8px] fill-muted-foreground">Forecast</text>
-
-          <rect x={100} y={-11} width={10} height={6} fill="#14b8a6" fillOpacity={0.2} />
-          <text x={114} y={-5} className="text-[8px] fill-muted-foreground">Range</text>
-
-          {/* Row 2: Selection (Orange) */}
+          {/* Col 2: Comparison */}
           {comparisonData && (
-            <>
-              <line x1={0} y1={4} x2={12} y2={4} stroke="#f97316" strokeWidth={2} strokeDasharray="3 3" />
-              <text x={16} y={7} className="text-[8px] fill-muted-foreground">Selection</text>
-            </>
-          )}
-
-          {/* Row 3: Preview (Fuchsia) */}
-          {previewData && (
-            <g transform="translate(60, 12)">
-              <line x1={0} y1={0} x2={12} y2={0} stroke="#d946ef" strokeWidth={2} strokeDasharray="3 3" />
-              <text x={16} y={3} className="text-[8px] fill-muted-foreground">Preview</text>
+            <g transform="translate(60, 0)">
+              <line x1={0} y1={-18} x2={12} y2={-18} stroke="#f97316" strokeWidth={2} strokeDasharray="3 3" />
+              <text x={16} y={-15} className="text-[8px] fill-muted-foreground">Comparison</text>
             </g>
           )}
+
+          {/* Col 3: Candidate */}
+          {previewData && (
+            <g transform="translate(125, 0)">
+              <line x1={0} y1={-18} x2={12} y2={-18} stroke="#d946ef" strokeWidth={2} strokeDasharray="3 3" />
+              <text x={16} y={-15} className="text-[8px] fill-muted-foreground">Candidate Comparison</text>
+            </g>
+          )}
+
+          {/* Row 2: Range (Applies to all) */}
+          <rect x={0} y={-8} width={10} height={6} fill="#888888" fillOpacity={0.3} />
+          <text x={14} y={-2} className="text-[8px] fill-muted-foreground">Forecast Range</text>
         </g>
       </svg>
     )

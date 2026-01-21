@@ -103,7 +103,7 @@ export function aggregateDetails(detailsList: DetailsResponse[]): DetailsRespons
     }
 
     return {
-        h3Id: "aggregated-selection",
+        id: "aggregated-selection",
         historicalValues: aggHistorical,
         fanChart: aggFan,
         reliability: detailsList[0].reliability

@@ -22,38 +22,7 @@ interface LegendProps {
 
 export function Legend({ className, colorMode = "growth", onColorModeChange }: LegendProps) {
   return (
-    <div className={cn("glass-panel rounded-lg p-3 space-y-3 text-xs", className)}>
-      {/* Color Mode Toggle */}
-      {onColorModeChange && (
-        <div className="space-y-1.5">
-          <span className="text-muted-foreground text-[10px] uppercase tracking-wide">Display Mode</span>
-          <div className="grid grid-cols-2 gap-1 p-0.5 bg-secondary/50 rounded-md">
-            <button
-              onClick={() => onColorModeChange("growth")}
-              className={cn(
-                "px-2 py-1.5 text-xs font-medium rounded transition-all",
-                colorMode === "growth"
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              Δ Growth
-            </button>
-            <button
-              onClick={() => onColorModeChange("value")}
-              className={cn(
-                "px-2 py-1.5 text-xs font-medium rounded transition-all",
-                colorMode === "value"
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              Value $
-            </button>
-          </div>
-        </div>
-      )}
-
+    <div className={cn("glass-panel rounded-lg p-3 space-y-1 text-xs", className)}>
       {/* Color Scale */}
       <div className="space-y-1.5">
         <div className="flex items-center gap-1.5 text-foreground font-medium">
@@ -96,10 +65,43 @@ export function Legend({ className, colorMode = "growth", onColorModeChange }: L
         </div>
       </div>
 
-      {/* No Data Indicator */}
-      <div className="flex items-center gap-1.5">
-        <div className="w-4 h-4 rounded border border-[#888888] bg-[#888888]/10" />
-        <span className="text-muted-foreground">No Data</span>
+      {/* Bottom Row: No Data + Toggles */}
+      <div className="flex items-center justify-between gap-4">
+        {/* No Data Indicator */}
+        <div className="flex items-center gap-1.5">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2L20.66 7V17L12 22L3.34 17V7L12 2Z" fill="#888888" fillOpacity="0.1" stroke="#888888" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          <span className="text-[10px] text-muted-foreground leading-tight">No Residential Properties</span>
+        </div>
+
+        {/* Color Mode Toggle (Compact, Bottom Right) */}
+        {onColorModeChange && (
+          <div className="grid grid-cols-2 gap-1 p-0.5 bg-secondary/50 rounded-md shrink-0">
+            <button
+              onClick={() => onColorModeChange("growth")}
+              className={cn(
+                "px-2 py-1 text-[10px] font-medium rounded transition-all",
+                colorMode === "growth"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Growth
+            </button>
+            <button
+              onClick={() => onColorModeChange("value")}
+              className={cn(
+                "px-2 py-1 text-[10px] font-medium rounded transition-all",
+                colorMode === "value"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Value
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )

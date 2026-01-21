@@ -9,77 +9,82 @@ import type { DetailsResponse, FanChartData } from "@/lib/types"
  */
 export async function getH3CellDetails(h3Id: string, forecastYear = 2026): Promise<DetailsResponse | null> {
   console.log(`[SERVER] getH3CellDetails called: h3_id=${h3Id}, year=${forecastYear}`)
-  const supabase = await getSupabaseServerClient()
+  try {
+    const supabase = await getSupabaseServerClient()
 
-  // Run queries in parallel: 
-  // 1. Details for the requested forecast year
-  // 2. Historical values (2019-2025)
-  // 3. Grid coordinates
-  // 4. Base details for FanChart (2026) if needed
-  const [detailsResult, historyResult, gridResult, baseResult] = await Promise.all([
-    supabase
-      .from("h3_precomputed_hex_details")
-      .select("*")
-      .eq("h3_id", h3Id)
-      .eq("forecast_year", forecastYear)
-      .single(),
-    supabase
-      .from("h3_precomputed_hex_details")
-      .select("forecast_year, predicted_value")
-      .eq("h3_id", h3Id)
-      .lte("forecast_year", 2025)
-      .order("forecast_year", { ascending: true }),
-    supabase
-      .from("h3_aoi_grid")
-      .select("lat, lng")
-      .eq("h3_id", h3Id)
-      .eq("aoi_id", "harris_county")
-      .single(),
-    forecastYear !== 2026
-      ? supabase
+    // Run queries in parallel: 
+    // 1. Details for the requested forecast year
+    // 2. Historical values (2019-2025)
+    // 3. Grid coordinates
+    // 4. Base details for FanChart (2026) if needed
+    const [detailsResult, historyResult, gridResult, baseResult] = await Promise.all([
+      supabase
         .from("h3_precomputed_hex_details")
         .select("*")
         .eq("h3_id", h3Id)
-        .eq("forecast_year", 2026)
+        .eq("forecast_year", forecastYear)
+        .single(),
+      supabase
+        .from("h3_precomputed_hex_details")
+        .select("forecast_year, predicted_value")
+        .eq("h3_id", h3Id)
+        .lte("forecast_year", 2025)
+        .order("forecast_year", { ascending: true }),
+      supabase
+        .from("h3_aoi_grid")
+        .select("lat, lng")
+        .eq("h3_id", h3Id)
+        .eq("aoi_id", "harris_county")
+        .single(),
+      forecastYear !== 2026
+        ? supabase
+          .from("h3_precomputed_hex_details")
+          .select("*")
+          .eq("h3_id", h3Id)
+          .eq("forecast_year", 2026)
+          .single()
+        : Promise.resolve({ data: null, error: null })
+    ])
+
+    const { data: detailsData, error: detailsError } = detailsResult
+    const { data: historyData } = historyResult
+    const { data: gridData } = gridResult
+    // Use base data for FanChart if available (to keep chart stable), otherwise use current details
+    const fanSourceData = baseResult.data ?? detailsData
+
+    console.log(`[SERVER] Query result for ${h3Id}/${forecastYear}: predicted_value=${detailsData?.predicted_value}, opportunity=${detailsData?.opportunity}`)
+    console.log(`[SERVER] History result for ${h3Id}: ${historyData?.length ?? 0} rows`)
+
+    if (detailsError || !detailsData) {
+      console.error(`[v0] Failed to fetch details for ${h3Id}:`, detailsError)
+
+      // Fallback: try hex_rows for basic data
+      const { data: hexData, error: hexError } = await supabase
+        .from("h3_precomputed_hex_rows")
+        .select("*")
+        .eq("h3_id", h3Id)
+        .eq("forecast_year", forecastYear)
         .single()
-      : Promise.resolve({ data: null, error: null })
-  ])
 
-  const { data: detailsData, error: detailsError } = detailsResult
-  const { data: historyData } = historyResult
-  const { data: gridData } = gridResult
-  // Use base data for FanChart if available (to keep chart stable), otherwise use current details
-  const fanSourceData = baseResult.data ?? detailsData
+      if (hexError || !hexData) {
+        console.error(`[v0] Fallback to hex_rows also failed for ${h3Id}:`, hexError)
+        return null
+      }
 
-  console.log(`[SERVER] Query result for ${h3Id}/${forecastYear}: predicted_value=${detailsData?.predicted_value}, opportunity=${detailsData?.opportunity}`)
-  console.log(`[SERVER] History result for ${h3Id}: ${historyData?.length ?? 0} rows`)
-
-  if (detailsError || !detailsData) {
-    console.error(`[v0] Failed to fetch details for ${h3Id}:`, detailsError)
-
-    // Fallback: try hex_rows for basic data
-    const { data: hexData, error: hexError } = await supabase
-      .from("h3_precomputed_hex_rows")
-      .select("*")
-      .eq("h3_id", h3Id)
-      .eq("forecast_year", forecastYear)
-      .single()
-
-    if (hexError || !hexData) {
-      console.error(`[v0] Fallback to hex_rows also failed for ${h3Id}:`, hexError)
-      return null
+      // Return partial response from hex_rows (many fields will be null)
+      return buildPartialResponse(h3Id, hexData)
     }
 
-    // Return partial response from hex_rows (many fields will be null)
-    return buildPartialResponse(h3Id, hexData)
+    // Extract historical values array [2019, ..., 2025]
+    // Create mapping of year -> value
+    const historyMap = new Map(historyData?.map(r => [r.forecast_year, r.predicted_value]) ?? [])
+    const historicalValues = [2019, 2020, 2021, 2022, 2023, 2024, 2025].map(y => historyMap.get(y) ?? 0)
+
+    return buildFullResponse(h3Id, detailsData, historicalValues, gridData, fanSourceData)
+  } catch (err) {
+    console.error(`[SERVER] Critical error in getH3CellDetails for ${h3Id}:`, err)
+    return null
   }
-
-  // Extract historical values array [2019, ..., 2025]
-  // Create mapping of year -> value
-  const historyMap = new Map(historyData?.map(r => [r.forecast_year, r.predicted_value]) ?? [])
-  const historicalValues = [2019, 2020, 2021, 2022, 2023, 2024, 2025].map(y => historyMap.get(y) ?? 0)
-
-  return buildFullResponse(h3Id, detailsData, historicalValues, gridData, fanSourceData)
 }
 
 /**

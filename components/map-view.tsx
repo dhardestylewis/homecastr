@@ -21,7 +21,7 @@ const getTrendIcon = (trend: "up" | "down" | "stable" | undefined) => {
     if (trend === "up") return <TrendingUp className="h-3 w-3 text-green-500" />
     if (trend === "down") return <TrendingDown className="h-3 w-3 text-red-500" />
     return <Minus className="h-3 w-3 text-muted-foreground" />
-    return <Minus className="h-3 w-3 text-muted-foreground" />
+
 }
 
 function useIsMobile() {
@@ -35,20 +35,79 @@ function useIsMobile() {
     return isMobile
 }
 
-// Helper: Ensure tooltip stays within bounds
-function clampTooltipPos(x: number, y: number, width: number = 320, height: number = 400) {
+
+
+
+interface TransformState {
+    offsetX: number
+    offsetY: number
+    scale: number
+}
+
+// Helper: Ensure tooltip stays within bounds and respects Sidebar
+const SIDEBAR_WIDTH = 340
+const TOOLTIP_WIDTH = 320
+const TOOLTIP_HEIGHT = 450
+
+function getSmartTooltipPos(x: number, y: number, windowWidth: number, windowHeight: number) {
     if (typeof window === 'undefined') return { x, y }
 
-    const margin = 20
-    const maxX = window.innerWidth - width - margin
-    const maxY = window.innerHeight - height - margin
-    const minX = margin
-    const minY = margin // Allow top placement for now, maybe check header?
+    // Default: Place to the RIGHT of the cursor
+    let left = x + 20
+    let top = y - 20
 
-    return {
-        x: Math.max(minX, Math.min(x, maxX)),
-        y: Math.max(minY, Math.min(y, maxY))
+    // 1. Horizontal Constraint
+    // If placing to the right goes off screen...
+    if (left + TOOLTIP_WIDTH > windowWidth - 20) {
+        // Try placing to the LEFT of the cursor
+        const tryLeft = x - TOOLTIP_WIDTH - 20
+
+        // If placing left overlaps Sidebar (and we are potentially covering it?)
+        // Only if tryLeft < SIDEBAR_WIDTH. 
+        // But if x is far right, tryLeft is likely > SIDEBAR_WIDTH.
+        // If x is near SIDEBAR_WIDTH (e.g. 350), tryLeft = 10. Overlaps Sidebar?
+        // Sidebar is technically "floating" but user wants to avoid covering it.
+        // But if we are at x=350, Right is 370. That's fine.
+        // If we are at x=WindowWidth (e.g. 1920), Left is 1580. Fine.
+
+        // What if both block? (Narrow screen)
+        // Check if Left placement hits Sidebar
+        if (tryLeft < SIDEBAR_WIDTH + 10) {
+            // We are squeezed between Sidebar and Right Edge.
+            // Priority: Keep on screen.
+            // If tryLeft < Sidebar, maybe we force Right but clamped?
+            // Or force Left but clamped?
+
+            // Let's stick to the side that has more space.
+            const spaceRight = windowWidth - x
+            const spaceLeft = x - SIDEBAR_WIDTH
+
+            if (spaceRight > spaceLeft && spaceRight > TOOLTIP_WIDTH) {
+                left = x + 20
+            } else if (spaceLeft > TOOLTIP_WIDTH) {
+                left = tryLeft
+            } else {
+                // Not enough space either side. 
+                // Default to Right but clamped to window edge (covering whatever)
+                left = Math.min(left, windowWidth - TOOLTIP_WIDTH - 10)
+            }
+        } else {
+            left = tryLeft
+        }
     }
+
+    // 2. Vertical Constraint
+    // Stay inside window height
+    top = Math.max(10, Math.min(top, windowHeight - TOOLTIP_HEIGHT - 10))
+
+    // 3. Final Safety Clamp (Left Edge / Sidebar)
+    // If we ended up on the left side, ensure we don't go negative or into Sidebar if possible
+    // Use SIDEBAR_WIDTH as the hard 'minX' roughly
+    // But don't clamp strictly if it means going off screen right? 
+    // Already handled above. Just standard min clamp.
+    left = Math.max(10, left)
+
+    return { x: left, y: top }
 }
 
 // MapView Props Interface
@@ -61,6 +120,8 @@ interface MapViewProps {
     className?: string
     onMockDataDetected?: () => void
     onYearChange?: (year: number) => void
+    mobileSelectionMode?: 'replace' | 'add' | 'range'
+    onMobileSelectionModeChange?: (mode: 'replace' | 'add' | 'range') => void
 }
 
 const HARRIS_COUNTY_CENTER = { lng: -95.3698, lat: 29.7604 }
@@ -130,7 +191,7 @@ function canvasToLatLng(
     canvasY: number,
     canvasWidth: number,
     canvasHeight: number,
-    transform: { offsetX: number; offsetY: number; scale: number },
+    transform: TransformState,
     basemapCenter: { lng: number; lat: number },
 ): { lat: number; lng: number } {
     const zoom = getContinuousBasemapZoom(transform.scale)
@@ -158,7 +219,7 @@ function canvasToLatLng(
 function getViewportBoundsAccurate(
     canvasWidth: number,
     canvasHeight: number,
-    transform: { offsetX: number; offsetY: number; scale: number },
+    transform: TransformState,
     basemapCenter: { lat: number; lng: number },
 ): { minLat: number; maxLat: number; minLng: number; maxLng: number } {
     const padFrac = 0.2
@@ -183,11 +244,7 @@ function getViewportBoundsAccurate(
     }
 }
 
-interface TransformState {
-    offsetX: number
-    offsetY: number
-    scale: number
-}
+
 
 /**
  * Ray-casting algorithm to check if a point is inside a polygon
@@ -276,7 +333,9 @@ export function MapView({
     year = 2026,
     className,
     onMockDataDetected,
-    onYearChange
+    onYearChange,
+    mobileSelectionMode,
+    onMobileSelectionModeChange
 }: MapViewProps) {
     const basemapCenter = useMemo(() => ({ lng: -95.3698, lat: 29.7604 }), [])
     const [h3Resolution, setH3Resolution] = useState<number>(0)
@@ -321,6 +380,28 @@ export function MapView({
             scale: initialScale,
         }
     })
+
+    // Sync external mapState selection (mapState.selectedId) -> internal selection (selectedHexes)
+    // This allows parent Reset button to clear selection
+    useEffect(() => {
+        if (!mapState.selectedId) {
+            // Cleared externally
+            if (selectedHexes.length > 0) {
+                setSelectedHexes([])
+                setFixedTooltipPos(null)
+                setSelectedHexGeoCenter(null)
+                setComparisonHex(null)
+                setComparisonDetails(null)
+            }
+        } else {
+            // Selected externally (e.g. initial URL load or future functionality)
+            // Only update if not already matching to avoid loops (though array ref check helps)
+            if (!selectedHexes.includes(mapState.selectedId)) {
+                setSelectedHexes([mapState.selectedId])
+                // We might want to auto-center or tooltip here, but let's stick to just state sync for now
+            }
+        }
+    }, [mapState.selectedId])
 
     // Sync transform when mapState changes (e.g. Search or URL change)
     useEffect(() => {
@@ -384,7 +465,24 @@ export function MapView({
     const [isShiftHeld, setIsShiftHeld] = useState(false)
     const [shiftPreviewHexes, setShiftPreviewHexes] = useState<string[]>([])
     const [shiftPreviewDetails, setShiftPreviewDetails] = useState<DetailsResponse | null>(null)
-    const [mobileSelectionMode, setMobileSelectionMode] = useState<'replace' | 'add' | 'range'>('replace')
+    // Mobile Selection Mode State (Controlled or Internal fallback not really needed if fully controlled, but keeping simple)
+    // Actually, if we want to move buttons to Page, we should rely on props.
+    // But to avoid breaking if props missing, we can use a local state initialized from props? 
+    // No, let's just use the prop. But we need to handle the case where it's not provided?
+    // For now, let's assume it's passed or default to 'replace'.
+    // We already defaulted it in destructuring.
+
+    const [internalMobileMode, setInternalMobileMode] = useState<'replace' | 'add' | 'range'>('replace')
+
+    // Use prop if handler provided, else local (backward compat)
+    const effectiveMobileMode = onMobileSelectionModeChange ? mobileSelectionMode : internalMobileMode
+    const setEffectiveMobileMode = onMobileSelectionModeChange ? onMobileSelectionModeChange : setInternalMobileMode
+
+    const handleCellClick = (cellId: string, e: any) => {
+        // ...
+        // We need to check where mobileSelectionMode is used.
+        // It's used in handleCanvasClick (lines ~1505)
+    }
     const selectedHex = selectedHexes.length > 0 ? selectedHexes[selectedHexes.length - 1] : null
     const selectedHexRef = useRef<string | null>(null)
 
@@ -409,50 +507,80 @@ export function MapView({
     }, [selectedHexes, hoveredHex, tooltipData])
 
     // Fetch Logic
+    // Fetch Logic
     useEffect(() => {
-        const targets = selectedHexes.length > 0 ? selectedHexes : (hoveredHex ? [hoveredHex] : [])
-
-        if (targets.length === 0) {
-            setHoveredDetails(null)
-            setSelectionDetails(null)
-            setPrimaryDetails(null)
-            return
-        }
-
-        // Helper to fetch with cache
-        const fetchWithCache = async (id: string, y: number) => {
-            const key = `${id}-${y}`
-            if (detailsCache.current.has(key)) return detailsCache.current.get(key)!
-
-            const data = await getH3CellDetails(id, y)
-            if (data) detailsCache.current.set(key, data)
-            return data
-        }
-
+        // Debounce fetch
         const timer = setTimeout(() => {
+            // Determine what to fetch
+            const needSelection = selectedHexes.length > 0
+            const needHover = hoveredHex && !selectedHexes.includes(hoveredHex)
+
+            if (!needSelection && !hoveredHex) {
+                setHoveredDetails(null)
+                setSelectionDetails(null)
+                setPrimaryDetails(null)
+                return
+            }
+
             setIsLoadingDetails(true)
 
-            Promise.all(targets.map(id => fetchWithCache(id, year)))
-                .then(details => {
-                    const validDetails = details.filter((d): d is DetailsResponse => d !== null)
+            // Helper to fetch with cache
+            const fetchWithCache = async (id: string, y: number) => {
+                const key = `${id}-${y}`
+                if (detailsCache.current.has(key)) return detailsCache.current.get(key)!
 
-                    if (selectedHexes.length > 0) {
-                        if (validDetails.length > 0) {
-                            // Aggregate Selection (Line 2: Orange)
-                            setSelectionDetails(aggregateDetails(validDetails))
+                const data = await getH3CellDetails(id, y)
+                if (data) detailsCache.current.set(key, data)
+                return data
+            }
 
-                            // Fetch Primary (Line 1: Teal) - Always the first selected hex
-                            const primaryId = selectedHexes[0]
-                            fetchWithCache(primaryId, year).then(d => d && setPrimaryDetails(d))
-                        }
-                    } else if (validDetails.length > 0) {
-                        // Hover (Line 1: Teal - acts as primary when no selection)
-                        setHoveredDetails(validDetails[0])
-                        setPrimaryDetails(validDetails[0]) // Show hover as primary
+            const selectionPromise = needSelection
+                ? Promise.all(selectedHexes.map(id => fetchWithCache(id, year)))
+                : Promise.resolve([])
+
+            const hoverPromise = needHover
+                ? fetchWithCache(hoveredHex!, year)
+                : Promise.resolve(null)
+
+            Promise.all([selectionPromise, hoverPromise])
+                .then(([selectionResults, hoverResult]) => {
+                    const validSelection = selectionResults.filter((d): d is DetailsResponse => d !== null)
+
+                    // 1. Update Selection State
+                    if (validSelection.length > 0) {
+                        setSelectionDetails(aggregateDetails(validSelection))
+                        // Primary is always the first selected hex
+                        setPrimaryDetails(validSelection[0])
+                    } else if (selectedHexes.length > 0) {
+                        // Selection fetch failed completely
+                        setSelectionDetails(null)
+                        setPrimaryDetails(null)
+                    } else {
+                        // No active selection
+                        setSelectionDetails(null)
+                        // Primary will be cleared unless set by Hover below
+                        setPrimaryDetails(null)
+                    }
+
+                    // 2. Resolve Hover Data
+                    let finalHoverDetails = hoverResult
+
+                    // If hover wasn't fetched separately, it might be in the selection
+                    if (!finalHoverDetails && hoveredHex && selectedHexes.includes(hoveredHex)) {
+                        const idx = selectedHexes.indexOf(hoveredHex)
+                        if (idx !== -1) finalHoverDetails = selectionResults[idx]
+                    }
+
+                    setHoveredDetails(finalHoverDetails)
+
+                    // 3. Fallback: If no selection, Hover becomes Primary
+                    if (selectedHexes.length === 0 && finalHoverDetails) {
+                        setPrimaryDetails(finalHoverDetails)
                     }
                 })
                 .catch(e => console.error(e))
                 .finally(() => setIsLoadingDetails(false))
+
         }, 150)
         return () => clearTimeout(timer)
     }, [selectedHexes, hoveredHex, year])
@@ -579,7 +707,7 @@ export function MapView({
 
         if (!interactionDetails) return null
 
-        if (selectedHexes.includes(interactionDetails.h3_id)) {
+        if (selectedHexes.includes(interactionDetails.id)) {
             // REMOVAL PREVIEW: "What if I remove this hex?"
             // Aggregate = Selection - Interaction
             // Note: aggregateDetails might not support subtraction easily if it just averages.
@@ -607,8 +735,8 @@ export function MapView({
         if (!isTooltipDragging) return
 
         const handleMouseMove = (e: MouseEvent) => {
-            // Apply clamping
-            const docked = clampTooltipPos(e.clientX, e.clientY)
+            // Apply smart positioning
+            const docked = getSmartTooltipPos(e.clientX, e.clientY, window.innerWidth, window.innerHeight)
             setFixedTooltipPos({ globalX: docked.x, globalY: docked.y })
         }
 
@@ -678,8 +806,8 @@ export function MapView({
         // If year changed but viewport is stable -> Instant (0ms)
         // If viewport changed -> Debounce (200ms)
         const isYearChangeOnly = year !== lastYearRef.current &&
-            transform.x === lastTransformRef.current.x &&
-            transform.y === lastTransformRef.current.y &&
+            transform.offsetX === lastTransformRef.current.offsetX &&
+            transform.offsetY === lastTransformRef.current.offsetY &&
             transform.scale === lastTransformRef.current.scale
 
         const delay = isYearChangeOnly ? 0 : 200
@@ -744,12 +872,14 @@ export function MapView({
                     setRealHexData(validData)
                     setIsLoadingData(false)
 
-                    // BATCH PREFETCHING (Aggressive: ALL Future Years)
-                    // Fetch ALL remaining years in a single batch to make timelapse instant
-                    // Browser memory is plentiful (5MB total for all years), so we cache everything.
+                    // BATCH PREFETCHING (Aggressive: ALL Years - Past & Future)
+                    // Fetch ALL years (2019-2032) to ensure instant scrubbing/timelapse in both directions
                     const yearsToFetch: number[] = []
-                    // Iterate from next year up to 2032
-                    for (let targetYear = year + 1; targetYear <= 2032; targetYear++) {
+                    // Iterate all supporting years
+                    for (let targetYear = 2019; targetYear <= 2032; targetYear++) {
+                        // Skip current year (fetched individually)
+                        if (targetYear === year) continue
+
                         const targetKey = `v${CACHE_VERSION}-${currentH3Res}-${targetYear}-${bounds.minLat.toFixed(2)}-${bounds.maxLat.toFixed(2)}-${bounds.minLng.toFixed(2)}-${bounds.maxLng.toFixed(2)}`
                         if (!h3DataCache.current.has(targetKey)) {
                             yearsToFetch.push(targetYear)
@@ -1160,7 +1290,7 @@ export function MapView({
         if (hoveredHex && hoveredHex !== selectedHex) {
             // If locked (selectedHex exists), the hovered hex is the COMPARISON target -> AMBER
             if (selectedHex) {
-                drawOutcome(hoveredHex, "#f59e0b", 3, true) // Amber-500 dashed
+                drawOutcome(hoveredHex, "#f97316", 3, true) // Orange-500 dashed (matches fan chart comparison line)
             } else {
                 // Normal hover -> White
                 drawOutcome(hoveredHex, "#ffffff", 2)
@@ -1177,7 +1307,7 @@ export function MapView({
             const nonPrimaryHexes = selectedHexes.slice(1)
 
             // Draw non-primary first (amber)
-            ctx.strokeStyle = '#f59e0b' // Amber
+            ctx.strokeStyle = '#f97316' // Orange (matches fan chart comparison line)
             ctx.lineWidth = 2.5
             nonPrimaryHexes.forEach(h => {
                 const vertices = getH3CellCanvasVertices(h, canvasSize.width, canvasSize.height, transform, basemapCenter)
@@ -1206,7 +1336,7 @@ export function MapView({
 
         // Draw Shift Preview Hexes (Dashed Amber)
         if (shiftPreviewHexes.length > 0) {
-            ctx.strokeStyle = '#f59e0b'
+            ctx.strokeStyle = '#f97316' // Orange (matches fan chart comparison line)
             ctx.lineWidth = 2
             ctx.setLineDash([5, 5])
             shiftPreviewHexes.forEach(h => {
@@ -1401,7 +1531,8 @@ export function MapView({
                 } else {
                     // No selection - normal hover behavior with tooltip
                     const props = hexPropertyMap.current.get(cellId)!
-                    setTooltipData({ x: canvasX, y: canvasY, globalX: e.clientX, globalY: e.clientY, properties: props })
+                    const smartPos = getSmartTooltipPos(e.clientX, e.clientY, window.innerWidth, window.innerHeight)
+                    setTooltipData({ x: canvasX, y: canvasY, globalX: smartPos.x, globalY: smartPos.y, properties: props })
                     onFeatureHover(cellId)
                 }
             } else {
@@ -1422,8 +1553,8 @@ export function MapView({
         if (hasDraggedRef.current) return
 
         if (hoveredHex) {
-            const isShift = e.shiftKey || (isMobile && mobileSelectionMode === 'range')
-            const isMulti = e.ctrlKey || e.metaKey || (isMobile && mobileSelectionMode === 'add')
+            const isShift = e.shiftKey || (isMobile && effectiveMobileMode === 'range')
+            const isMulti = e.ctrlKey || e.metaKey || (isMobile && effectiveMobileMode === 'add')
 
             let newSet: string[]
 
@@ -1488,7 +1619,7 @@ export function MapView({
                 // If single click (replace), update tooltip pos
                 // Use click coordinates directly for instant locking
                 // This prevents jumping if tooltipData is stale or null
-                const clamped = clampTooltipPos(e.clientX, e.clientY)
+                const clamped = getSmartTooltipPos(e.clientX, e.clientY, window.innerWidth, window.innerHeight)
                 setFixedTooltipPos({ globalX: clamped.x, globalY: clamped.y })
             }
         } else {
@@ -1514,7 +1645,10 @@ export function MapView({
             setTooltipData(null)
             onFeatureHover(null)
         } else {
+            // Clear comparison when mouse leaves canvas (no stale comparison data)
             setComparisonHex(null)
+            setComparisonDetails(null)
+            setEphemeralHoverDetails(null)
             setHoveredHex(null)
         }
     }
@@ -1659,30 +1793,7 @@ export function MapView({
         }
     }, [canvasSize, basemapCenter])
 
-    const handleZoomIn = () => {
-        setTransform((prev) => ({
-            ...prev,
-            scale: Math.min(50000, prev.scale * 1.3),
-        }))
-    }
 
-    const handleZoomOut = () => {
-        setTransform((prev) => ({
-            ...prev,
-            scale: Math.max(1000, prev.scale / 1.3),
-        }))
-    }
-
-    const handleReset = () => {
-        setTransform({ offsetX: 0, offsetY: 0, scale: 3000 }) // Match initial zoomed out view
-        setSelectedHexes([])
-        setHoveredHex(null)
-        setTooltipData(null)
-        setFixedTooltipPos(null)
-        setSelectedHexGeoCenter(null)
-        setComparisonHex(null)
-        setComparisonDetails(null)
-    }
 
     // ESC key to exit static tooltip mode
     useEffect(() => {
@@ -1804,9 +1915,11 @@ export function MapView({
                             transform: `translateY(calc(${isMinimized ? '100% - 24px' : '0px'} + ${dragOffset}px))`,
                             transition: touchStart === null ? 'transform 0.3s ease-out' : 'none'
                         } : {
-                            left: (displayPos?.globalX ?? 0) + 20,
-                            top: (displayPos?.globalY ?? 0) + ((displayPos?.globalY ?? 0) > window.innerHeight - 350 ? -20 : 20),
-                            transform: `${(displayPos?.globalX ?? 0) > window.innerWidth - 340 ? 'translateX(-100%) translateX(-40px)' : ''} ${(displayPos?.globalY ?? 0) > window.innerHeight - 350 ? 'translateY(-100%)' : ''}`.trim() || 'none'
+                            left: displayPos?.globalX ?? 0,
+                            top: displayPos?.globalY ?? 0,
+                            // Transform not needed for flip anymore as getSmartTooltipPos handles it.
+                            // But we keep translation for Minimize logic ? No, Minimize is mobile-only.
+                            // We might want verify transition?
                         }}
                         onMouseDown={lockedMode && !isMobile ? (e) => {
                             setIsTooltipDragging(true)
@@ -1915,7 +2028,7 @@ export function MapView({
                                                 </div>
                                                 {displayDetails?.historicalValues && (
                                                     <div className="text-[10px] text-muted-foreground mt-1">
-                                                        Curr (2025): <span className="text-foreground">{formatCurrency(displayDetails.historicalValues[displayDetails.historicalValues.length - 1])}</span>
+                                                        Current (2025): <span className="text-foreground">{formatCurrency(displayDetails.historicalValues[displayDetails.historicalValues.length - 1])}</span>
                                                     </div>
                                                 )}
                                             </div>
@@ -1931,7 +2044,7 @@ export function MapView({
                                             </div>
                                         </div>
 
-                                        {displayDetails?.fanChart || primaryDetails ? (
+                                        {(displayDetails?.fanChart || primaryDetails?.fanChart) ? (
                                             <div className="space-y-2">
                                                 <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold flex justify-between">
                                                     <span>Value Timeline</span>
@@ -1941,7 +2054,7 @@ export function MapView({
                                                     <FanChart
                                                         // Line 1: Primary (Anchor) - always first hex's data
                                                         // Fallback to displayDetails (hovered) if no primary (i.e. no selection)
-                                                        data={primaryDetails?.fanChart || displayDetails?.fanChart}
+                                                        data={(primaryDetails?.fanChart || displayDetails?.fanChart)!}
                                                         currentYear={year}
                                                         height={160}
                                                         historicalValues={primaryDetails?.historicalValues || displayDetails?.historicalValues}
@@ -1951,8 +2064,9 @@ export function MapView({
                                                         comparisonHistoricalValues={selectedHexes.length > 1 ? selectionDetails?.historicalValues : null}
 
                                                         // Line 3: Preview (Fuchsia) - Aggregate of Selection + Candidate
-                                                        previewData={previewDetails?.fanChart}
-                                                        previewHistoricalValues={previewDetails?.historicalValues}
+                                                        // Show hoveredDetails explicitly as Candidate
+                                                        previewData={previewDetails?.fanChart || (selectedHexes.length > 0 ? hoveredDetails?.fanChart : null)}
+                                                        previewHistoricalValues={previewDetails?.historicalValues || (selectedHexes.length > 0 ? hoveredDetails?.historicalValues : null)}
 
                                                         onYearChange={onYearChange}
                                                     />
@@ -1966,7 +2080,7 @@ export function MapView({
                                             )
                                         )}
 
-                                        <div className="pt-2 mt-1 border-t border-border/50 grid grid-cols-2 gap-4 text-center">
+                                        <div className="pt-1 mt-0 border-t border-border/50 grid grid-cols-2 gap-4 text-center">
                                             <div>
                                                 <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold">Properties</div>
                                                 <div className="text-xs font-medium text-foreground">{displayProps.n_accts}</div>
@@ -1991,62 +2105,8 @@ export function MapView({
                 )
             })()}
 
-            <div className="absolute top-[120px] right-4 md:top-auto md:bottom-4 flex flex-row md:flex-col gap-2 z-30">
-                {/* Mobile Selection Mode Toggles */}
-                {isMobile && (
-                    <>
-                        <button
-                            onClick={() => setMobileSelectionMode('replace')}
-                            className={cn(
-                                "w-10 h-10 rounded-lg flex items-center justify-center transition-colors shadow-lg font-bold text-xs",
-                                mobileSelectionMode === 'replace' ? "bg-primary text-primary-foreground" : "glass-panel text-foreground"
-                            )}
-                            title="Single Select"
-                        >
-                            1
-                        </button>
-                        <button
-                            onClick={() => setMobileSelectionMode('add')}
-                            className={cn(
-                                "w-10 h-10 rounded-lg flex items-center justify-center transition-colors shadow-lg font-bold text-xs",
-                                mobileSelectionMode === 'add' ? "bg-primary text-primary-foreground" : "glass-panel text-foreground"
-                            )}
-                            title="Multi Select (Add)"
-                        >
-                            +
-                        </button>
-                        <button
-                            onClick={() => setMobileSelectionMode('range')}
-                            className={cn(
-                                "w-10 h-10 rounded-lg flex items-center justify-center transition-colors shadow-lg font-bold text-xs",
-                                mobileSelectionMode === 'range' ? "bg-primary text-primary-foreground" : "glass-panel text-foreground"
-                            )}
-                            title="Range Select"
-                        >
-                            ↔
-                        </button>
-                        <div className="w-2 md:h-2" /> {/* Spacer */}
-                    </>
-                )}
-
-                <button
-                    onClick={handleZoomIn}
-                    className="w-10 h-10 glass-panel rounded-lg flex items-center justify-center text-foreground hover:bg-accent transition-colors shadow-lg"
-                >
-                    +
-                </button>
-                <button
-                    onClick={handleZoomOut}
-                    className="w-10 h-10 glass-panel rounded-lg flex items-center justify-center text-foreground hover:bg-accent transition-colors shadow-lg"
-                >
-                    -
-                </button>
-                <button
-                    onClick={handleReset}
-                    className="w-10 h-10 glass-panel rounded-lg flex items-center justify-center text-foreground hover:bg-accent transition-colors text-[10px] font-medium uppercase tracking-wider shadow-lg"
-                >
-                    Reset
-                </button>
+            <div className="absolute top-[120px] left-4 md:top-[120px] md:left-4 md:right-auto flex flex-row md:flex-col gap-2 z-30">
+                {/* Mobile Selection Mode Toggles - REMOVED (Moved to Parent) */}
             </div>
         </div >
     )

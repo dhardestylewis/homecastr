@@ -12,7 +12,7 @@ import { useToast } from "@/hooks/use-toast"
 import type { PropertyForecast } from "@/app/actions/property-forecast"
 import { TimeControls } from "@/components/time-controls"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { AlertCircle } from "lucide-react"
+import { AlertCircle, Plus, Minus, RotateCcw, ArrowLeftRight, Copy } from "lucide-react"
 import { geocodeAddress, reverseGeocode } from "@/app/actions/geocode"
 
 import { cellToLatLng } from "h3-js"
@@ -25,6 +25,7 @@ function DashboardContent() {
   const [currentYear, setCurrentYear] = useState(2026)
   const [isUsingMockData, setIsUsingMockData] = useState(false)
   const [searchBarValue, setSearchBarValue] = useState<string>("")
+  const [mobileSelectionMode, setMobileSelectionMode] = useState<'replace' | 'add' | 'range'>('replace')
   const { toast } = useToast()
 
   // Reverse Geocode Effect
@@ -133,20 +134,20 @@ function DashboardContent() {
             year={currentYear}
             onMockDataDetected={handleMockDataDetected}
             onYearChange={setCurrentYear}
+            mobileSelectionMode={mobileSelectionMode}
+            onMobileSelectionModeChange={setMobileSelectionMode}
           />
         )}
 
-        {/* Floating Search Bar - Top Left */}
-        <div className="absolute top-2 left-4 right-4 md:right-auto md:w-auto z-[60]">
+        {/* Unified Sidebar Container - Top Left */}
+        <div className="absolute top-4 left-4 z-[60] flex flex-col gap-3 w-full max-w-[calc(100vw-32px)] md:w-[320px]">
+          {/* ... (SearchBox and TimeControls remain same) */}
           <SearchBox
             onSearch={handleSearch}
             placeholder="Search address or ID..."
             value={searchBarValue}
           />
-        </div>
 
-        {/* Time Controls - Top Right */}
-        <div className="absolute top-[56px] left-4 right-4 md:top-4 md:right-4 md:left-auto md:w-auto z-50">
           <TimeControls
             minYear={2019}
             maxYear={2030}
@@ -155,15 +156,87 @@ function DashboardContent() {
             onPlayStart={() => {
               console.log("[PAGE] Play started - prefetch all years triggered")
             }}
-            className="w-full md:w-[320px]"
+            className="w-full"
           />
+
+          {/* 3. Legend & (Selection Buttons + Vertical Zoom Controls) Row */}
+          <div className="flex flex-row gap-2 items-stretch h-full">
+            {/* Legend - Takes up available space */}
+            <Legend
+              className="flex-1"
+              colorMode={filters.colorMode}
+              onColorModeChange={handleColorModeChange}
+            />
+
+            {/* Controls Column: Grid on Mobile, Flex Col on Desktop */}
+            <div className="grid grid-cols-2 gap-2 md:flex md:flex-col md:w-10 shrink-0">
+
+              {/* Mobile Selection Buttons (Hidden on Desktop) */}
+              <div className="flex flex-col gap-2 md:hidden w-10">
+                <button
+                  onClick={() => setMobileSelectionMode('replace')}
+                  className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors shadow-sm font-bold text-xs ${mobileSelectionMode === 'replace' ? "bg-primary text-primary-foreground" : "glass-panel text-foreground"}`}
+                  title="Single Select"
+                >
+                  1
+                </button>
+                <button
+                  onClick={() => setMobileSelectionMode('add')}
+                  className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors shadow-sm font-bold text-xs ${mobileSelectionMode === 'add' ? "bg-primary text-primary-foreground" : "glass-panel text-foreground"}`}
+                  title="Multi Select (Add)"
+                >
+                  <Copy className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => setMobileSelectionMode('range')}
+                  className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors shadow-sm font-bold text-xs ${mobileSelectionMode === 'range' ? "bg-primary text-primary-foreground" : "glass-panel text-foreground"}`}
+                  title="Range Select"
+                >
+                  <ArrowLeftRight className="h-4 w-4" />
+                </button>
+              </div>
+
+              {/* Vertical Zoom Controls (Always Visible, Col 2 on Mobile) */}
+              <div className="flex flex-col gap-2 w-10">
+                <button
+                  onClick={() => {
+                    setMapState({ zoom: Math.min(18, mapState.zoom + 1) })
+                  }}
+                  className="w-10 h-10 glass-panel rounded-lg flex items-center justify-center text-foreground hover:bg-accent transition-colors shadow-sm active:scale-95"
+                  aria-label="Zoom In"
+                >
+                  <Plus className="h-5 w-5" />
+                </button>
+                <button
+                  onClick={() => {
+                    setMapState({ zoom: Math.max(9, mapState.zoom - 1) })
+                  }}
+                  className="w-10 h-10 glass-panel rounded-lg flex items-center justify-center text-foreground hover:bg-accent transition-colors shadow-sm active:scale-95"
+                  aria-label="Zoom Out"
+                >
+                  <Minus className="h-5 w-5" />
+                </button>
+                <button
+                  onClick={() => {
+                    setMapState({
+                      center: [-95.3698, 29.7604],
+                      zoom: 11,
+                      selectedId: null
+                    })
+                    resetFilters()
+                  }}
+                  className="w-10 h-10 glass-panel rounded-lg flex items-center justify-center text-foreground hover:bg-accent transition-colors shadow-sm active:scale-95"
+                  aria-label="Reset Map"
+                  title="Reset Map"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <Legend
-          className="absolute top-[120px] left-4 md:top-auto md:bottom-4 z-50"
-          colorMode={filters.colorMode}
-          onColorModeChange={handleColorModeChange}
-        />
+
 
 
         <ExplainerPopup />
