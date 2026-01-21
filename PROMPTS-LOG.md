@@ -316,3 +316,9 @@ clicking on a second tile instead makes that the primary tile rather than for co
 ### [2026-01-17 15:50]
 
 the dashed line seems to be rendering from a different zoom/resolution level?
+
+## 2026-01-21T11:25 - Comparison Mode Fixes
+
+### [2026-01-21 11:25]
+
+candidate comparison when mouse goes off screen shouldnt appear at all, also the highlight color for candidates should match the timeline color
