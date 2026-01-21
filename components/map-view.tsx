@@ -794,6 +794,7 @@ export function MapView({
     // Separate abort controller for batch prefetch - should not be cancelled when user scrubs
     const batchPrefetchAbortRef = useRef<AbortController | null>(null)
     const batchPrefetchInProgressRef = useRef(false)
+    const hasRunFirstPrefetchRef = useRef(false) // Track if initial prefetch has completed
 
     // Track last values to determine debounce strategy
     const lastYearRef = useRef<number>(year)
@@ -898,10 +899,13 @@ export function MapView({
     // BATCH PREFETCH - Independent effect that warms the cache for all years
     // Triggers on viewport/resolution changes, runs independently of current year
     useEffect(() => {
-        // Debounce to avoid spamming during pan/zoom
-        // But if year changed, prefetch immediately (0ms) to warm cache for timelapse
+        // Smart debouncing strategy:
+        // - 0ms on first run (page load) → instant cache warming for timelapse
+        // - 0ms on year change → immediate prefetch to fill gaps during scrubbing
+        // - 1s on subsequent viewport changes → avoid spam during pan/zoom
+        const isFirstRun = !hasRunFirstPrefetchRef.current
         const isYearChange = year !== lastYearRef.current
-        const delay = isYearChange ? 0 : 1000 // 1s debounce for viewport changes, instant for year
+        const delay = isFirstRun || isYearChange ? 0 : 1000
 
         const timer = setTimeout(() => {
             // Skip if already in progress
@@ -952,6 +956,7 @@ export function MapView({
                         console.log(`[BATCH-PREFETCH] ✓ Cached year ${y}: ${resultData.length} rows`)
                     })
                     batchPrefetchInProgressRef.current = false
+                    hasRunFirstPrefetchRef.current = true // Mark first prefetch as complete
                 })
                 .catch(err => {
                     if (err.name !== 'AbortError') {
