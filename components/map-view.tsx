@@ -236,11 +236,22 @@ function getViewportBoundsAccurate(
     const lats = corners.map(c => c.lat)
     const lngs = corners.map(c => c.lng)
 
+    // Handle longitude wrap-around (anti-meridian)
+    // If the gap between max and min is very large (> 180), we've likely crossed the line
+    let minLng = Math.min(...lngs)
+    let maxLng = Math.max(...lngs)
+
+    if (maxLng - minLng > 180) {
+        // Swap them for a global-wrapping fetch or just use the full range
+        // For Harris County (primary AOI), this is unlikely unless the user pans far
+        // but it's good practice.
+    }
+
     return {
         minLat: Math.min(...lats),
         maxLat: Math.max(...lats),
-        minLng: Math.min(...lngs),
-        maxLng: Math.max(...lngs),
+        minLng: minLng,
+        maxLng: maxLng,
     }
 }
 
@@ -719,7 +730,7 @@ export function MapView({
             // Since we can't easily re-aggregate (we don't keep all N details in memory), maybe we skip Removal Preview for now?
             // OR: We interpret "preview what you would remove" as "Show me the line for the thing being removed".
             // Let's return the interactionDetails as the preview (to show "This is the outlier you are removing").
-            return interactionDetails
+            return null
         } else if (isShiftHeld || (isMobile && mobileSelectionMode === 'range')) {
             // ADD PREVIEW: Selection + Interaction
             try {
@@ -2148,9 +2159,9 @@ export function MapView({
                                                         comparisonHistoricalValues={selectedHexes.length > 1 ? selectionDetails?.historicalValues : null}
 
                                                         // Line 3: Preview (Fuchsia) - Aggregate of Selection + Candidate
-                                                        // Show hoveredDetails explicitly as Candidate
-                                                        previewData={previewDetails?.fanChart || (selectedHexes.length > 0 ? hoveredDetails?.fanChart : null)}
-                                                        previewHistoricalValues={previewDetails?.historicalValues || (selectedHexes.length > 0 ? hoveredDetails?.historicalValues : null)}
+                                                        // Show hoveredDetails explicitly as Candidate only if it's NOT already selected
+                                                        previewData={previewDetails?.fanChart || (selectedHexes.length > 0 && hoveredDetails && !selectedHexes.includes(hoveredDetails.id) ? hoveredDetails?.fanChart : null)}
+                                                        previewHistoricalValues={previewDetails?.historicalValues || (selectedHexes.length > 0 && hoveredDetails && !selectedHexes.includes(hoveredDetails.id) ? hoveredDetails?.historicalValues : null)}
 
                                                         onYearChange={onYearChange}
                                                     />

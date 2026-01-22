@@ -13,6 +13,7 @@ const DEFAULT_FILTERS: FilterState = {
   colorMode: "value",
   layerOverride: undefined,
   usePMTiles: true,
+  useVectorMap: false,
 }
 
 export function useFilters() {
@@ -32,6 +33,7 @@ export function useFilters() {
       colorMode: (modeParam === "growth" ? "growth" : "value"),
       layerOverride: searchParams.get("layer") ? Number.parseInt(searchParams.get("layer")!, 10) : undefined,
       usePMTiles: searchParams.get("pmtiles") === "true", // Opt-in until tiles are deployed
+      useVectorMap: searchParams.get("vector") === "true",
     }
   })
 
@@ -71,6 +73,10 @@ export function useFilters() {
 
     if (filters.usePMTiles) {
       params.set("pmtiles", "true")
+    }
+
+    if (filters.useVectorMap) {
+      params.set("vector", "true")
     }
 
     if (filters.layerOverride !== undefined) {

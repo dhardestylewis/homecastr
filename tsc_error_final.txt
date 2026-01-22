@@ -1,0 +1,4 @@
+app/api/tiles/[z]/[x]/[y]/route.ts(3,41): error TS2307: Cannot find module '@/lib/supabase/server' or its corresponding type declarations.
+components/vector-map.tsx(6,44): error TS2307: Cannot find module '@/lib/types' or its corresponding type declarations.
+components/vector-map.tsx(7,52): error TS2307: Cannot find module '@/lib/utils/colors' or its corresponding type declarations.
+components/vector-map.tsx(8,20): error TS2307: Cannot find module '@/lib/utils' or its corresponding type declarations.

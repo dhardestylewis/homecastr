@@ -300,6 +300,7 @@ export interface FilterState {
   colorMode: "growth" | "value"
   layerOverride?: number
   usePMTiles?: boolean
+  useVectorMap?: boolean
   dscrMin?: number
   scoreMin?: number
   excludeAlerts?: boolean

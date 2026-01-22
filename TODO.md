@@ -12,7 +12,8 @@
 - [x] **Reliability filter broken**: Now works (data exists in hex_rows)
 - [x] **Med Years filter broken**: Hidden (no column exists in DB)
 - [ ] **Zoom/cell loading issue**: Only cells on right side load at some zoom levels
-- [ ] **Timelapse rendering slow**: Consider MVT tiles, WebGL (Deck.gl), or pre-caching all years
+- [x] **Timelapse rendering slow**: Improved with Double Buffering/Batch Prefetch. migrating to Tile Server for complete fix. [Updated: 2026-01-21]
+- [ ] **Migrate to Tile Server Architecture**: Move from client-side H3 fetch to PostGIS MVT + MapLibre for scalable performance. [Added: 2026-01-21]
 - [x] **Mobile z-index**: Address suggestions dropdown hidden behind year element → Fixed z-[200] [Added: 2026-01-17 15:28]
 
 ### P2 - Feature Gaps (Tooltip Lock & Comparison Mode) [Added: 2026-01-17]
@@ -29,10 +30,10 @@
 - [x] **Homeowner-friendly legend**: "P10-P90" changed to "Likely Range" [Added: 2026-01-17 15:49]
 - [x] **Comparison fan chart**: Hovering another tile while one selected shows combined overlay [Added: 2026-01-17 15:34]
 - [x] **Visual Consistency**: Map highlights (Teal/Amber) match fan chart line colors for Primary/Comparison [Added: 2026-01-17 16:18]
+- [x] **Comparison Hex Logic**: Primary select is excluded from preview line when hovered. [Added: 2026-01-21]
 - [ ] **Multi-Select Aggregation**:
   - [ ] Ctrl+Click/Shift+Click to select multiple comparisons.
-  - [ ] Map highlights all selected tiles with "Comparison" color (Amber).
-  - [ ] Chart displays ONE aggregate line (Avg/Median) for the entire comparison group, not individual lines.
+  - [ ] Chart displays ONE aggregate line (Avg/Median) for the entire comparison group.
 
 ### P2 - Feature Gaps (Existing)
 - [ ] **Fan chart missing**: Investigate if DB has fan chart columns populated

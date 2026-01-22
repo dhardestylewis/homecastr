@@ -1,0 +1,3 @@
+app/api/tiles/[z]/[x]/[y]/route.ts(3,41): error TS2307: Cannot find module '@/lib/supabase/server' or its corresponding type declarations.
+app/api/tiles/[z]/[x]/[y]/route.ts(101,33): error TS2345: Argument of type 'Buffer<ArrayBufferLike>' is not assignable to parameter of type 'BodyInit'.
+  Type 'Buffer<ArrayBufferLike>' is missing the following properties from type 'URLSearchParams': size, append, delete, get, and 2 more.

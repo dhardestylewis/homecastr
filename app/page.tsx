@@ -2,8 +2,10 @@
 
 import { useState, useCallback, Suspense, useEffect } from "react"
 import { MapView } from "@/components/map-view"
+import { VectorMap } from "@/components/vector-map"
 import H3Map from "@/components/h3-map"
 import { Legend } from "@/components/legend"
+import { cn } from "@/lib/utils"
 
 import { SearchBox } from "@/components/search-box"
 import { useFilters } from "@/hooks/use-filters"
@@ -121,7 +123,16 @@ function DashboardContent() {
           </Alert>
         )}
 
-        {filters.usePMTiles ? (
+        {filters.useVectorMap ? (
+          <VectorMap
+            filters={filters}
+            mapState={mapState}
+            onFeatureSelect={selectFeature}
+            onFeatureHover={hoverFeature}
+            year={currentYear}
+            className="absolute inset-0 z-0"
+          />
+        ) : filters.usePMTiles ? (
           <div className="absolute inset-0 z-0">
             <H3Map year={currentYear} colorMode={filters.colorMode} />
           </div>
@@ -158,6 +169,23 @@ function DashboardContent() {
             }}
             className="w-full"
           />
+
+          {/* Migration Toggle */}
+          <button
+            onClick={() => setFilters({ useVectorMap: !filters.useVectorMap })}
+            className={cn(
+              "w-full py-1.5 px-3 rounded-lg border text-[10px] font-bold uppercase tracking-wider transition-all shadow-sm flex items-center justify-between",
+              filters.useVectorMap
+                ? "bg-primary/20 border-primary/50 text-primary"
+                : "bg-muted/30 border-border/50 text-muted-foreground hover:bg-muted/50"
+            )}
+          >
+            <span>Tile Engine: {filters.useVectorMap ? "New (Vector)" : "Classic (H3)"}</span>
+            <div className={cn(
+              "w-2 h-2 rounded-full",
+              filters.useVectorMap ? "bg-primary animate-pulse" : "bg-muted-foreground/30"
+            )} />
+          </button>
 
           {/* 3. Legend & (Selection Buttons + Vertical Zoom Controls) Row */}
           <div className="flex flex-row gap-2 items-stretch h-full">
