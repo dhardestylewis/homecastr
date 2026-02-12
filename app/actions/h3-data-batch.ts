@@ -15,10 +15,10 @@ function asNum(x: unknown): number {
 export async function getH3DataBatch(
     h3Resolution: number,
     years: number[],
-    bounds?: ViewportBounds
+    bounds?: ViewportBounds,
 ): Promise<Record<number, H3HexagonDataV2[]>> {
     const supabase = await getSupabaseServerClient()
-    console.log(`[SERVER-BATCH] getH3DataBatch called for years: ${years.join(", ")}`)
+    console.log(`[SERVER-BATCH] getH3DataBatch called for ${years.length} years: ${years.join(", ")}`)
 
     if (years.length === 0) return {}
 

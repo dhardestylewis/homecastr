@@ -32,9 +32,9 @@ function asNum(x: unknown): number {
 export async function getH3DataV2(
     h3Resolution: number,
     forecastYear = 2026,
-    bounds?: ViewportBounds
+    bounds?: ViewportBounds,
 ): Promise<H3HexagonDataV2[]> {
-    console.log("[SERVER-V2] getH3DataV2 called (Fresh Endpoint)")
+    console.log(`[SERVER-V2] getH3DataV2 called for year ${forecastYear}`)
     try {
         const supabase = await getSupabaseServerClient()
 
