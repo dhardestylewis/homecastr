@@ -38,6 +38,8 @@ export function useFilters() {
   })
 
   // Sync filters to URL via useEffect (not during render)
+  // IMPORTANT: We preserve existing URL params (lat, lng, zoom, id) to avoid
+  // stripping map position params and causing a navigation cascade.
   useEffect(() => {
     // Skip URL update on first render (already initialized from URL)
     if (isFirstRender.current) {
@@ -45,43 +47,27 @@ export function useFilters() {
       return
     }
 
-    const params = new URLSearchParams()
+    // Start from current URL params so we preserve lat/lng/zoom/id
+    const params = new URLSearchParams(window.location.search)
 
-    if (filters.reliabilityMin > 0) {
-      params.set("rMin", filters.reliabilityMin.toString())
+    // Filter-owned keys: set or delete each one
+    const setOrDelete = (key: string, value: string | undefined, condition: boolean) => {
+      if (condition && value !== undefined) {
+        params.set(key, value)
+      } else {
+        params.delete(key)
+      }
     }
 
-    if (filters.nAcctsMin > 0) {
-      params.set("nMin", filters.nAcctsMin.toString())
-    }
-
-    if (filters.medNYearsMin > 0) {
-      params.set("yMin", filters.medNYearsMin.toString())
-    }
-
-    if (!filters.showUnderperformers) {
-      params.set("underperf", "false")
-    }
-
-    if (!filters.highlightWarnings) {
-      params.set("warnings", "false")
-    }
-
-    if (filters.colorMode !== "growth") {
-      params.set("mode", filters.colorMode)
-    }
-
-    if (filters.usePMTiles) {
-      params.set("pmtiles", "true")
-    }
-
-    if (filters.useVectorMap) {
-      params.set("vector", "true")
-    }
-
-    if (filters.layerOverride !== undefined) {
-      params.set("layer", filters.layerOverride.toString())
-    }
+    setOrDelete("rMin", filters.reliabilityMin.toString(), filters.reliabilityMin > 0)
+    setOrDelete("nMin", filters.nAcctsMin.toString(), filters.nAcctsMin > 0)
+    setOrDelete("yMin", filters.medNYearsMin.toString(), filters.medNYearsMin > 0)
+    setOrDelete("underperf", "false", !filters.showUnderperformers)
+    setOrDelete("warnings", "false", !filters.highlightWarnings)
+    setOrDelete("mode", filters.colorMode, filters.colorMode !== "growth")
+    setOrDelete("pmtiles", "true", filters.usePMTiles)
+    setOrDelete("vector", "true", filters.useVectorMap)
+    setOrDelete("layer", filters.layerOverride?.toString(), filters.layerOverride !== undefined)
 
     const queryString = params.toString()
     router.replace(queryString ? `?${queryString}` : "/", { scroll: false })

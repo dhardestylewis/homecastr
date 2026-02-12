@@ -15,7 +15,7 @@ import { getH3ChildTimelines } from "@/app/actions/h3-children"
 import { getH3DataBatch } from "@/app/actions/h3-data-batch"
 import { FanChart } from "./fan-chart"
 import { aggregateProperties, aggregateDetails } from "@/lib/utils/aggregation"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter } from "next/navigation"
 
 // Helper to get trend icon
 const getTrendIcon = (trend: "up" | "down" | "stable" | undefined) => {
@@ -455,22 +455,21 @@ export function MapView({
 
     // SYNC URL WITH MAP POSITION (Legacy Engine)
     const router = useRouter()
-    const searchParams = useSearchParams()
 
+    // Sync map position to URL params.
+    // IMPORTANT: Read current params from window.location instead of searchParams
+    // to avoid a dependency loop (searchParams changes when ANY param changes,
+    // which would re-trigger this effect causing cascading navigations and NetworkErrors).
     useEffect(() => {
         const timer = setTimeout(() => {
             const { zoom } = getZoomConstants(transform.scale)
-            // Reverse engineering center from offsets is complex in this custom engine.
-            // But we can approximate or use `canvasToLatLng` for the center point.
-            // Center of canvas (assuming 800x600 or current size)
-            // We need current canvas size. separate ref?
             if (!containerRef.current) return
             const width = containerRef.current.clientWidth || 800
             const height = containerRef.current.clientHeight || 600
 
             const center = canvasToLatLng(width / 2, height / 2, width, height, transform, basemapCenter)
 
-            const params = new URLSearchParams(searchParams.toString())
+            const params = new URLSearchParams(window.location.search)
             params.set("lat", center.lat.toFixed(5))
             params.set("lng", center.lng.toFixed(5))
             params.set("zoom", zoom.toFixed(2))
@@ -478,7 +477,7 @@ export function MapView({
             router.replace(`?${params.toString()}`, { scroll: false })
         }, 500) // Debounce URL updates
         return () => clearTimeout(timer)
-    }, [transform, searchParams, router, basemapCenter])
+    }, [transform, router, basemapCenter])
 
 
     const [isDragging, setIsDragging] = useState(false)
