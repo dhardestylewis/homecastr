@@ -49,7 +49,7 @@
     "embla-carousel-react": "8.5.1",
     "h3-js": "4.4.0",
     "input-otp": "1.4.1",
-    "leaflet": "^1.9.4",
+
     "lucide-react": "^0.454.0",
     "maplibre-gl": "5.16.0",
     "next": "16.0.10",
@@ -61,7 +61,7 @@
     "react-day-picker": "9.8.0",
     "react-dom": "19.2.0",
     "react-hook-form": "^7.60.0",
-    "react-leaflet": "^4.2.1",
+
     "react-resizable-panels": "^2.1.7",
     "recharts": "2.15.4",
     "sonner": "^1.7.4",
@@ -72,7 +72,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.9",
-    "@types/leaflet": "^1.9.8",
+
     "@types/node": "^22",
     "@types/pg": "^8.16.0",
     "@types/react": "^19",

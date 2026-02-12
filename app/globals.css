@@ -124,58 +124,6 @@
   }
 }
 
-/* Leaflet map styles */
-.leaflet-container {
-  font-family: var(--font-sans);
-  background: var(--sidebar);
-}
-
-.leaflet-tooltip {
-  background: var(--card);
-  color: var(--card-foreground);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 8px 12px;
-  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.3), 0 2px 4px -2px rgb(0 0 0 / 0.3);
-}
-
-.leaflet-tooltip-top:before,
-.leaflet-tooltip-bottom:before,
-.leaflet-tooltip-left:before,
-.leaflet-tooltip-right:before {
-  border-top-color: var(--card);
-}
-
-.leaflet-tooltip-bottom:before {
-  border-bottom-color: var(--card);
-}
-
-.leaflet-control-zoom {
-  border: 1px solid var(--border) !important;
-  border-radius: var(--radius) !important;
-  overflow: hidden;
-}
-
-.leaflet-control-zoom a {
-  background: var(--card) !important;
-  color: var(--card-foreground) !important;
-  border-bottom-color: var(--border) !important;
-}
-
-.leaflet-control-zoom a:hover {
-  background: var(--secondary) !important;
-}
-
-.leaflet-control-attribution {
-  background: var(--card) !important;
-  color: var(--muted-foreground) !important;
-  font-size: 10px;
-}
-
-.leaflet-control-attribution a {
-  color: var(--primary) !important;
-}
-
 /* Custom scrollbar for panels */
 .custom-scrollbar::-webkit-scrollbar {
   width: 6px;
