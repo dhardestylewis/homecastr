@@ -94,7 +94,8 @@ export async function getH3DataV2(
         const chunks: string[][] = []
         for (let i = 0; i < ids.length; i += CHUNK) chunks.push(ids.slice(i, i + CHUNK))
 
-        const results = await Promise.all(
+        // Uses Promise.allSettled so a single chunk failure doesn't discard all results
+        const settled = await Promise.allSettled(
             chunks.map(async (idChunk) => {
                 const [rowsRes, detailsRes] = await Promise.all([
                     // hex_rows does NOT have alert_pct or sample_accuracy
@@ -126,8 +127,19 @@ export async function getH3DataV2(
             }),
         )
 
-        const rows_all = results.flatMap((r) => r.rows)
-        const details_all = results.flatMap((r) => r.details)
+        // Collect successful results, log failures
+        const successfulResults = settled
+            .filter((s): s is PromiseFulfilledResult<{ rows: any[]; details: any[] }> => {
+                if (s.status === "rejected") {
+                    console.error("[v0] chunk failed (partial results preserved):", s.reason)
+                    return false
+                }
+                return true
+            })
+            .map((s) => s.value)
+
+        const rows_all = successfulResults.flatMap((r) => r.rows)
+        const details_all = successfulResults.flatMap((r) => r.details)
 
         console.log(`[v0] year=${year} res=${res}: hex_rows=${rows_all.length}, hex_details=${details_all.length}`)
 

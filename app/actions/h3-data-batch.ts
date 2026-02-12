@@ -80,10 +80,11 @@ export async function getH3DataBatch(
     const details_all: any[] = []
 
     // Limited concurrency to avoid overwhelming Supabase
+    // Uses Promise.allSettled so a single chunk failure doesn't discard all results
     const CONCURRENCY = 4
     for (let ci = 0; ci < chunks.length; ci += CONCURRENCY) {
         const batch = chunks.slice(ci, ci + CONCURRENCY)
-        await Promise.all(
+        const settled = await Promise.allSettled(
             batch.map(async (idChunk) => {
                 const [rowsRes, detailsRes] = await Promise.all([
                     // hex_rows does NOT have alert_pct or sample_accuracy
@@ -110,6 +111,12 @@ export async function getH3DataBatch(
                 if (detailsRes.data) details_all.push(...detailsRes.data)
             }),
         )
+        // Log any chunk failures without aborting the whole batch
+        for (const s of settled) {
+            if (s.status === "rejected") {
+                console.error("[v0] batch chunk failed (partial results preserved):", s.reason)
+            }
+        }
     }
 
     console.log(`[v0] batch totals: ${rows_all.length} rows, ${details_all.length} details`)

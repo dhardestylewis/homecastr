@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import type React from "react"
 import { getH3DataV2 } from "@/app/actions/h3-data-v2"
@@ -834,6 +834,8 @@ export function MapView({
     const batchPrefetchAbortRef = useRef<AbortController | null>(null)
     const batchPrefetchInProgressRef = useRef(false)
     const hasRunFirstPrefetchRef = useRef(false) // Track if initial prefetch has completed
+    const initialFetchCompleteRef = useRef(false) // Gate: don't batch until first main fetch completes
+    const lastYearForBatchRef = useRef<number>(year) // Separate year tracking for batch effect (avoids shared ref race)
 
     // Offscreen canvas for double buffering to prevent flicker
     const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -887,19 +889,10 @@ export function MapView({
                 return
             }
 
-            // Smart abort strategy for timelapse:
-            // - If we have a cache MISS for the new year, DON'T abort previous fetch
-            //   (let it complete and populate cache for next timelapse loop)
-            // - Only abort if we have a cache HIT (switching to already-loaded data)
-            // This prevents rapid year changes (timelapse) from cancelling fetches
-            const willUseCacheForNewYear = h3DataCache.current.has(cacheKey)
-
-            if (abortControllerRef.current && willUseCacheForNewYear) {
-                console.log('[FETCH] Aborting previous fetch (new year has cached data)')
-                abortControllerRef.current.abort()
-            } else if (abortControllerRef.current) {
-                console.log('[FETCH] Keeping previous fetch alive (new year needs data)')
-            }
+            // We intentionally do NOT abort previous fetches here.
+            // At this point we have a cache MISS (cache HITs return early above),
+            // so the previous fetch is populating cache for timelapse playback.
+            // Let it finish in the background while we start a new fetch.
             abortControllerRef.current = new AbortController()
 
             setIsLoadingData(true)
@@ -926,6 +919,7 @@ export function MapView({
                     h3DataCache.current.set(cacheKey, validData)
                     setRealHexData(validData)
                     setIsLoadingData(false)
+                    initialFetchCompleteRef.current = true // Ungate batch prefetch
 
                     // NOTE: Batch prefetch is now handled in a separate useEffect below
 
@@ -949,14 +943,21 @@ export function MapView({
 
     // BATCH PREFETCH - Independent effect that warms the cache for all years
     // Triggers on viewport/resolution changes, runs independently of current year
+    // Gated: waits until the first main data fetch completes to avoid mount-storm spam
     useEffect(() => {
+        // Don't start batch prefetching until the first main fetch has completed.
+        // This prevents 4-6 redundant batch calls during initial mount (canvas resize,
+        // transform sync from URL, etc.)
+        if (!initialFetchCompleteRef.current) return
+
         // Smart debouncing strategy:
-        // - 0ms on first run (page load) → instant cache warming for timelapse
+        // - 0ms on first run after gate opens → instant cache warming for timelapse
         // - 0ms on year change → immediate prefetch to fill gaps during scrubbing
-        // - 1s on subsequent viewport changes → avoid spam during pan/zoom
+        // - 1.5s on subsequent viewport changes → avoid spam during pan/zoom
         const isFirstRun = !hasRunFirstPrefetchRef.current
-        const isYearChange = year !== lastYearRef.current
-        const delay = isFirstRun || isYearChange ? 0 : 1000
+        const isYearChange = year !== lastYearForBatchRef.current
+        const delay = isFirstRun || isYearChange ? 0 : 1500
+        lastYearForBatchRef.current = year
 
         const timer = setTimeout(() => {
             // Skip if already in progress
@@ -974,8 +975,11 @@ export function MapView({
             )
 
             // Build list of years that need prefetching
+            // Range 2019-2030 matches the TimeControls UI min/max year
+            const MIN_YEAR = 2019
+            const MAX_YEAR = 2030
             const yearsToFetch: number[] = []
-            for (let targetYear = 2019; targetYear <= 2032; targetYear++) {
+            for (let targetYear = MIN_YEAR; targetYear <= MAX_YEAR; targetYear++) {
                 if (targetYear === year) continue // Skip current year (fetched by main effect)
 
                 const targetKey = `v${CACHE_VERSION}-${currentH3Res}-${targetYear}-${bounds.minLat.toFixed(2)}-${bounds.maxLat.toFixed(2)}-${bounds.minLng.toFixed(2)}-${bounds.maxLng.toFixed(2)}`
@@ -1004,7 +1008,7 @@ export function MapView({
                         const y = parseInt(yStr)
                         const key = `v${CACHE_VERSION}-${currentH3Res}-${y}-${bounds.minLat.toFixed(2)}-${bounds.maxLat.toFixed(2)}-${bounds.minLng.toFixed(2)}-${bounds.maxLng.toFixed(2)}`
                         h3DataCache.current.set(key, resultData)
-                        console.log(`[BATCH-PREFETCH] ✓ Cached year ${y}: ${resultData.length} rows`)
+                        console.log(`[BATCH-PREFETCH] Cached year ${y}: ${resultData.length} rows`)
                     })
                     batchPrefetchInProgressRef.current = false
                     hasRunFirstPrefetchRef.current = true // Mark first prefetch as complete
@@ -1131,7 +1135,6 @@ export function MapView({
                     )
                 })
 
-            setFilteredHexes(hexagons)
             setFilteredHexes(hexagons)
             // setH3Resolution(currentH3Res) // This might be redundant or causing loops if it updates mapState -> transform -> effect
             // If we need to sync resolution, do it only if changed?
