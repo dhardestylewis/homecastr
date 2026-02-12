@@ -71,7 +71,9 @@ export async function getH3DataBatch(
 
     // 2. Details Query - Fetch for ALL requested years in one go using IN()
     // We fetch details for all these IDs across all the requested years.
-    const chunkSize = 500
+    // Chunk size must account for year multiplier: each ID returns up to `years.length` rows.
+    // Supabase default limit is 1000 rows per request. With 13 years, max ~75 IDs per chunk.
+    const chunkSize = Math.max(50, Math.floor(900 / years.length))
     const chunks: string[][] = []
     for (let i = 0; i < ids.length; i += chunkSize) chunks.push(ids.slice(i, i + chunkSize))
 
@@ -79,8 +81,12 @@ export async function getH3DataBatch(
     let details_all: any[] = []
     let rows_all: any[] = []
 
-    await Promise.all(
-        chunks.map(async (idChunk) => {
+    // Process chunks with limited concurrency to avoid overwhelming Supabase
+    const CONCURRENCY = 4
+    for (let ci = 0; ci < chunks.length; ci += CONCURRENCY) {
+        const batch = chunks.slice(ci, ci + CONCURRENCY)
+        await Promise.all(
+            batch.map(async (idChunk) => {
             // Parallel fetch: Hex Rows + Hex Details
             // Note: We use .in("forecast_year", years) to get all years at once
             const [rowsResult, detailsResult] = await Promise.all([
@@ -103,10 +109,17 @@ export async function getH3DataBatch(
                 // Removed .limit() - same reasoning as above
             ])
 
+            if (rowsResult.error) {
+                console.error("[DBG-BATCH] hex_rows chunk error", rowsResult.error.message)
+            }
+            if (detailsResult.error) {
+                console.error("[DBG-BATCH] hex_details chunk error", detailsResult.error.message)
+            }
             if (rowsResult.data) rows_all.push(...rowsResult.data)
             if (detailsResult.data) details_all.push(...detailsResult.data)
         })
-    )
+        )
+    }
 
     console.log(`[DBG-BATCH] Fetched total: ${rows_all.length} rows, ${details_all.length} details`)
 
