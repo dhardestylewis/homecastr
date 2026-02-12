@@ -86,8 +86,8 @@ export async function getH3DataBatch(
             const [rowsResult, detailsResult] = await Promise.all([
                 supabase
                     .from("h3_precomputed_hex_rows")
-                    .select("h3_id, property_count, opportunity, reliability, alert_pct, med_predicted_value, forecast_year")
-                    // NOTE: sample_accuracy does NOT exist in hex_rows, only in hex_details
+                    .select("h3_id, property_count, opportunity, reliability, med_predicted_value, forecast_year")
+                    // NOTE: sample_accuracy and alert_pct do NOT exist in hex_rows, only in hex_details
                     .in("forecast_year", years) // Batch Years
                     .eq("h3_res", res)
                     .in("h3_id", idChunk),

@@ -112,8 +112,8 @@ export async function getH3DataV2(
                     supabase
                         .from("h3_precomputed_hex_rows")
                         .select(
-                            "h3_id, property_count, opportunity, reliability, alert_pct, med_predicted_value"
-                            // NOTE: sample_accuracy does NOT exist in hex_rows, only in hex_details
+                            "h3_id, property_count, opportunity, reliability, med_predicted_value"
+                            // NOTE: sample_accuracy and alert_pct do NOT exist in hex_rows, only in hex_details
                         )
                         .eq("forecast_year", year)
                         .eq("h3_res", res)
