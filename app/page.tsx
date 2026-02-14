@@ -19,6 +19,8 @@ import { geocodeAddress, reverseGeocode } from "@/app/actions/geocode"
 
 import { cellToLatLng } from "h3-js"
 import { ExplainerPopup } from "@/components/explainer-popup"
+import { ChatPanel, type MapAction } from "@/components/chat-panel"
+import { MessageSquare } from "lucide-react"
 
 function DashboardContent() {
   const { filters, setFilters, resetFilters } = useFilters()
@@ -28,7 +30,22 @@ function DashboardContent() {
   const [isUsingMockData, setIsUsingMockData] = useState(false)
   const [searchBarValue, setSearchBarValue] = useState<string>("")
   const [mobileSelectionMode, setMobileSelectionMode] = useState<'replace' | 'add' | 'range'>('replace')
+  const [isChatOpen, setIsChatOpen] = useState(false)
   const { toast } = useToast()
+
+  // Handle map actions from chat (smooth fly-to)
+  const handleChatMapAction = useCallback((action: MapAction) => {
+    setMapState({
+      center: [action.lng, action.lat],
+      zoom: action.zoom,
+      ...(action.select_hex_id ? { selectedId: action.select_hex_id } : {}),
+    })
+    toast({
+      title: "Map updated",
+      description: `Navigating to ${action.lat.toFixed(4)}, ${action.lng.toFixed(4)}`,
+      duration: 2000,
+    })
+  }, [setMapState, toast])
 
   // Reverse Geocode Effect
   useEffect(() => {
@@ -150,14 +167,36 @@ function DashboardContent() {
           />
         )}
 
+        {/* Chat Panel Overlay */}
+        <ChatPanel
+          isOpen={isChatOpen}
+          onClose={() => setIsChatOpen(false)}
+          onMapAction={handleChatMapAction}
+        />
+
         {/* Unified Sidebar Container - Top Left */}
-        <div className="absolute top-4 left-4 z-[60] flex flex-col gap-3 w-full max-w-[calc(100vw-32px)] md:w-[320px]">
-          {/* ... (SearchBox and TimeControls remain same) */}
-          <SearchBox
-            onSearch={handleSearch}
-            placeholder="Search address or ID..."
-            value={searchBarValue}
-          />
+        <div className={`absolute top-4 left-4 z-[60] flex flex-col gap-3 w-full max-w-[calc(100vw-32px)] md:w-[320px] transition-all duration-300 ${isChatOpen ? 'md:left-[416px]' : ''}`}>
+          {/* Search + Chat Toggle Row */}
+          <div className="flex items-center gap-2">
+            <SearchBox
+              onSearch={handleSearch}
+              placeholder="Search address or ID..."
+              value={searchBarValue}
+            />
+            <button
+              onClick={() => setIsChatOpen(!isChatOpen)}
+              className={cn(
+                "w-10 h-10 rounded-lg flex items-center justify-center transition-all shadow-sm shrink-0",
+                isChatOpen
+                  ? "bg-primary text-primary-foreground"
+                  : "glass-panel text-foreground hover:bg-accent"
+              )}
+              aria-label={isChatOpen ? "Close chat" : "Open AI chat"}
+              title="Chat with Homecastr AI"
+            >
+              <MessageSquare className="h-4 w-4" />
+            </button>
+          </div>
 
           <TimeControls
             minYear={2019}
