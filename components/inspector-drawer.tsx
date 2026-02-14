@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   DollarSign,
   ShieldAlert,
+  Bot,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
@@ -27,6 +28,7 @@ interface InspectorDrawerProps {
   onClose: () => void
   year?: number
   className?: string
+  onConsultAI?: (details: { predictedValue: number | null; opportunityScore: number | null; capRate: number | null }) => void
 }
 
 async function fetchDetails(id: string, year: number): Promise<DetailsResponse | null> {
@@ -94,7 +96,7 @@ function safeFormatInt(value: number | null | undefined): string {
 // Component
 // =============================================================================
 
-export function InspectorDrawer({ selectedId, onClose, year = 2026, className }: InspectorDrawerProps) {
+export function InspectorDrawer({ selectedId, onClose, year = 2026, className, onConsultAI }: InspectorDrawerProps) {
   const [details, setDetails] = useState<DetailsResponse | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -323,29 +325,49 @@ export function InspectorDrawer({ selectedId, onClose, year = 2026, className }:
           </div>
 
           {/* Actions */}
-          <div className="p-3 border-t border-border flex gap-2">
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="outline" size="sm" className="flex-1 bg-transparent" onClick={handleCopyLink}>
-                    <Copy className="h-3.5 w-3.5 mr-1.5" />
-                    Copy Link
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Copy shareable link</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="outline" size="sm" className="flex-1 bg-transparent" onClick={handleDownload}>
-                    <Download className="h-3.5 w-3.5 mr-1.5" />
-                    Download
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Download as JSON</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+          <div className="p-3 border-t border-border space-y-2">
+            {/* Talk to Homecastr Live Agent */}
+            {onConsultAI && details && (
+              <Button
+                size="sm"
+                className="w-full bg-primary/15 hover:bg-primary/25 border border-primary/30 text-primary font-semibold"
+                variant="outline"
+                onClick={() =>
+                  onConsultAI({
+                    predictedValue: details.proforma?.predicted_value ?? null,
+                    opportunityScore: details.opportunity?.value ?? null,
+                    capRate: details.proforma?.cap_rate ?? null,
+                  })
+                }
+              >
+                <Bot className="h-3.5 w-3.5 mr-1.5" />
+                Talk to Homecastr
+              </Button>
+            )}
+            <div className="flex gap-2">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="outline" size="sm" className="flex-1 bg-transparent" onClick={handleCopyLink}>
+                      <Copy className="h-3.5 w-3.5 mr-1.5" />
+                      Copy Link
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Copy shareable link</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="outline" size="sm" className="flex-1 bg-transparent" onClick={handleDownload}>
+                      <Download className="h-3.5 w-3.5 mr-1.5" />
+                      Download
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Download as JSON</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
           </div>
         </>
       )

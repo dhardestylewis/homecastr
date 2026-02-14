@@ -14,13 +14,22 @@ import { useToast } from "@/hooks/use-toast"
 import type { PropertyForecast } from "@/app/actions/property-forecast"
 import { TimeControls } from "@/components/time-controls"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { AlertCircle, Plus, Minus, RotateCcw, ArrowLeftRight, Copy } from "lucide-react"
+import { AlertCircle, Plus, Minus, RotateCcw, ArrowLeftRight, Copy, Bot } from "lucide-react"
 import { geocodeAddress, reverseGeocode } from "@/app/actions/geocode"
 
-import { cellToLatLng } from "h3-js"
+import { cellToLatLng, latLngToCell } from "h3-js"
+import { getH3CellDetails } from "@/app/actions/h3-details"
 import { ExplainerPopup } from "@/components/explainer-popup"
 import { ChatPanel, type MapAction } from "@/components/chat-panel"
 import { MessageSquare } from "lucide-react"
+import { createTavusConversation } from "@/app/actions/tavus"
+import dynamic from "next/dynamic"
+
+// Dynamic import with SSR disabled — daily-js needs browser APIs
+const TavusMiniWindow = dynamic(
+  () => import("@/components/tavus-mini-window").then((mod) => mod.TavusMiniWindow),
+  { ssr: false }
+)
 
 function DashboardContent() {
   const { filters, setFilters, resetFilters } = useFilters()
@@ -32,6 +41,10 @@ function DashboardContent() {
   const [mobileSelectionMode, setMobileSelectionMode] = useState<'replace' | 'add' | 'range'>('replace')
   const [isChatOpen, setIsChatOpen] = useState(false)
   const { toast } = useToast()
+
+  // Tavus Homecastr state
+  const [tavusConversationUrl, setTavusConversationUrl] = useState<string | null>(null)
+  const [isTavusLoading, setIsTavusLoading] = useState(false)
 
   // Handle map actions from chat (smooth fly-to)
   const handleChatMapAction = useCallback((action: MapAction) => {
@@ -121,6 +134,68 @@ function DashboardContent() {
     setFilters({ colorMode: mode })
   }, [setFilters])
 
+  // Homecastr handler (called with pre-fetched details from tooltip buttons)
+  const handleConsultAI = useCallback(async (details: {
+    predictedValue: number | null
+    opportunityScore: number | null
+    capRate: number | null
+  }) => {
+    if (isTavusLoading) return
+
+    setIsTavusLoading(true)
+    try {
+      const result = await createTavusConversation({
+        predictedValue: details.predictedValue,
+        opportunityScore: details.opportunityScore,
+        capRate: details.capRate,
+      })
+      setTavusConversationUrl(result.conversation_url)
+    } catch (err) {
+      console.error("[TAVUS] Failed to create conversation:", err)
+      toast({
+        title: "Homecastr Unavailable",
+        description: "Could not connect to Homecastr agent. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsTavusLoading(false)
+    }
+  }, [isTavusLoading, toast])
+
+  // Floating button handler — fetches details on the fly from map center or selected hex
+  const handleFloatingConsultAI = useCallback(async () => {
+    if (isTavusLoading) return
+
+    setIsTavusLoading(true)
+    try {
+      // Try to use selected hex first, otherwise derive from map center
+      let h3Id = mapState.selectedId
+      if (!h3Id) {
+        const [lng, lat] = mapState.center
+        h3Id = latLngToCell(lat, lng, 8)
+      }
+
+      // Fetch details from Supabase
+      const details = await getH3CellDetails(h3Id, currentYear)
+
+      const result = await createTavusConversation({
+        predictedValue: details?.proforma?.predicted_value ?? null,
+        opportunityScore: details?.opportunity?.value ?? null,
+        capRate: details?.proforma?.cap_rate ?? null,
+      })
+      setTavusConversationUrl(result.conversation_url)
+    } catch (err) {
+      console.error("[TAVUS] Failed to create conversation:", err)
+      toast({
+        title: "Homecastr Unavailable",
+        description: "Could not connect to Homecastr agent. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsTavusLoading(false)
+    }
+  }, [isTavusLoading, toast, mapState.selectedId, mapState.center, currentYear])
+
   return (
     <div className="h-dvh flex flex-col">
       {/* Full-screen Map Container */}
@@ -149,6 +224,7 @@ function DashboardContent() {
             onFeatureHover={hoverFeature}
             year={currentYear}
             className="absolute inset-0 z-0"
+            onConsultAI={handleConsultAI}
           />
         ) : filters.usePMTiles ? (
           <div className="absolute inset-0 z-0">
@@ -165,6 +241,7 @@ function DashboardContent() {
             onYearChange={setCurrentYear}
             mobileSelectionMode={mobileSelectionMode}
             onMobileSelectionModeChange={setMobileSelectionMode}
+            onConsultAI={handleConsultAI}
           />
         )}
 
@@ -308,6 +385,38 @@ function DashboardContent() {
 
 
         <ExplainerPopup />
+
+        {/* Floating Homecastr Live Agent Button — always visible, bottom-left */}
+        {!tavusConversationUrl && !isTavusLoading && (
+          <button
+            onClick={handleFloatingConsultAI}
+            className="fixed bottom-5 left-5 z-[9999] flex items-center gap-2.5 px-5 py-3 rounded-2xl bg-[#16161e] hover:bg-[#1e1e2a] border border-white/15 hover:border-primary/40 text-white shadow-2xl transition-all hover:scale-105 active:scale-95 group"
+          >
+            <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center group-hover:bg-primary/30 transition-colors">
+              <Bot className="w-4 h-4 text-primary" />
+            </div>
+            <div className="flex flex-col items-start">
+              <span className="text-xs font-semibold text-white/90">Talk to Homecastr Live Agent</span>
+              <span className="text-[10px] text-white/40">Powered by Tavus</span>
+            </div>
+          </button>
+        )}
+
+        {/* Homecastr Loading Indicator */}
+        {isTavusLoading && (
+          <div className="fixed bottom-5 left-5 z-[10000] bg-[#16161e] text-white/90 rounded-2xl px-5 py-4 shadow-2xl border border-white/10 flex items-center gap-3">
+            <div className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+            <span className="text-xs font-medium">Connecting to Homecastr...</span>
+          </div>
+        )}
+
+        {/* Tavus AI Analyst Mini Window */}
+        {tavusConversationUrl && !isTavusLoading && (
+          <TavusMiniWindow
+            conversationUrl={tavusConversationUrl}
+            onClose={() => setTavusConversationUrl(null)}
+          />
+        )}
       </main>
     </div>
   )

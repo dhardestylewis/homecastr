@@ -8,7 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { cn } from "@/lib/utils"
 import { getOpportunityColor, getValueColor, formatOpportunity, formatCurrency, formatReliability } from "@/lib/utils/colors"
-import { TrendingUp, TrendingDown, Minus, Building2, X } from "lucide-react"
+import { TrendingUp, TrendingDown, Minus, Building2, X, Bot } from "lucide-react"
 import type { FilterState, FeatureProperties, MapState, DetailsResponse } from "@/lib/types"
 import { getH3CellDetails } from "@/app/actions/h3-details"
 import { getH3ChildTimelines } from "@/app/actions/h3-children"
@@ -123,6 +123,7 @@ interface MapViewProps {
     onYearChange?: (year: number) => void
     mobileSelectionMode?: 'replace' | 'add' | 'range'
     onMobileSelectionModeChange?: (mode: 'replace' | 'add' | 'range') => void
+    onConsultAI?: (details: { predictedValue: number | null; opportunityScore: number | null; capRate: number | null }) => void
 }
 
 const HARRIS_COUNTY_CENTER = { lng: -95.3698, lat: 29.7604 }
@@ -347,7 +348,8 @@ export function MapView({
     onMockDataDetected,
     onYearChange,
     mobileSelectionMode,
-    onMobileSelectionModeChange
+    onMobileSelectionModeChange,
+    onConsultAI
 }: MapViewProps) {
     const basemapCenter = useMemo(() => ({ lng: -95.3698, lat: 29.7604 }), [])
     const [h3Resolution, setH3Resolution] = useState<number>(0)
@@ -2246,6 +2248,26 @@ export function MapView({
                                                 <div className="text-xs font-medium text-foreground">{formatReliability(displayProps.R)}</div>
                                             </div>
                                         </div>
+
+                                        {/* Talk to Homecastr Live Agent Button */}
+                                        {lockedMode && onConsultAI && (
+                                            <div className="pt-2 mt-1 border-t border-border/50">
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation()
+                                                        onConsultAI({
+                                                            predictedValue: displayDetails?.proforma?.predicted_value ?? null,
+                                                            opportunityScore: displayDetails?.opportunity?.value ?? null,
+                                                            capRate: displayDetails?.proforma?.cap_rate ?? null,
+                                                        })
+                                                    }}
+                                                    className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-primary/15 hover:bg-primary/25 border border-primary/30 text-primary text-xs font-semibold transition-all hover:scale-[1.02] active:scale-[0.98]"
+                                                >
+                                                    <Bot className="w-3.5 h-3.5" />
+                                                    Talk to Homecastr
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
                                 )
                                 }

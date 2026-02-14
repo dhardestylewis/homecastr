@@ -2,7 +2,7 @@
 
 import { useMemo } from "react"
 import { createPortal } from "react-dom"
-import { TrendingUp, TrendingDown, Minus, Building2 } from "lucide-react"
+import { TrendingUp, TrendingDown, Minus, Building2, Bot } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { FanChart } from "@/components/fan-chart"
 import type { DetailsResponse, FeatureProperties, FanChartData } from "@/lib/types"
@@ -66,6 +66,8 @@ interface MapTooltipProps {
     onTouchEnd?: (e: React.TouchEvent) => void
     // Optional coord overrides if not importing h3-js
     coordinates?: [number, number]
+    // Tavus AI Analyst callback
+    onConsultAI?: () => void
 }
 
 export function MapTooltip({
@@ -92,7 +94,8 @@ export function MapTooltip({
     onTouchStart,
     onTouchMove,
     onTouchEnd,
-    coordinates
+    coordinates,
+    onConsultAI
 }: MapTooltipProps) {
 
     const getTrendIcon = (trend: "up" | "down" | "stable" | undefined) => {
@@ -289,6 +292,22 @@ export function MapTooltip({
                                     <div className="text-xs font-medium text-foreground">{formatReliability(displayProps.R)}</div>
                                 </div>
                             </div>
+
+                            {/* Talk to Homecastr Live Agent Button */}
+                            {lockedMode && onConsultAI && (
+                                <div className="pt-2 mt-1 border-t border-border/50">
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation()
+                                            onConsultAI()
+                                        }}
+                                        className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-primary/15 hover:bg-primary/25 border border-primary/30 text-primary text-xs font-semibold transition-all hover:scale-[1.02] active:scale-[0.98]"
+                                    >
+                                        <Bot className="w-3.5 h-3.5" />
+                                        Talk to Homecastr
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     )
                     }

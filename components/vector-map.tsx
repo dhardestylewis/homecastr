@@ -60,6 +60,7 @@ interface VectorMapProps {
     onFeatureSelect: (id: string | null) => void
     onFeatureHover: (id: string | null) => void
     className?: string
+    onConsultAI?: (details: { predictedValue: number | null; opportunityScore: number | null; capRate: number | null }) => void
 }
 
 export function VectorMap({
@@ -68,7 +69,8 @@ export function VectorMap({
     year,
     onFeatureSelect,
     onFeatureHover,
-    className
+    className,
+    onConsultAI
 }: VectorMapProps) {
     const mapContainerRef = useRef<HTMLDivElement>(null)
     const mapRef = useRef<maplibregl.Map | null>(null)
@@ -993,7 +995,6 @@ export function VectorMap({
                     <MapTooltip
                         x={displayPos.globalX ?? 0}
                         y={displayPos.globalY ?? 0}
-                        // VectorMap passes fixed coord prop for header display
                         coordinates={cellToLatLng(displayId)}
                         displayProps={displayProps || {
                             id: displayId,
@@ -1001,8 +1002,8 @@ export function VectorMap({
                             stability_flag: false, robustness_flag: false, has_data: false
                         }}
                         displayDetails={displayDetails}
-                        primaryDetails={primaryDetails}  // First hex's individual details (teal line)
-                        selectionDetails={selectionDetails}  // Aggregate of all selected (orange line)
+                        primaryDetails={primaryDetails}
+                        selectionDetails={selectionDetails}
                         comparisonDetails={comparisonDetails}
                         previewDetails={previewDetails}
                         selectedHexes={selectedHexes}
@@ -1015,19 +1016,17 @@ export function VectorMap({
                         lockedMode={lockedMode}
                         showDragHint={showDragHint}
                         onYearChange={setLocalYear}
-                        // Desktop drag handlers
                         onMouseDown={lockedMode && !isMobile ? (e: React.MouseEvent) => {
                             setIsTooltipDragging(true)
                             dragStartRef.current = { x: e.clientX - tooltipOffset.x, y: e.clientY - tooltipOffset.y }
                         } : undefined}
-                        // Mobile touch handlers for swipe dismiss
                         onTouchStart={isMobile ? (e: React.TouchEvent) => {
                             setTouchStart(e.touches[0].clientY)
                         } : undefined}
                         onTouchMove={isMobile ? (e: React.TouchEvent) => {
                             if (touchStart === null) return
                             const delta = e.touches[0].clientY - touchStart
-                            if (delta > 0) setDragOffset(delta) // Only allow downward swipe
+                            if (delta > 0) setDragOffset(delta)
                         } : undefined}
                         onTouchEnd={isMobile ? () => {
                             if (dragOffset > 100) {
@@ -1037,6 +1036,14 @@ export function VectorMap({
                             setTouchStart(null)
                         } : undefined}
                         dragOffset={dragOffset}
+                        onConsultAI={onConsultAI ? () => {
+                            const details = selectionDetails || primaryDetails || hoveredDetails
+                            onConsultAI({
+                                predictedValue: details?.proforma?.predicted_value ?? null,
+                                opportunityScore: details?.opportunity?.value ?? null,
+                                capRate: details?.proforma?.cap_rate ?? null,
+                            })
+                        } : undefined}
                     />
                 )
             })()}

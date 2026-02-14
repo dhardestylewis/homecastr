@@ -12,7 +12,7 @@ const DEFAULT_FILTERS: FilterState = {
   highlightWarnings: false,
   colorMode: "value",
   layerOverride: undefined,
-  usePMTiles: true,
+  usePMTiles: false,
   useVectorMap: false,
 }
 
@@ -32,7 +32,7 @@ export function useFilters() {
       highlightWarnings: searchParams.get("warnings") === "true",
       colorMode: (modeParam === "growth" ? "growth" : "value"),
       layerOverride: searchParams.get("layer") ? Number.parseInt(searchParams.get("layer")!, 10) : undefined,
-      usePMTiles: searchParams.get("pmtiles") === "true", // Opt-in until tiles are deployed
+      usePMTiles: false, // PMTiles disabled — local tile file not available
       useVectorMap: searchParams.get("vector") === "true",
     }
   })
@@ -65,7 +65,8 @@ export function useFilters() {
     setOrDelete("underperf", "false", !filters.showUnderperformers)
     setOrDelete("warnings", "false", !filters.highlightWarnings)
     setOrDelete("mode", filters.colorMode, filters.colorMode !== "growth")
-    setOrDelete("pmtiles", "true", filters.usePMTiles)
+    // PMTiles disabled locally — don't persist to URL
+    params.delete("pmtiles")
     setOrDelete("vector", "true", filters.useVectorMap)
     setOrDelete("layer", filters.layerOverride?.toString(), filters.layerOverride !== undefined)
 
