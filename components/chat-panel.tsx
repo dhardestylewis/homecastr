@@ -81,9 +81,22 @@ export function ChatPanel({ isOpen, onClose, onMapAction }: ChatPanelProps) {
 
             // Execute map actions (fly-to, select hex)
             if (data.mapActions && data.mapActions.length > 0) {
-                // Use the last map action (most specific)
-                const action = data.mapActions[data.mapActions.length - 1]
-                onMapAction(action)
+                if (data.mapActions.length === 1) {
+                    // Single location — fly directly
+                    onMapAction(data.mapActions[0])
+                } else {
+                    // Multiple locations (e.g. comparison) — compute midpoint + zoom to show all
+                    const actions = data.mapActions as MapAction[]
+                    const avgLat = actions.reduce((s, a) => s + a.lat, 0) / actions.length
+                    const avgLng = actions.reduce((s, a) => s + a.lng, 0) / actions.length
+                    // Compute zoom: use the span between locations to pick appropriate zoom
+                    const latSpan = Math.max(...actions.map(a => a.lat)) - Math.min(...actions.map(a => a.lat))
+                    const lngSpan = Math.max(...actions.map(a => a.lng)) - Math.min(...actions.map(a => a.lng))
+                    const maxSpan = Math.max(latSpan, lngSpan)
+                    // Rough heuristic: 0.01° span ≈ zoom 15, 0.1° ≈ zoom 12, 0.5° ≈ zoom 10
+                    const fitZoom = maxSpan < 0.01 ? 15 : maxSpan < 0.05 ? 13 : maxSpan < 0.1 ? 12 : maxSpan < 0.3 ? 11 : 10
+                    onMapAction({ lat: avgLat, lng: avgLng, zoom: fitZoom })
+                }
             }
         } catch (error: any) {
             setMessages([
