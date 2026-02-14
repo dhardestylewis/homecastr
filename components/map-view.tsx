@@ -2040,9 +2040,20 @@ export function MapView({
                 const displayDetails = lockedMode ? selectionDetails : hoveredDetails
                 const displayPos = lockedMode && fixedTooltipPos ? fixedTooltipPos : tooltipData
 
-                // FIX: Check displayPos instead of tooltipData. 
-                // In locked mode, tooltipData is null (if not hovering), but displayPos is set.
-                if (!mounted || !displayPos || !displayProps) return null
+                // logic for locked mode position fallback
+                let effectivePos = displayPos
+                if (lockedMode && !effectivePos && selectedHexGeoCenter) {
+                    // We have a selection but no screen position (maybe selected via Chat)
+                    // Project the geo center to screen coordinates
+                    const screenPos = geoToCanvas(selectedHexGeoCenter.lng, selectedHexGeoCenter.lat, canvasSize.width, canvasSize.height, transform, basemapCenter)
+                    const smartPos = getSmartTooltipPos(screenPos.x, screenPos.y, window.innerWidth, window.innerHeight)
+                    effectivePos = { globalX: smartPos.x, globalY: smartPos.y }
+                }
+
+                if (!mounted || !effectivePos || !displayProps) return null
+
+                // Update: use effectivePos instead of displayPos below
+                const finalPos = effectivePos
 
                 return createPortal(
                     <div
@@ -2060,8 +2071,8 @@ export function MapView({
                             transform: `translateY(calc(${isMinimized ? '100% - 24px' : '0px'} + ${dragOffset}px))`,
                             transition: touchStart === null ? 'transform 0.3s ease-out' : 'none'
                         } : {
-                            left: displayPos?.globalX ?? 0,
-                            top: displayPos?.globalY ?? 0,
+                            left: finalPos?.globalX ?? 0,
+                            top: finalPos?.globalY ?? 0,
                             // Transform not needed for flip anymore as getSmartTooltipPos handles it.
                             // But we keep translation for Minimize logic ? No, Minimize is mobile-only.
                             // We might want verify transition?
