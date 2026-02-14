@@ -215,7 +215,7 @@ RULES:
 1. For EVERY query: call fly_to_location in the SAME tool call batch as data lookups. Never wait for data results before flying.
 2. For COMPARISONS (e.g. "compare Heights vs Montrose"): call location_to_hex for EACH neighborhood AND ONE fly_to_location centered between both (zoom 13). The location_to_hex results already include all metrics — do NOT also call compare_h3_hexes.
 3. For SUGGESTIONS/RECOMMENDATIONS within a specific area (e.g. "any suggestions in Montrose?"): fly_to_location into that neighborhood (zoom 14-15) AND call rank_h3_hexes sorted by "opportunity" descending with a tight bounding box around that neighborhood. Name each result by its nearest cross-street or landmark.
-4. NEVER give generic real estate advice, neighborhood descriptions, or lifestyle info. You are a DATA tool. If tools fail, say "I couldn't pull that data — want me to try again?" and stop.
+4. INVALID REQUESTS: If asked for generic advice ("is this a good time to buy?"), refuse. HOWEVER, if asked to explain terms ("what is predicted value?"), USE the `explain_metric` tool.
 5. Only report numbers from tool results. No editorializing or parenthetical explanations.
 6. Do NOT mention "confidence" or "reliability".
 7. Default forecast_year: 2029, h3_res: 9.
@@ -584,13 +584,17 @@ async function executeToolCall(toolName: string, args: Record<string, any>): Pro
                     .order(sortColumn, { ascending: false })
                     .limit(limit)
 
-                // If bbox provided, filter by bounds
+                // If bbox provided, filter by bounds. If NOT provided, default to broad Houston bounds to prevent full-table scan.
+                const [minLat, maxLat, minLng, maxLng] = args.bbox || [29.50, 30.17, -95.96, -94.90]
+
+                query = query
+                    .gte("lat", minLat).lte("lat", maxLat)
+                    .gte("lng", minLng).lte("lng", maxLng)
+
                 if (args.bbox) {
-                    const [minLat, maxLat, minLng, maxLng] = args.bbox
-                    query = query
-                        .gte("lat", minLat).lte("lat", maxLat)
-                        .gte("lng", minLng).lte("lng", maxLng)
                     console.log(`[Chat Tool] ${toolName} bbox: lat ${minLat}-${maxLat}, lng ${minLng}-${maxLng}`)
+                } else {
+                    console.log(`[Chat Tool] ${toolName} using default Houston bbox`)
                 }
 
                 console.log(`[Chat Tool] ${toolName} querying: year=${forecastYear}, res=${args.h3_res ?? 9}, sort=${sortColumn}, limit=${limit}`)
