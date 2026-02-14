@@ -92,9 +92,9 @@ export function ChatPanel({ isOpen, onClose, onMapAction }: ChatPanelProps) {
                     const a = data.mapActions[0]
                     const offset = computeOffset(a.zoom)
                     console.log(`[MapAction] Requested: (${a.lat.toFixed(5)}, ${a.lng.toFixed(5)}) zoom=${a.zoom}`)
-                    console.log(`[MapAction] Sidebar offset: ${offset.toFixed(5)}°`)
-                    console.log(`[MapAction] Adjusted center: (${a.lat.toFixed(5)}, ${(a.lng + offset).toFixed(5)})`)
-                    onMapAction({ ...a, lng: a.lng + offset })
+                    console.log(`[MapAction] Sidebar offset: -${offset.toFixed(5)}° (shifting map center west)`)
+                    console.log(`[MapAction] Adjusted center: (${a.lat.toFixed(5)}, ${(a.lng - offset).toFixed(5)})`)
+                    onMapAction({ ...a, lng: a.lng - offset })
                 } else {
                     // Multiple locations (e.g. comparison) — compute midpoint + zoom to show all
                     const actions = data.mapActions as MapAction[]
@@ -107,9 +107,9 @@ export function ChatPanel({ isOpen, onClose, onMapAction }: ChatPanelProps) {
                     const offset = computeOffset(fitZoom)
                     console.log(`[MapAction] ${actions.length} locations:`, actions.map(a => `(${a.lat.toFixed(5)}, ${a.lng.toFixed(5)})`))
                     console.log(`[MapAction] Midpoint: (${avgLat.toFixed(5)}, ${avgLng.toFixed(5)}), span=${maxSpan.toFixed(4)}, fitZoom=${fitZoom}`)
-                    console.log(`[MapAction] Sidebar offset: ${offset.toFixed(5)}°`)
-                    console.log(`[MapAction] Adjusted center: (${avgLat.toFixed(5)}, ${(avgLng + offset).toFixed(5)})`)
-                    onMapAction({ lat: avgLat, lng: avgLng + offset, zoom: fitZoom })
+                    console.log(`[MapAction] Sidebar offset: -${offset.toFixed(5)}° (shifting map center west)`)
+                    console.log(`[MapAction] Adjusted center: (${avgLat.toFixed(5)}, ${(avgLng - offset).toFixed(5)})`)
+                    onMapAction({ lat: avgLat, lng: avgLng - offset, zoom: fitZoom })
                 }
             }
         } catch (error: any) {

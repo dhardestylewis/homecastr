@@ -209,31 +209,23 @@ const TOOL_DEFINITIONS: OpenAI.ChatCompletionTool[] = [
     },
 ]
 
-const SYSTEM_PROMPT = `You are Homecastr, a friendly and knowledgeable real estate analytics assistant for Houston, Texas (Harris County). You help homeowners and buyers understand property value forecasts, neighborhood trends, and investment metrics.
+const SYSTEM_PROMPT = `You are Homecastr, a real estate data assistant for Houston, TX (Harris County). You look up property value forecasts and neighborhood metrics from our database.
 
-Your tools let you:
-- Resolve locations (addresses, neighborhoods, zip codes) to coordinates
-- Look up H3 hex metrics (opportunity/growth, reliability/confidence, predicted values)
-- Search and rank areas by investment criteria
-- Compare neighborhoods side-by-side
-- Explain metrics in plain English
-- Control the map (fly to locations, highlight hexes)
+RULES:
+1. For EVERY query: call fly_to_location in the SAME tool call batch as data lookups (location_to_hex, rank_h3_hexes, etc). Never wait for data results before flying.
+2. For COMPARISONS (e.g. "compare Heights vs Montrose"): In your first batch, call location_to_hex for EACH neighborhood AND ONE fly_to_location centered between both (zoom 13). Never call fly_to_location twice.
+3. NEVER give generic real estate advice, neighborhood descriptions, or lifestyle info. You are a DATA tool. If tools fail, say "I couldn't pull that data — want me to try again?" and stop.
+4. Only report numbers from tool results. No editorializing or parenthetical explanations.
+5. Do NOT mention "confidence" or "reliability".
+6. Default forecast_year: 2029, h3_res: 9.
+7. Use real Houston place names. Never generic labels.
+8. FORMAT — keep it tight:
+   - The tools return "annual_change_pct" which is already a percentage. Display it as: "Expected Change: X% each year over the next 4 years". Example: 5.0 → "Expected Change: +5% each year over the next 4 years", -26.0 → "Expected Change: -26% each year over the next 4 years".
+   - Each metric: one short line
+   - Summary: 2-3 sentences max
+   - Total response: 6-10 lines, never more than 15
 
-IMPORTANT BEHAVIOR:
-1. ALWAYS call fly_to_location in the SAME tool call batch as your data lookups — do NOT wait for data results before flying. Call fly_to_location alongside location_to_hex, rank_h3_hexes, etc.
-2. For COMPARISONS (e.g. "compare Heights vs Montrose"): call ONE fly_to_location with coordinates centered between BOTH locations and a zoom level that shows both (e.g. zoom 12-13). Do NOT call fly_to_location twice.
-3. Keep responses concise and conversational — you're talking to homeowners, not analysts.
-4. Use plain language for metrics: "growth potential" instead of "opportunity score", "predicted value" for forecasted property values.
-5. Do NOT mention or discuss the "confidence" or "reliability" metric in your responses. Only discuss growth potential, predicted value, and property count.
-6. Default to forecast_year 2029 and h3_res 9 unless the user specifies otherwise.
-7. ALWAYS name areas specifically using real Houston place names (sub-neighborhoods, cross-streets, landmarks). NEVER say generic names like "Area 1".
-8. FORMAT: Each data point should be ONE short line with just the raw value — no parenthetical explanations or characterizations. Example:
-   - Growth Potential: -0.26
-   - Predicted Value: $683,251
-   - Properties: 102
-   Keep summaries to 2-3 sentences max. Be direct and let the data speak.
-
-You have access to real data from the Homecastr database covering Harris County, TX. Your tool calls query real metrics from the database and geocode real locations. Always use the tools to look up data rather than guessing.`
+You query real data from the Homecastr database. Always use tools — never guess or make up numbers.`
 
 export async function POST(req: NextRequest) {
     try {
@@ -454,11 +446,9 @@ async function executeToolCall(toolName: string, args: Record<string, any>): Pro
                         forecast_year: data.forecast_year,
                         location: { name: locationName, lat: data.lat, lng: data.lng },
                         metrics: {
-                            opportunity: data.opportunity,
-                            reliability: data.reliability,
+                            annual_change_pct: data.opportunity != null ? Math.round(data.opportunity * 10000) / 100 : null,
                             predicted_value: data.predicted_value,
                             property_count: data.property_count,
-                            sample_accuracy: data.sample_accuracy,
                         },
                     },
                 })
@@ -501,11 +491,17 @@ async function executeToolCall(toolName: string, args: Record<string, any>): Pro
                     const forecastYear = args.forecast_year || 2029
                     const { data } = await supabase
                         .from("h3_precomputed_hex_details")
-                        .select("opportunity, reliability, predicted_value, property_count, sample_accuracy")
+                        .select("opportunity, predicted_value, property_count")
                         .eq("h3_id", hexId)
                         .eq("forecast_year", forecastYear)
                         .single()
-                    metrics = data
+                    if (data) {
+                        metrics = {
+                            annual_change_pct: data.opportunity != null ? Math.round(data.opportunity * 10000) / 100 : null,
+                            predicted_value: data.predicted_value,
+                            property_count: data.property_count,
+                        }
+                    }
                 }
 
                 const addr = place.address || {}
@@ -593,8 +589,7 @@ async function executeToolCall(toolName: string, args: Record<string, any>): Pro
                         forecast_year: row.forecast_year,
                         location: { name: locationName, lat: row.lat, lng: row.lng },
                         metrics: {
-                            opportunity: row.opportunity,
-                            reliability: row.reliability,
+                            annual_change_pct: row.opportunity != null ? Math.round(row.opportunity * 10000) / 100 : null,
                             predicted_value: row.predicted_value,
                             property_count: row.property_count,
                         },
@@ -654,18 +649,22 @@ async function executeToolCall(toolName: string, args: Record<string, any>): Pro
 
                 const highlights: string[] = []
                 if (left && right) {
-                    if ((left.opportunity ?? 0) > (right.opportunity ?? 0)) highlights.push(`${leftName} has higher growth potential`)
-                    else if ((right.opportunity ?? 0) > (left.opportunity ?? 0)) highlights.push(`${rightName} has higher growth potential`)
-                    if ((left.reliability ?? 0) > (right.reliability ?? 0)) highlights.push(`${leftName} has better confidence`)
-                    else if ((right.reliability ?? 0) > (left.reliability ?? 0)) highlights.push(`${rightName} has better confidence`)
+                    if ((left.opportunity ?? 0) > (right.opportunity ?? 0)) highlights.push(`${leftName} has a higher expected annual change`)
+                    else if ((right.opportunity ?? 0) > (left.opportunity ?? 0)) highlights.push(`${rightName} has a higher expected annual change`)
                     if ((left.predicted_value ?? 0) > (right.predicted_value ?? 0)) highlights.push(`${leftName} has higher predicted value`)
                     else if ((right.predicted_value ?? 0) > (left.predicted_value ?? 0)) highlights.push(`${rightName} has higher predicted value`)
                 }
 
+                const toMetrics = (d: any) => d ? {
+                    annual_change_pct: d.opportunity != null ? Math.round(d.opportunity * 10000) / 100 : null,
+                    predicted_value: d.predicted_value,
+                    property_count: d.property_count,
+                } : null
+
                 console.log(`[Chat Tool] compare: ${leftName} vs ${rightName}`)
                 return JSON.stringify({
-                    left: { h3_id: args.left_h3_id, name: leftName, metrics: left ? { opportunity: left.opportunity, reliability: left.reliability, predicted_value: left.predicted_value, property_count: left.property_count } : null },
-                    right: { h3_id: args.right_h3_id, name: rightName, metrics: right ? { opportunity: right.opportunity, reliability: right.reliability, predicted_value: right.predicted_value, property_count: right.property_count } : null },
+                    left: { h3_id: args.left_h3_id, name: leftName, metrics: toMetrics(left) },
+                    right: { h3_id: args.right_h3_id, name: rightName, metrics: toMetrics(right) },
                     highlights,
                 })
             } catch (e: any) {
@@ -676,8 +675,7 @@ async function executeToolCall(toolName: string, args: Record<string, any>): Pro
 
         case "explain_metric": {
             const explanations: Record<string, string> = {
-                opportunity: "Growth potential measures how much we expect property values to increase. A 10% score means values may rise about 10% by the forecast year.",
-                reliability: "Confidence tells you how certain our prediction is. 80% confidence means the forecast is well-supported by data.",
+                opportunity: "Expected annual change shows how much property values are projected to change each year over the next 4 years. For example, +5% means values are expected to rise about 5% per year.",
                 predicted_value: "The predicted median home value in this area by the forecast year, based on historical trends and market conditions.",
                 property_count: "The number of properties in this hex cell used to calculate the forecast. More properties generally means a more reliable prediction.",
                 sample_accuracy: "How accurately our model predicted past values in this area. Higher accuracy means the model performs well here.",
