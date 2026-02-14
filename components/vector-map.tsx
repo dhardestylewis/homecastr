@@ -16,6 +16,43 @@ import { MapTooltip } from "./map-tooltip"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useMapInteraction } from "@/hooks/use-map-interaction"
 
+// Tooltip positioning constants (must match MapView)
+const SIDEBAR_WIDTH = 340
+const TOOLTIP_WIDTH = 320
+const TOOLTIP_HEIGHT = 450
+
+// Helper: Ensure tooltip stays within bounds and respects Sidebar
+function getSmartTooltipPos(x: number, y: number, windowWidth: number, windowHeight: number) {
+    if (typeof window === 'undefined') return { x, y }
+
+    let left = x + 20
+    let top = y - 20
+
+    // Horizontal Constraint
+    if (left + TOOLTIP_WIDTH > windowWidth - 20) {
+        const tryLeft = x - TOOLTIP_WIDTH - 20
+        if (tryLeft < SIDEBAR_WIDTH + 10) {
+            const spaceRight = windowWidth - x
+            const spaceLeft = x - SIDEBAR_WIDTH
+            if (spaceRight > spaceLeft && spaceRight > TOOLTIP_WIDTH) {
+                left = x + 20
+            } else if (spaceLeft > TOOLTIP_WIDTH) {
+                left = tryLeft
+            } else {
+                left = Math.min(left, windowWidth - TOOLTIP_WIDTH - 10)
+            }
+        } else {
+            left = tryLeft
+        }
+    }
+
+    // Vertical Constraint
+    top = Math.max(10, Math.min(top, windowHeight - TOOLTIP_HEIGHT - 10))
+    left = Math.max(10, left)
+
+    return { x: left, y: top }
+}
+
 interface VectorMapProps {
     filters: FilterState
     mapState: MapState
@@ -89,9 +126,9 @@ export function VectorMap({
     // DATA CACHE & REFS (Avoid stale closures and trails)
     const hoveredHexRef = useRef<string | null>(null)
     const activeHoverIds = useRef<Set<string>>(new Set()) // Track all for sweep
-    const [mousePos, setMousePos] = useState<{ x: number, y: number } | null>(null)
-
-    const [tooltipProps, setTooltipProps] = useState<any>(null)
+    // Unified tooltip state (matches MapView pattern)
+    const [tooltipData, setTooltipData] = useState<{ x: number; y: number; globalX: number; globalY: number; properties: any } | null>(null)
+    const [fixedTooltipPos, setFixedTooltipPos] = useState<{ globalX: number; globalY: number } | null>(null)
 
     // Fix stale closure for isMobile in map event handlers
     const isMobileRef = useRef(isMobile)
@@ -278,9 +315,10 @@ export function VectorMap({
                     paintCandidatesRef.current.clear()
                 }
 
-                if (id) {
+                // Add to Paint Candidate Set
+                if (id && !paintCandidatesRef.current.has(id)) {
                     paintCandidatesRef.current.add(id)
-                    // Visual Feedback
+                    // Visual Feedback: Mark as Candidate
                     const sources = ["h3-a", "h3-b"]
                     sources.forEach(s => {
                         try {
@@ -297,13 +335,11 @@ export function VectorMap({
             // Standard Hover Logic (only if not painting)
             if (isPaintingRef.current) return
 
-            setMousePos({ x: e.originalEvent.clientX, y: e.originalEvent.clientY })
-
             if (!id) return
 
             // Map Vector Tile Props -> FeatureProperties
             const p = feature.properties || {}
-            setTooltipProps({
+            const properties = {
                 id: p.h3_id,
                 O: (p.opp || 0) * 100,
                 R: p.rel || 0,
@@ -314,7 +350,19 @@ export function VectorMap({
                 robustness_flag: (p.ap || 0) > 0.25,
                 has_data: (p.count || 0) > 0,
                 med_predicted_value: p.val || 0
-            })
+            }
+
+            // Only update tooltip if not in locked mode (has selection)
+            if (selectedHexesRef.current.length === 0) {
+                const smartPos = getSmartTooltipPos(e.originalEvent.clientX, e.originalEvent.clientY, window.innerWidth, window.innerHeight)
+                setTooltipData({
+                    x: e.originalEvent.clientX,
+                    y: e.originalEvent.clientY,
+                    globalX: smartPos.x,
+                    globalY: smartPos.y,
+                    properties
+                })
+            }
 
             // RANGE PREVIEW & HOVER LOGIC
             // Clear previous states
@@ -389,6 +437,7 @@ export function VectorMap({
                 // Trigger React Update for Tooltip (debounced/handled by hook mostly, but we set local state)
                 setHoveredHex(id)
                 onFeatureHover(id)
+                hoveredHexRef.current = id
             }
         }
 
@@ -396,7 +445,7 @@ export function VectorMap({
         map.on("mousemove", "h3-fill-b", handleMove)
 
         const handleLeave = () => {
-            setMousePos(null)
+            setTooltipData(null)
             const sources = ["h3-a", "h3-b"]
             activeHoverIds.current.forEach(oldId => {
                 sources.forEach(s => {
@@ -432,6 +481,7 @@ export function VectorMap({
                 })
                 selectedHexesRef.current = []
                 setSelectedHexes([])
+                setFixedTooltipPos(null)
                 onFeatureSelect(null)
                 return
             }
@@ -525,6 +575,12 @@ export function VectorMap({
             if (next.length > 0 && !isMobileRef.current) {
                 setLockedMode(true)
                 setTooltipOffset({ x: 0, y: 0 }) // Reset position
+                // Capture current mouse position for locked tooltip
+                if (e.lngLat) {
+                    const point = map.project(e.lngLat)
+                    const rect = mapContainerRef.current?.getBoundingClientRect()
+                    setFixedTooltipPos({ globalX: point.x + (rect?.left || 0) + 20, globalY: point.y + (rect?.top || 0) - 20 })
+                }
 
                 // First-time drag hint (localStorage check)
                 const hasSeenHint = localStorage.getItem("vectormap_drag_hint")
@@ -533,6 +589,8 @@ export function VectorMap({
                     localStorage.setItem("vectormap_drag_hint", "true")
                     setTimeout(() => setShowDragHint(false), 3000)
                 }
+            } else if (next.length === 0) {
+                setFixedTooltipPos(null)
             }
 
             // Update Parent
@@ -624,6 +682,33 @@ export function VectorMap({
             }
         }
 
+        // Register click and mouseup handlers
+        map.on("click", "h3-fill-a", handleClick)
+        map.on("click", "h3-fill-b", handleClick)
+        map.on("mouseup", handleMouseUp)
+        // Handle clicks on background (not on hexes) to clear selection
+        map.on("click", (e: maplibregl.MapMouseEvent) => {
+            // Only trigger if no features under click
+            const features = map.queryRenderedFeatures(e.point, { layers: ["h3-fill-a", "h3-fill-b"] })
+            if (features.length === 0) {
+                // Clear selection
+                const sources = ["h3-a", "h3-b"]
+                selectedHexesRef.current.forEach(hId => {
+                    sources.forEach(s => {
+                        try {
+                            map.setFeatureState(
+                                { source: s, sourceLayer: "default", id: hId },
+                                { selected: false, primary: false, comparison: false }
+                            )
+                        } catch (err) { /* ignore */ }
+                    })
+                })
+                selectedHexesRef.current = []
+                setSelectedHexes([])
+                setFixedTooltipPos(null)
+                onFeatureSelect(null)
+            }
+        })
 
 
             // Storage for toggle logic
@@ -890,57 +975,65 @@ export function VectorMap({
                 </div>
             )}
 
-            {/* SHARED TOOLTIP UI */}
-            {isLoaded && displayId && mousePos && (
-                <MapTooltip
-                    x={(lockedMode ? mousePos.x + 20 + tooltipOffset.x : mousePos.x + 20)}
-                    y={(lockedMode ? mousePos.y - 20 + tooltipOffset.y : mousePos.y - 20)}
-                    // VectorMap passes fixed coord prop for header display
-                    coordinates={cellToLatLng(displayId)}
-                    displayProps={tooltipProps || {
-                        id: displayId,
-                        O: 0, R: 0, n_accts: 0, med_mean_ape_pct: 0, med_mean_pred_cv_pct: 0,
-                        stability_flag: false, robustness_flag: false, has_data: false
-                    }}
-                    displayDetails={displayDetails}
-                    primaryDetails={primaryDetails}  // First hex's individual details (teal line)
-                    selectionDetails={selectionDetails}  // Aggregate of all selected (orange line)
-                    comparisonDetails={comparisonDetails}
-                    previewDetails={previewDetails}
-                    selectedHexes={selectedHexes}
-                    hoveredDetails={hoveredDetails}
-                    year={localYear}
-                    h3Resolution={h3Resolution}
-                    isLoadingDetails={isLoadingDetails}
-                    isMobile={isMobile}
-                    isMinimized={isMinimized}
-                    lockedMode={lockedMode}
-                    showDragHint={showDragHint}
-                    onYearChange={setLocalYear}
-                    // Desktop drag handlers
-                    onMouseDown={lockedMode && !isMobile ? (e: React.MouseEvent) => {
-                        setIsTooltipDragging(true)
-                        dragStartRef.current = { x: e.clientX - tooltipOffset.x, y: e.clientY - tooltipOffset.y }
-                    } : undefined}
-                    // Mobile touch handlers for swipe dismiss
-                    onTouchStart={isMobile ? (e: React.TouchEvent) => {
-                        setTouchStart(e.touches[0].clientY)
-                    } : undefined}
-                    onTouchMove={isMobile ? (e: React.TouchEvent) => {
-                        if (touchStart === null) return
-                        const delta = e.touches[0].clientY - touchStart
-                        if (delta > 0) setDragOffset(delta) // Only allow downward swipe
-                    } : undefined}
-                    onTouchEnd={isMobile ? () => {
-                        if (dragOffset > 100) {
-                            setIsMinimized(true)
-                        }
-                        setDragOffset(0)
-                        setTouchStart(null)
-                    } : undefined}
-                    dragOffset={dragOffset}
-                />
-            )}
+            {/* SHARED TOOLTIP UI - Match MapView pattern */}
+            {(() => {
+                const lockedModeActive = selectedHexes.length > 0
+                const displayProps = lockedModeActive ? tooltipData?.properties : tooltipData?.properties
+                const displayPos = lockedModeActive && fixedTooltipPos ? fixedTooltipPos : tooltipData
+
+                if (!isLoaded || !displayPos || !displayId) return null
+
+                return (
+                    <MapTooltip
+                        x={displayPos.globalX ?? 0}
+                        y={displayPos.globalY ?? 0}
+                        // VectorMap passes fixed coord prop for header display
+                        coordinates={cellToLatLng(displayId)}
+                        displayProps={displayProps || {
+                            id: displayId,
+                            O: 0, R: 0, n_accts: 0, med_mean_ape_pct: 0, med_mean_pred_cv_pct: 0,
+                            stability_flag: false, robustness_flag: false, has_data: false
+                        }}
+                        displayDetails={displayDetails}
+                        primaryDetails={primaryDetails}  // First hex's individual details (teal line)
+                        selectionDetails={selectionDetails}  // Aggregate of all selected (orange line)
+                        comparisonDetails={comparisonDetails}
+                        previewDetails={previewDetails}
+                        selectedHexes={selectedHexes}
+                        hoveredDetails={hoveredDetails}
+                        year={localYear}
+                        h3Resolution={h3Resolution}
+                        isLoadingDetails={isLoadingDetails}
+                        isMobile={isMobile}
+                        isMinimized={isMinimized}
+                        lockedMode={lockedMode}
+                        showDragHint={showDragHint}
+                        onYearChange={setLocalYear}
+                        // Desktop drag handlers
+                        onMouseDown={lockedMode && !isMobile ? (e: React.MouseEvent) => {
+                            setIsTooltipDragging(true)
+                            dragStartRef.current = { x: e.clientX - tooltipOffset.x, y: e.clientY - tooltipOffset.y }
+                        } : undefined}
+                        // Mobile touch handlers for swipe dismiss
+                        onTouchStart={isMobile ? (e: React.TouchEvent) => {
+                            setTouchStart(e.touches[0].clientY)
+                        } : undefined}
+                        onTouchMove={isMobile ? (e: React.TouchEvent) => {
+                            if (touchStart === null) return
+                            const delta = e.touches[0].clientY - touchStart
+                            if (delta > 0) setDragOffset(delta) // Only allow downward swipe
+                        } : undefined}
+                        onTouchEnd={isMobile ? () => {
+                            if (dragOffset > 100) {
+                                setIsMinimized(true)
+                            }
+                            setDragOffset(0)
+                            setTouchStart(null)
+                        } : undefined}
+                        dragOffset={dragOffset}
+                    />
+                )
+            })()}
         </div>
     )
 }

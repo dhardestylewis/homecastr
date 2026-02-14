@@ -49,6 +49,15 @@ The goal is to move the temporary download directory for HCAD data to a permanen
 - [x] **Timelapse rendering slow**: Fixed with Double Buffering + idle+RAF swap [Updated: 2026-01-21]
 - [/] **Migrate to Tile Server Architecture**: VectorMap component complete. Pending: user must run `get_tile.sql` in Supabase [Updated: 2026-01-21]
 - [x] **Mobile z-index**: Address suggestions dropdown fixed z-[200] [Added: 2026-01-17]
+- [ ] **Res 11 hex fill bug**: At outermost zoom levels in res 11, not all hexes appear filled - they fill in when zooming slightly more to inner zoom levels (classic tile engine only) [Added: 2026-02-08]
+- [ ] **VectorMap tooltip missing**: New (vector) version doesn't have fanchart tooltip popping up at all [Added: 2026-02-08]
+- [ ] **VectorMap timelapse flicker**: Flicker on new version when using timelapse [Added: 2026-02-08]
+- [ ] **Tooltip parity**: VectorMap should use exact same tooltip as MapView (classic) [Added: 2026-02-08]
+
+### P1 - Accessibility (Vercel Audit) [Added: 2026-02-08]
+- [ ] **Enable zooming/scaling**: Zooming and scaling must not be disabled
+- [ ] **ARIA hidden focusable fix**: ARIA hidden elements must not be focusable or contain focusable elements
+- [ ] **Add main landmark**: Document should have one `<main>` element
 
 ### P1 - VectorMap Full Parity Checklist
 *Derived from comprehensive analysis of MapView logic.*
@@ -90,6 +99,17 @@ The goal is to move the temporary download directory for HCAD data to a permanen
 - [ ] **Predicted value alongside current value**: Add current value display
 - [ ] **Natural boundary aggregation**: Consider using lot lines + organic aggregates (blocks, neighborhoods, school districts, zip codes) instead of H3 hexes - more intuitive for users
 
+### P2 - Explainer Popup Animation [Added: 2026-02-08]
+- [ ] **Minimize to corner**: Currently minimizing to center, should minimize to bottom-right corner
+- [ ] **Eye-tracking animation**: Make minimize animation direct user's eye to follow it for a brief moment of perception
+- [ ] **Visible minimize**: Popup should visibly minimize rather than disappear forever
+
+### P2 - Visual Theming / Skins [Added: 2026-02-08]
+- [ ] **Research Goodfire color schema**: Look up https://startups.gallery/companies/goodfire and Goodfire proper
+- [ ] **Create skin options**: Provide multiple theme/skin options based on Goodfire aesthetic
+- [ ] **Add theme toggle UI**: Add temporarily placed buttons to toggle between skins visibly on screen
+- [ ] **Skin comparison menu**: Add button or menu for comparing visual skins
+
 ### P3 - UX Improvements
 - [x] **Hide Risk Scoring section**: σ-notation metrics hidden for homeowner view
 - [x] **Data Confidence tier labels**: Shows High/Medium/Low/N/A instead of %
@@ -104,6 +124,19 @@ The goal is to move the temporary download directory for HCAD data to a permanen
 - [x] **Interactive Fan Chart**: Click fan to scrub timeline/change year [Added: 2026-01-17]
 - [x] **Mobile Controls Layout**: Repositioned Zoom/Legend/Display controls to avoid tooltip overlap [Added: 2026-01-17]
 - [x] **Swipe Threshold**: Relaxed to 50px for easier minimization [Added: 2026-01-17]
+- [ ] **Explainer copy for lay homeowners**: Revise popup text to be more accessible for lay homeowner audience [Added: 2026-02-08]
+
+### P3 - Address Search & Display [Added: 2026-02-08]
+- [ ] **Address formatting**: Remove comma between street number and street name (e.g., `1103, River Glyn Drive` → `1103 River Glyn Drive`)
+- [ ] **Hide county**: Don't display county under found address or in search bar
+- [ ] **Gentle zoom/pan**: When entering address, zoom and pan gently (smooth animation) to location
+- [ ] **Auto-show tooltip**: After address search, automatically show tooltip for innermost zoom hex on that address
+
+### P3 - Layout Shift (CLS) [Added: 2026-02-08]
+- [ ] **Fix CLS issues**: `div.p-6.border-b.border-white/10.bg-white/5.flex.justify-between.items-start` becoming smaller and shifting 2 other elements
+
+### P3 - Documentation [Added: 2026-02-08]
+- [ ] **README update**: Change "Monte Carlo" to "diffusion scenario generations"
 
 ---
 

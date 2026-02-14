@@ -2,7 +2,7 @@
 
 **Status**: READY FOR IMPLEMENTATION  
 **Date**: 2026-01-15  
-**Context**: Optimization of Properlytic Map Frontend (Next.js/Supabase)
+**Context**: Optimization of Homecastr Map Frontend (Next.js/Supabase)
 
 ## 1. Executive Summary
 The frontend requires a unified, optimized schema to reduce payload size and query complexity. The current system relies on multiple redundant tables (`h3_precomputed_hex_details`, `h3_precomputed_hex_rows`) and expensive joins. We are moving to a single partitioned table `h3_unified_forecasts` with a SQL View `view_h3_frontend_api` acting as the API contract.

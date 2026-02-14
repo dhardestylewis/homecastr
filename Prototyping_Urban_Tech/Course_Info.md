@@ -1,0 +1,169 @@
+Prototyping in Urban Tech: Project, Product, People
+
+James Piacentini, jsp2199 - Columbia GSAPP, Spring 2026
+Tuesdays 3-5pm, Fayerweather 202
+
+Course Concept (Theory)
+
+Increasingly, designers, planners, urbanists, and data analysts have become storytellers. Whether we analyze data to critique or support policy initiatives, to propose new solutions to challenges our societies face, to create clarity within the chaos of urban life, or to demonstrate an underlying truth that might not otherwise be visible, we are called to tell stories of social and physical environments, and of the people and communities that inhabit them. As experts on data, design, analysis, and visualization, we are information arbiters. As information arbiters, we have the opportunity to be information advocates.
+
+Being an information advocate requires knowing what stories to tell and how to tell them. And knowing what stories to tell requires collaboration with communities to understand their needs and integrate those needs into both our research and presentation practices. This user-centric approach to research and design is vital to the ethos and responsibilities of urban data advocacy and will guide our process during this course.
+
+Beyond the value of a user-centric approach to design thinking, as urbanists we also hold an essential role in the politics of the urban sphere. Our work has the potential to reform laws and policies, to reshape the fabric of the environment, and to activate community power. We will keep these ideas in mind as we evaluate our own positionality as the authors of our own research and designs, and consider our responsibility to our users and our audience.
+
+Course Purpose (Praxis)
+This course reframes the practice of research and data visualization toward a user-centric model and will challenge students to start with the end (users) to understand the value our work can provide. It is meant to serve as a complement to other analytics/visualization courses and provide opportunities for students to transform their work into public-facing prototypes. We will build toward an interactive product that takes user-informed functionality and data analysis as its inputs. We will reflect on and improve the practice of data analysis and urban design by connecting our projects to people through our prototyped product, such as an app, web-based map, dashboard, or other interactive digital data tool.
+
+We will seek to address urban-scale challenges through evidence-based research and community-driven agendas. We will conditionalize our work on the expectation of a clear and defined end-use case, centering our priorities on the needs of our users from research to ideation to interaction. And we will critically engage with questions around why our work matters, who it benefits, and how we can deliver it. Your research may be interesting to you, but it should also be interesting to the people and places it focuses on.
+
+We will ground our projects through a service-oriented lens, asking who will benefit from our analysis and how we can put this analysis in their hands. Users (people) generate the need for a tool (product) that derives from and drives forward our research (project). Said in another way:
+
+Project ⊃ Product ⊃ People
+
+Which project, which product, and which people will be up to students to define along the way. Students may generate new topics for this course, but they are welcome to consider concurrent work being done in other courses or revisiting previous projects to “re-imagine”. Students may work alone or in groups of two to three.
+
+Course Goals (Practice)
+
+This course will rely on students conducting specific data analytics and/or generating visualizations based on their interests and on the needs defined by their user research. We will work in Figma and Figjam boards as part of our workflow and bring in visualizations from other tools such as Adobe Creative Suite, 2D and 3D design software, and geospatial mapping programs such as ArcGIS Pro and QGIS. No prior experience or knowledge of Figma, Figjam, prototyping, coding, or UI/UX design is required for this course. While no prior data analysis or mapping experience is required, it is recommended that students have some idea of the data/visualization and topics they want to explore.
+
+Additionally, we will explore ways to host our geospatial data visualizations using Mapbox GL JS/Native and other interactive tools. Students are encouraged to explore other methods of interactive visualization based on their interest and skill levels, including physical interventions..
+
+Students will learn how to:
+
+Conduct user outreach and engagement to understand user needs
+Generate and vet project scope with ‘product owners’ and users through Agile workflows
+Employ UI/UX and data organization best practices
+Generate user flows, affinity maps, wireframes, and prototypes
+Integrate our data analytics research and visualizations into user-centered products
+Define clear product features, user stories, and metrics for success
+Create a product brief and prototype for their minimum viable product (MVP)
+(Optional) Develop a working technical alpha of their site or application
+
+Course Outline (Process)
+
+The first half of the course will focus on strategic thinking, problem definition, and developing our project ideas. Students will refine their projects and prepare their user research plans before the spring recess. The second half of the course focuses on implementing the user-centered design method, moving into the insights, ideation, and prototyping phases. We will lean on our design and analytical skills and implement a user-centric design philosophy to develop and demo an interactive minimum viable product (MVP) for the final.
+
+There will be some additional readings, tutorials, and relevant resources shared throughout the semester via Courseworks.
+
+The course schedule (subject to change) is below:
+
+Week1_Cityscape is Datascape - Jan20
+Why digital technologies/user-oriented platforms matter in planning/design
+The new ‘real’ as digital overlays on physical space
+The city is a product with too (many/few) designers and too (many/few) users
+In-class discussion: Who asked me how to live in the city?
+
+Week2_Ways of Knowing Cities - Jan27
+City as a space, a place, a product; people as inhabitants, collaborators, users
+HCI - why we build interactively
+In-class exercise: Figma/Figjam setup
+In-class discussion: Case Study selections
+Assignment given: Case Study
+
+Week3_Case Studies - Feb3
+Assignment due: Case Study
+In-class presentation: Case Studies
+Assignment given: Initial Project Proposal (1 Page)
+
+Week4_People to Product / Data to Design - Feb10
+Assignment due: Initial Project Proposal (1 Page)
+Service Oriented Design and Human Centered Design
+Methods and modes for Human Centered Design
+Conducting Research: Determining our users
+In-class exercise: Figma Basic Playground
+Assignment given: Updated Project Proposal (3 Pages)
+
+Week5_Developing Our Projects - Feb17
+Assignment due: Update Project Proposal (3 Pages)
+In-class discussion: Project Proposals Desk Crits
+In-class exercise: Figma Basic Playground
+Assignment given: User Research Plan
+
+Week6_Mapping People for People - Feb24
+Assignment due: User Research Plan
+In-class exercise: Interactive Mapping
+In-class discussion: Guest Lecture (TBD)
+Assignment given: User Research
+
+Week7_Principles of Prototyping in Action - Mar3
+Research, Insights, Ideation, Prototype, Repeat
+In-class exercise: Synthesis/Affinity Mapping/Personas/Flows
+Assignment given: Research Synthesis
+
+Week8_Research - Mar10 (Kinne Week)
+How to analyze and synthesize user feedback
+In-class exercise: Desk Crits & Figma Playground
+
+Week9_SPRING BREAK - Mar17
+
+Week10_Insights - Mar24
+Assignment due: User Research
+Assignment due: Research Synthesis
+In-class presentation: Synthesis Charette
+In-class exercise: Wireframing
+Assignment Given: Lo-Fi Wireframes
+
+Week11_Ideation - Mar31
+Assignment due: Lo-Fi Wireframes
+Mapping user needs to features to user-stories to products
+In-class presentation: Lightning Pitch
+Assignment given: Mid-Fi Wireframes
+
+Week12_Prototype - Apr7
+Assignment due: Mid-Fi Wireframes
+In-class exercise: Prototype
+In-class discussion: Desk Crits
+Assignment given: Hi-Fi Wireframes
+
+Week13_Prototype - Apr14
+Assignment due: Hi-Fi Wireframes
+In-class exercise: Prototype
+In-class discussion: Desk Crits
+Assignment given: Final Deliverables
+
+Week14_Final Presentations - Apr21
+Final Prototype Presentations
+
+Week15 _Final Presentations - Apr28
+Final Prototype Presentations
+
+Week16_Final Deliverables Due - May8
+Assignment due: Final Deliverables
+
+Final Deliverables (Product)
+
+The final deliverables for this course will include both the prototype presentation (a link to the Figma file is acceptable) and a 5-10 page written product brief. Product briefs should include a summary of the product goals and intended users, as well as detailed analysis of the user research and data analysis processes. We will review examples of product briefs throughout the semester to familiarize ourselves with these expectations.
+
+Optionally, students who wish to develop a technical prototype of their site or application are encouraged to do so. While this is not a coding-based course, we will have time toward the end of the semester to evaluate web- and application-based development practices should students like to explore this option. This product (in partial or full working form) will be due alongside the final deliverables for the course.
+
+Course Grading (Outcome)
+
+The course will be graded along the High Pass/Pass/Low Pass scale. Grading will be determined by class participation and the quality of assignments:
+
+Class participation (10%)
+Case study (10%)
+Project proposals (10%)
+Research (10%)
+Insights (10%)
+Ideation (10%)
+Prototypes (20%)
+Final Presentation/Product Brief (20%)
+
+Student Accountability Statement
+
+Students are expected to read and understand GSAPP’s and Columbia University’s Honor System and Plagiarism Policies and abide by all School and University rules surrounding plagiarism and academic conduct. There is a zero-tolerance policy on all forms of cheating and plagiarism.
+
+Certain assignments and/or specific tasks (i.e., questionnaires, synthesis, code support) in this course will permit the use of generative Artificial Intelligence (AI) tools on a case-by-case basis. The default is that AI use is disallowed unless the instructor states otherwise. When approved, any such use must be appropriately acknowledged and cited. In addition, note that the information produced by AI generative tools may be unreliable, inaccurate, biased, outdated, or copyrighted. If you find yourself uncertain about the appropriate ways and circumstances to employ it, please feel free to seek guidance from your instructor. Please be aware that each student is responsible for assessing the validity and applicability of any submitted AI output, and violations of this policy will be considered academic misconduct. Under no circumstances can any final design work be completed with the aid of generative AI tools.
+
+https://www.arch.columbia.edu/honor-system
+https://www.arch.columbia.edu/plagiarism-policy
+
+Special Accommodations
+
+Students requiring any special accommodations in accordance with the policies defined by the University should register in advance with the Office of Disability Services.
+
+https://www.health.columbia.edu/services/register-disability-services
+
+Necessary adjustments to course expectations and workflow will be made on an individual basis to accommodate students’ needs to ensure that they can succeed in this course.
+
+Additionally, given the complex and turbulent nature of the current political and campus climates, consideration will be given to adjustments in scheduling and scope on both individual and collective bases. Students should feel welcome to participate fully in the course materials and succeed in their academic and creative endeavors. Irrespective of other campus initiatives, in this course, political, moral, intellectual, and academic freedoms will not be undermined or limited except by the merit of their foundations.

@@ -1,0 +1,34 @@
+\documentclass[11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{geometry}
+\geometry{a4paper, margin=1in}
+\usepackage{titling}
+\usepackage{hyperref}
+\usepackage{parskip}
+
+\title{Initial Project Proposal \\ \large PLANA6645 - Prototyping in Urban Tech}
+\author{Daniel Lewis}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\section*{Project Proposal: Properlytic}
+
+\textbf{Project:} 
+I am interested in \textbf{providing home price forecasts with confidence}. Specifically, I am building \textbf{Probabilistic Price Forecasting Models} that move beyond single-point estimates to provide forward-looking, probabilistic forecasts with confidence bands. By leveraging public records, market data, and \textbf{diffusion world model scenario generation}, this project aims to quantify risk and make market uncertainty legible to homeowners at the property level, particularly in heterogeneous markets like New York City where traditional comps often fall short, and particularly in cities where homeowners and brokers are beginning to care about how much their properties will sell for.
+
+\textbf{Product:} 
+The proposed product is \textbf{Properlytic}, an interactive, API-first forecasting platform and dashboard. Unlike standard listing portals that show static historical data, Properlytic will feature a dynamic interface where users can view fan charts of the future for individual property valuations. Key features will include:
+1.  \textbf{Probabilistic Forecasts:} Visualizing scenario paths generated via \textbf{diffusion world models} to show a range of potential future values. For homeowners, this appears as an intuitive fan chart, while institutional API users access the underlying $P_{10}$, $P_{50}$, $P_{90}$ confidence intervals.
+2.  \textbf{Scenario Analysis:} Strictly for institutional users via API, allowing stress-testing of valuations under different economic conditions such as interest rate shifts and inventory changes.
+3.  \textbf{Risk Metrics:} Clear visualization of confidence scores, market volatility, and downside risk for specific micro-locations.
+
+\textbf{People:} 
+This tool is designed for two primary user groups with distinct but overlapping needs:
+1.  \textbf{Homeowners, Buyers, and Sellers:} Who need data-driven insights to navigate complex transactions and understand the risk profile of a property beyond just list price.
+2.  \textbf{Institutional Investors, Lenders, and Portfolio Managers:} Who require auditable, scenario-level forecasts for underwriting, portfolio monitoring, and risk surveillance.
+By providing forecasts free for homeowners, Properlytic aims to set the standard of future value while being a trusted source of finegrained forecasts for institutions.
+
+\end{document}

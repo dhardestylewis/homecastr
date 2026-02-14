@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: Properlytic Tool API (Current DB: H3 + Precomputed Hex Details)
+  title: Homecastr Tool API (Current DB: H3 + Precomputed Hex Details)
   version: 1.0.0
   description: >
     Allowlisted, typed tool endpoints for conversational Q&A backed by the current Supabase schema:
@@ -14,7 +14,7 @@ info:
       - Your frontend/backend must listen for tool calls, call these endpoints, then feed results back via conversation.append_llm_context and/or conversation.respond. :contentReference[oaicite:1]{index=1}
 
 servers:
-  - url: https://properlytic.com/api/tools/v1
+  - url: https://homecastr.com/api/tools/v1
 
 security:
   - ToolApiKey: []
