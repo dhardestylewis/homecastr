@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, Suspense, useEffect } from "react"
+import React, { useState, useCallback, Suspense, useEffect } from "react"
 import { MapView } from "@/components/map-view"
 import { VectorMap } from "@/components/vector-map"
 import H3Map from "@/components/h3-map"
@@ -29,7 +29,7 @@ import dynamic from "next/dynamic"
 const TavusMiniWindow = dynamic(
   () => import("@/components/tavus-mini-window").then((mod) => mod.TavusMiniWindow),
   { ssr: false }
-)
+) as React.ComponentType<{ conversationUrl: string; onClose: () => void; chatOpen?: boolean }>
 
 function DashboardContent() {
   const { filters, setFilters, resetFilters } = useFilters()
@@ -386,11 +386,14 @@ function DashboardContent() {
 
         <ExplainerPopup />
 
-        {/* Floating Homecastr Live Agent Button — always visible, bottom-left */}
+        {/* Floating Homecastr Live Agent Button — always visible, bottom-left, shifts when chat open */}
         {!tavusConversationUrl && !isTavusLoading && (
           <button
             onClick={handleFloatingConsultAI}
-            className="fixed bottom-5 left-5 z-[9999] flex items-center gap-2.5 px-5 py-3 rounded-2xl bg-[#16161e] hover:bg-[#1e1e2a] border border-white/15 hover:border-primary/40 text-white shadow-2xl transition-all hover:scale-105 active:scale-95 group"
+            className={cn(
+              "fixed bottom-5 z-[9999] flex items-center gap-2.5 px-5 py-3 rounded-2xl bg-[#16161e] hover:bg-[#1e1e2a] border border-white/15 hover:border-primary/40 text-white shadow-2xl transition-all duration-300 hover:scale-105 active:scale-95 group",
+              isChatOpen ? "left-[420px]" : "left-5"
+            )}
           >
             <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center group-hover:bg-primary/30 transition-colors">
               <Bot className="w-4 h-4 text-primary" />
@@ -404,7 +407,10 @@ function DashboardContent() {
 
         {/* Homecastr Loading Indicator */}
         {isTavusLoading && (
-          <div className="fixed bottom-5 left-5 z-[10000] bg-[#16161e] text-white/90 rounded-2xl px-5 py-4 shadow-2xl border border-white/10 flex items-center gap-3">
+          <div className={cn(
+            "fixed bottom-5 z-[10000] bg-[#16161e] text-white/90 rounded-2xl px-5 py-4 shadow-2xl border border-white/10 flex items-center gap-3 transition-all duration-300",
+            isChatOpen ? "left-[420px]" : "left-5"
+          )}>
             <div className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
             <span className="text-xs font-medium">Connecting to Homecastr...</span>
           </div>
@@ -415,6 +421,7 @@ function DashboardContent() {
           <TavusMiniWindow
             conversationUrl={tavusConversationUrl}
             onClose={() => setTavusConversationUrl(null)}
+            chatOpen={isChatOpen}
           />
         )}
       </main>

@@ -7,9 +7,10 @@ import { cn } from "@/lib/utils"
 interface TavusMiniWindowProps {
   conversationUrl: string
   onClose: () => void
+  chatOpen?: boolean
 }
 
-export function TavusMiniWindow({ conversationUrl, onClose }: TavusMiniWindowProps) {
+export function TavusMiniWindow({ conversationUrl, onClose, chatOpen = false }: TavusMiniWindowProps) {
   const [isMinimized, setIsMinimized] = useState(false)
   const [isMicOn, setIsMicOn] = useState(true)
   const [isCamOn, setIsCamOn] = useState(true)
@@ -145,10 +146,11 @@ export function TavusMiniWindow({ conversationUrl, onClose }: TavusMiniWindowPro
   return (
     <div
       className={cn(
-        "fixed z-[10000] transition-all duration-300 ease-in-out",
+        "fixed z-[10000] transition-all duration-300 ease-in-out bottom-5",
+        chatOpen ? "left-[420px]" : "left-5",
         isMinimized
-          ? "bottom-5 left-5 w-[280px] h-[56px]"
-          : "bottom-5 left-5 w-[340px] h-[520px]"
+          ? "w-[280px] h-[56px]"
+          : "w-[340px] h-[520px]"
       )}
     >
       <div className="relative w-full h-full rounded-2xl overflow-hidden shadow-2xl border border-white/10 bg-[#0f0f14] flex flex-col">
