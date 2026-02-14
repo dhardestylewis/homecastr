@@ -37,7 +37,7 @@ export function TopBar({ filters, isFiltersPanelOpen, onToggleFiltersPanel, onSe
           {isFiltersPanelOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         </Button>
         <Building2 className="h-6 w-6 text-primary" />
-        <span className="font-semibold text-lg hidden sm:inline">Properlytic</span>
+        <span className="font-semibold text-lg hidden sm:inline">Homecastr</span>
       </div>
 
       {/* Search */}

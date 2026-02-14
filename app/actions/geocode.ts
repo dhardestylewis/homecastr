@@ -24,7 +24,7 @@ export async function geocodeAddress(query: string): Promise<GeocodeResult | nul
 
         const response = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`, {
             headers: {
-                "User-Agent": "ProperlyticUI/1.0",
+                "User-Agent": "HomecastrUI/1.0",
             },
         })
 
@@ -86,7 +86,7 @@ export async function getAutocompleteSuggestions(query: string): Promise<Autocom
 
         const response = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`, {
             headers: {
-                "User-Agent": "ProperlyticUI/1.0",
+                "User-Agent": "HomecastrUI/1.0",
             },
         })
 
@@ -124,7 +124,7 @@ export async function reverseGeocode(lat: number, lng: number, zoom = 18): Promi
 
         const response = await fetch(`https://nominatim.openstreetmap.org/reverse?${params.toString()}`, {
             headers: {
-                "User-Agent": "ProperlyticUI/1.0",
+                "User-Agent": "HomecastrUI/1.0",
             },
         })
 

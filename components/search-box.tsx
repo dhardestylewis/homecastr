@@ -111,7 +111,7 @@ export function SearchBox({ onSearch, placeholder = "Search address or ID...", v
           {/* Branding */}
           <div className="flex items-center gap-2 text-primary shrink-0 border-r border-border pr-3">
             <Building2 className="w-4 h-4" />
-            <span className="font-bold text-sm tracking-tight hidden sm:inline-block text-foreground">Properlytic</span>
+            <span className="font-bold text-sm tracking-tight hidden sm:inline-block text-foreground">Homecastr</span>
           </div>
 
           {/* Search Input Area */}
