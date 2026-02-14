@@ -246,97 +246,99 @@ export async function POST(req: NextRequest) {
         }
 
         // Prepend system prompt
-        const fullMessages = [
+        const conversationMessages: OpenAI.ChatCompletionMessageParam[] = [
             { role: "system" as const, content: SYSTEM_PROMPT },
             ...messages,
         ]
 
-        const response = await openai.chat.completions.create({
-            model: "gpt-4o-mini",
-            messages: fullMessages,
-            tools: TOOL_DEFINITIONS,
-            tool_choice: "auto",
-            temperature: 0.7,
-            max_tokens: 1024,
-        })
+        const allMapActions: any[] = []
+        const allToolsUsed: string[] = []
+        const MAX_ROUNDS = 3
 
-        const choice = response.choices[0]
-        const assistantMessage = choice.message
+        for (let round = 0; round < MAX_ROUNDS; round++) {
+            console.log(`[Chat API] Round ${round + 1}, messages: ${conversationMessages.length}`)
 
-        // If the model wants to call tools, we handle them
-        if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
-            // Separate UI-control tools (handled client-side) from API tools (would hit backend)
-            const uiToolCalls = assistantMessage.tool_calls.filter(
-                (tc) => tc.function.name === "fly_to_location"
-            )
-            const apiToolCalls = assistantMessage.tool_calls.filter(
-                (tc) => tc.function.name !== "fly_to_location"
-            )
+            const response = await openai.chat.completions.create({
+                model: "gpt-4o-mini",
+                messages: conversationMessages,
+                tools: TOOL_DEFINITIONS,
+                tool_choice: round < MAX_ROUNDS - 1 ? "auto" : "none", // Force text on last round
+                temperature: 0.7,
+                max_tokens: 1024,
+            })
 
-            // For API tool calls, generate mock results (backend not connected yet)
-            const toolResults = apiToolCalls.map((tc) => ({
-                tool_call_id: tc.id,
-                role: "tool" as const,
-                content: generateMockToolResult(tc.function.name, JSON.parse(tc.function.arguments)),
-            }))
+            const assistantMessage = response.choices[0].message
+            console.log(`[Chat API] Round ${round + 1} response:`, {
+                hasContent: !!assistantMessage.content,
+                contentPreview: assistantMessage.content?.substring(0, 100),
+                toolCalls: assistantMessage.tool_calls?.map(tc => tc.function.name) || [],
+            })
 
-            // If there are API tool calls, do a follow-up completion with results
-            if (toolResults.length > 0) {
-                const followUpMessages = [
-                    ...fullMessages,
-                    assistantMessage,
-                    ...toolResults,
-                ]
-
-                const followUp = await openai.chat.completions.create({
-                    model: "gpt-4o-mini",
-                    messages: followUpMessages,
-                    tools: TOOL_DEFINITIONS,
-                    tool_choice: "auto",
-                    temperature: 0.7,
-                    max_tokens: 1024,
-                })
-
-                const followUpMessage = followUp.choices[0].message
-
-                // Collect any additional fly_to calls from the follow-up
-                const followUpUiCalls = followUpMessage.tool_calls?.filter(
-                    (tc) => tc.function.name === "fly_to_location"
-                ) || []
-
+            // No tool calls — we have our final text response
+            if (!assistantMessage.tool_calls || assistantMessage.tool_calls.length === 0) {
+                console.log(`[Chat API] Final response (round ${round + 1}):`, assistantMessage.content?.substring(0, 100))
                 return NextResponse.json({
                     message: {
                         role: "assistant",
-                        content: followUpMessage.content || "",
+                        content: assistantMessage.content || "(No response generated)",
                     },
-                    mapActions: [...uiToolCalls, ...followUpUiCalls].map((tc) =>
-                        JSON.parse(tc.function.arguments)
-                    ),
-                    toolCallsUsed: apiToolCalls.map((tc) => tc.function.name),
+                    mapActions: allMapActions,
+                    toolCallsUsed: allToolsUsed,
                 })
             }
 
-            // Only UI tool calls (fly_to_location), return the assistant text + map actions
-            return NextResponse.json({
-                message: {
-                    role: "assistant",
-                    content: assistantMessage.content || "",
-                },
-                mapActions: uiToolCalls.map((tc) =>
-                    JSON.parse(tc.function.arguments)
-                ),
-                toolCallsUsed: [],
-            })
+            // Process tool calls
+            // Add assistant message with tool_calls to conversation
+            conversationMessages.push(assistantMessage)
+
+            for (const tc of assistantMessage.tool_calls) {
+                if (tc.function.name === "fly_to_location") {
+                    // UI tool — extract for client-side, return dummy result to LLM
+                    try {
+                        const args = JSON.parse(tc.function.arguments)
+                        allMapActions.push(args)
+                        console.log(`[Chat API] fly_to_location:`, args)
+                    } catch (e) {
+                        console.error(`[Chat API] Failed to parse fly_to_location args:`, tc.function.arguments)
+                    }
+                    conversationMessages.push({
+                        role: "tool",
+                        tool_call_id: tc.id,
+                        content: JSON.stringify({ status: "ok", message: "Map is now showing the requested location." }),
+                    })
+                } else {
+                    // API tool — generate mock result
+                    allToolsUsed.push(tc.function.name)
+                    try {
+                        const args = JSON.parse(tc.function.arguments)
+                        const mockResult = generateMockToolResult(tc.function.name, args)
+                        console.log(`[Chat API] Tool ${tc.function.name} mock result:`, mockResult.substring(0, 100))
+                        conversationMessages.push({
+                            role: "tool",
+                            tool_call_id: tc.id,
+                            content: mockResult,
+                        })
+                    } catch (e) {
+                        console.error(`[Chat API] Failed to process tool ${tc.function.name}:`, e)
+                        conversationMessages.push({
+                            role: "tool",
+                            tool_call_id: tc.id,
+                            content: JSON.stringify({ error: "Failed to process tool call" }),
+                        })
+                    }
+                }
+            }
         }
 
-        // No tool calls — just return content
+        // If we exhausted rounds, return whatever we have
+        console.log(`[Chat API] Exhausted ${MAX_ROUNDS} rounds, returning last state`)
         return NextResponse.json({
             message: {
                 role: "assistant",
-                content: assistantMessage.content || "",
+                content: "I found some information for you. Let me know if you'd like more details!",
             },
-            mapActions: [],
-            toolCallsUsed: [],
+            mapActions: allMapActions,
+            toolCallsUsed: allToolsUsed,
         })
     } catch (error: any) {
         console.error("[Chat API] Error:", error)
