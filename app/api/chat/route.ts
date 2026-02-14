@@ -212,17 +212,23 @@ const TOOL_DEFINITIONS: OpenAI.ChatCompletionTool[] = [
 const SYSTEM_PROMPT = `You are Homecastr, a real estate data assistant for Houston, TX (Harris County). You look up property value forecasts and neighborhood metrics from our database.
 
 RULES:
-1. For EVERY query: call fly_to_location in the SAME tool call batch as data lookups (location_to_hex, rank_h3_hexes, etc). Never wait for data results before flying.
-2. For COMPARISONS (e.g. "compare Heights vs Montrose"): In your first batch, call location_to_hex for EACH neighborhood AND ONE fly_to_location centered between both (zoom 13). Never call fly_to_location twice.
-3. NEVER give generic real estate advice, neighborhood descriptions, or lifestyle info. You are a DATA tool. If tools fail, say "I couldn't pull that data — want me to try again?" and stop.
-4. Only report numbers from tool results. No editorializing or parenthetical explanations.
-5. Do NOT mention "confidence" or "reliability".
+1. For EVERY query: call fly_to_location in the SAME tool call batch as data lookups. Never wait for data results before flying.
+2. For COMPARISONS (e.g. "compare Heights vs Montrose"): call location_to_hex for EACH neighborhood AND ONE fly_to_location centered between both (zoom 13). The location_to_hex results already include all metrics — do NOT also call compare_h3_hexes.
+3. For SUGGESTIONS/RECOMMENDATIONS (e.g. "any suggestions in Montrose?"): use rank_h3_hexes sorted by "opportunity" descending with a bounding box around the neighborhood to find the top 3-5 sub-areas. Name each one by its nearest cross-street or landmark.
+4. NEVER give generic real estate advice, neighborhood descriptions, or lifestyle info. You are a DATA tool. If tools fail, say "I couldn't pull that data — want me to try again?" and stop.
+5. Only report numbers from tool results. No editorializing or parenthetical explanations.
+6. Do NOT mention "confidence" or "reliability".
 6. Default forecast_year: 2029, h3_res: 9.
 7. Use real Houston place names. Never generic labels.
 8. FORMAT — keep it tight:
-   - The tools return "annual_change_pct" which is already a percentage. Display it as: "Expected Change: X% each year over the next 4 years". Example: 5.0 → "Expected Change: +5% each year over the next 4 years", -26.0 → "Expected Change: -26% each year over the next 4 years".
-   - Each metric: one short line
-   - Summary: 2-3 sentences max
+   - "annual_change_pct" is already a percentage. Display as: "Expected Change: X% each year over the next N years" where N = forecast_year - 2026.
+   - Show BOTH current value AND predicted value. Example output:
+     Heights (2029 forecast):
+     Current Value: $580,000
+     Predicted Value: $683,251
+     Expected Change: -26% each year over the next 3 years
+   - Do NOT editorialize about property count in summaries. It's metadata, not insight.
+   - Summary: 1-2 sentences comparing the key difference (value or expected change). No fluff.
    - Total response: 6-10 lines, never more than 15
 
 You query real data from the Homecastr database. Always use tools — never guess or make up numbers.`
@@ -413,12 +419,25 @@ async function executeToolCall(toolName: string, args: Record<string, any>): Pro
             try {
                 const supabase = await getSupabaseServerClient()
                 const forecastYear = args.forecast_year || 2029
-                const { data, error } = await supabase
-                    .from("h3_precomputed_hex_details")
-                    .select("h3_id, h3_res, forecast_year, opportunity, reliability, predicted_value, property_count, sample_accuracy, lat, lng")
-                    .eq("h3_id", args.h3_id)
-                    .eq("forecast_year", forecastYear)
-                    .single()
+                const yearsOut = forecastYear - 2026
+                const [forecastResult, currentResult] = await Promise.all([
+                    supabase
+                        .from("h3_precomputed_hex_details")
+                        .select("h3_id, h3_res, forecast_year, opportunity, predicted_value, property_count, lat, lng")
+                        .eq("h3_id", args.h3_id)
+                        .eq("forecast_year", forecastYear)
+                        .single(),
+                    supabase
+                        .from("h3_precomputed_hex_details")
+                        .select("predicted_value")
+                        .eq("h3_id", args.h3_id)
+                        .eq("forecast_year", 2026)
+                        .single(),
+                ])
+
+                const data = forecastResult.data
+                const error = forecastResult.error
+                const currentValue = currentResult.data?.predicted_value ?? null
 
                 if (error || !data) {
                     console.error("[Chat Tool] get_h3_hex error:", error?.message)
@@ -444,9 +463,11 @@ async function executeToolCall(toolName: string, args: Record<string, any>): Pro
                         h3_id: data.h3_id,
                         h3_res: data.h3_res,
                         forecast_year: data.forecast_year,
+                        years_out: yearsOut,
                         location: { name: locationName, lat: data.lat, lng: data.lng },
                         metrics: {
                             annual_change_pct: data.opportunity != null ? Math.round(data.opportunity * 10000) / 100 : null,
+                            current_value: currentValue,
                             predicted_value: data.predicted_value,
                             property_count: data.property_count,
                         },
@@ -489,17 +510,29 @@ async function executeToolCall(toolName: string, args: Record<string, any>): Pro
                 if (args.include_metrics !== false) {
                     const supabase = await getSupabaseServerClient()
                     const forecastYear = args.forecast_year || 2029
-                    const { data } = await supabase
-                        .from("h3_precomputed_hex_details")
-                        .select("opportunity, predicted_value, property_count")
-                        .eq("h3_id", hexId)
-                        .eq("forecast_year", forecastYear)
-                        .single()
+                    const yearsOut = forecastYear - 2026
+                    const [forecastResult, currentResult] = await Promise.all([
+                        supabase
+                            .from("h3_precomputed_hex_details")
+                            .select("opportunity, predicted_value, property_count")
+                            .eq("h3_id", hexId)
+                            .eq("forecast_year", forecastYear)
+                            .single(),
+                        supabase
+                            .from("h3_precomputed_hex_details")
+                            .select("predicted_value")
+                            .eq("h3_id", hexId)
+                            .eq("forecast_year", 2026)
+                            .single(),
+                    ])
+                    const data = forecastResult.data
                     if (data) {
                         metrics = {
                             annual_change_pct: data.opportunity != null ? Math.round(data.opportunity * 10000) / 100 : null,
+                            current_value: currentResult.data?.predicted_value ?? null,
                             predicted_value: data.predicted_value,
                             property_count: data.property_count,
+                            years_out: yearsOut,
                         }
                     }
                 }
@@ -513,7 +546,6 @@ async function executeToolCall(toolName: string, args: Record<string, any>): Pro
                         label: locationLabel + ", Houston, TX",
                         lat,
                         lng,
-                        confidence: 0.9,
                         kind: place.type || "place",
                     },
                     h3: {
