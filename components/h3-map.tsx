@@ -47,7 +47,7 @@ export default function H3Map({ year = 2026, colorMode = "growth" }: H3MapProps)
             map.current.addSource('h3-pmtiles', {
                 type: 'vector',
                 url: `pmtiles://${PMTILES_URL}`,
-                attribution: '© Properlytic'
+                attribution: '© Homecastr'
             });
 
             // Add layers for each resolution level (7-11)

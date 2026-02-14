@@ -951,7 +951,13 @@ export function VectorMap({
                 if (Math.abs(center.lng - mapState.center[0]) > 0.001 ||
                     Math.abs(center.lat - mapState.center[1]) > 0.001 ||
                     Math.abs(zoom - mapState.zoom) > 0.1) {
-                    map.flyTo({ center: [mapState.center[0], mapState.center[1]], zoom: mapState.zoom, speed: 1.5 })
+                    map.flyTo({
+                        center: [mapState.center[0], mapState.center[1]],
+                        zoom: mapState.zoom,
+                        speed: 0.8,
+                        curve: 1.42,
+                        easing: (t: number) => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2, // easeInOutCubic
+                    })
                 }
             }
         } catch (e) { /* map might be in transition or removed */ }

@@ -141,7 +141,7 @@ export function MapTooltip({
                             <div className="flex items-center justify-between px-3 py-2 border-b border-border/50 bg-muted/40 backdrop-blur-md">
                                 <div className="flex items-center gap-2">
                                     <Building2 className="w-3.5 h-3.5 text-primary" />
-                                    <span className="font-bold text-[10px] tracking-wide text-foreground uppercase">Properlytic</span>
+                                    <span className="font-bold text-[10px] tracking-wide text-foreground uppercase">Homecastr</span>
                                     {lockedMode && (
                                         <span className="px-1.5 py-0.5 bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 text-[8px] font-semibold uppercase tracking-wider rounded">Locked</span>
                                     )}

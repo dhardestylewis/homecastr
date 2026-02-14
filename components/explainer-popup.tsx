@@ -77,7 +77,7 @@ export function ExplainerPopup() {
                     <div className="p-6 border-b border-white/10 bg-white/5 flex justify-between items-start">
                         <div>
                             <h2 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-teal-400 to-amber-400">
-                                Welcome to Properlytic
+                                Welcome to Homecastr
                             </h2>
                             <p className="text-muted-foreground mt-1">
                                 A powerful platform for visualizing real estate value trends, forecasts, and confidence metrics.
@@ -92,7 +92,7 @@ export function ExplainerPopup() {
                             <div className="space-y-3">
                                 <h3 className="font-semibold text-lg text-teal-400">What is this?</h3>
                                 <p className="text-sm text-slate-300 leading-relaxed">
-                                    Properlytic aggregates property data into hexagonal grids to reveal granular market dynamics.
+                                    Homecastr aggregates property data into hexagonal grids to reveal granular market dynamics.
                                     We define "Value" not just by price, but by predictive confidence and stability over time.
                                 </p>
                                 <p className="text-sm text-slate-300 leading-relaxed">
