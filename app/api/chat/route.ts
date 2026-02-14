@@ -563,6 +563,7 @@ async function executeToolCall(toolName: string, args: Record<string, any>): Pro
         case "search_h3_hexes":
         case "rank_h3_hexes": {
             try {
+                console.log(`[Chat Tool] ${toolName} called with args:`, JSON.stringify(args))
                 const supabase = await getSupabaseServerClient()
                 const forecastYear = args.forecast_year || 2029
                 const limit = Math.min(args.limit || 5, 10)
@@ -576,7 +577,7 @@ async function executeToolCall(toolName: string, args: Record<string, any>): Pro
                 // Build query with optional bbox filter
                 let query = supabase
                     .from("h3_precomputed_hex_details")
-                    .select("h3_id, h3_res, forecast_year, opportunity, reliability, predicted_value, property_count, lat, lng")
+                    .select("h3_id, h3_res, forecast_year, opportunity, predicted_value, property_count, lat, lng")
                     .eq("forecast_year", forecastYear)
                     .eq("h3_res", args.h3_res ?? 9)
                     .not(sortColumn, "is", null)
@@ -589,14 +590,18 @@ async function executeToolCall(toolName: string, args: Record<string, any>): Pro
                     query = query
                         .gte("lat", minLat).lte("lat", maxLat)
                         .gte("lng", minLng).lte("lng", maxLng)
+                    console.log(`[Chat Tool] ${toolName} bbox: lat ${minLat}-${maxLat}, lng ${minLng}-${maxLng}`)
                 }
 
+                console.log(`[Chat Tool] ${toolName} querying: year=${forecastYear}, res=${args.h3_res ?? 9}, sort=${sortColumn}, limit=${limit}`)
                 const { data, error } = await query
 
                 if (error) {
-                    console.error("[Chat Tool] search/rank error:", error.message)
+                    console.error(`[Chat Tool] ${toolName} DB error:`, error.message)
                     return JSON.stringify({ hexes: [], error: error.message })
                 }
+
+                console.log(`[Chat Tool] ${toolName} got ${data?.length ?? 0} rows`)
 
                 // Reverse geocode each hex to get a location name (batch, with rate limiting)
                 const hexes = await Promise.all((data || []).map(async (row: any, i: number) => {
