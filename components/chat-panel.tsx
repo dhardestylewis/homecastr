@@ -175,8 +175,8 @@ export function ChatPanel({ isOpen, onClose, onMapAction }: ChatPanelProps) {
                         >
                             <div
                                 className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${msg.role === "user"
-                                        ? "bg-primary text-primary-foreground rounded-br-md"
-                                        : "bg-muted/60 text-foreground rounded-bl-md"
+                                    ? "bg-primary text-primary-foreground rounded-br-md"
+                                    : "bg-muted/60 text-foreground rounded-bl-md"
                                     }`}
                             >
                                 <p className="whitespace-pre-wrap">{msg.content}</p>
@@ -194,9 +194,9 @@ export function ChatPanel({ isOpen, onClose, onMapAction }: ChatPanelProps) {
                                 {/* Show tools used */}
                                 {msg.toolsUsed && msg.toolsUsed.length > 0 && (
                                     <div className="flex flex-wrap gap-1 mt-1.5">
-                                        {msg.toolsUsed.map((tool) => (
+                                        {msg.toolsUsed.map((tool, idx) => (
                                             <span
-                                                key={tool}
+                                                key={`${tool}-${idx}`}
                                                 className="text-[9px] px-1.5 py-0.5 bg-background/50 rounded text-muted-foreground font-mono"
                                             >
                                                 {tool}
