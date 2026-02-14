@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react"
 import { Send, X, Loader2, MessageSquare, MapPin, Sparkles } from "lucide-react"
+import ReactMarkdown from "react-markdown"
 
 export interface MapAction {
     lat: number
@@ -172,7 +173,7 @@ export function ChatPanel({ isOpen, onClose, onMapAction }: ChatPanelProps) {
                                     "Show me Montrose",
                                     "Where has the most growth potential?",
                                     "Compare Heights vs Montrose",
-                                    "What does reliability mean?",
+                                    "What does growth potential mean?",
                                 ].map((suggestion) => (
                                     <button
                                         key={suggestion}
@@ -200,7 +201,13 @@ export function ChatPanel({ isOpen, onClose, onMapAction }: ChatPanelProps) {
                                     : "bg-muted/60 text-foreground rounded-bl-md"
                                     }`}
                             >
-                                <p className="whitespace-pre-wrap">{msg.content}</p>
+                                {msg.role === "user" ? (
+                                    <p className="whitespace-pre-wrap">{msg.content}</p>
+                                ) : (
+                                    <div className="prose prose-sm prose-invert max-w-none [&>h3]:text-xs [&>h3]:font-semibold [&>h3]:mt-2 [&>h3]:mb-1 [&>h2]:text-sm [&>h2]:font-semibold [&>h2]:mt-2 [&>h2]:mb-1 [&>p]:my-1 [&>ul]:my-1 [&>ul]:pl-4 [&>ol]:my-1 [&>ol]:pl-4 [&>li]:my-0.5 [&_strong]:text-foreground">
+                                        <ReactMarkdown>{msg.content}</ReactMarkdown>
+                                    </div>
+                                )}
 
                                 {/* Show map action indicator */}
                                 {msg.mapActions && msg.mapActions.length > 0 && (
