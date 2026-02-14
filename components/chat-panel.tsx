@@ -91,19 +91,24 @@ export function ChatPanel({ isOpen, onClose, onMapAction }: ChatPanelProps) {
                     // Single location — fly directly, offset for sidebar
                     const a = data.mapActions[0]
                     const offset = computeOffset(a.zoom)
+                    console.log(`[MapAction] Requested: (${a.lat.toFixed(5)}, ${a.lng.toFixed(5)}) zoom=${a.zoom}`)
+                    console.log(`[MapAction] Sidebar offset: ${offset.toFixed(5)}°`)
+                    console.log(`[MapAction] Adjusted center: (${a.lat.toFixed(5)}, ${(a.lng + offset).toFixed(5)})`)
                     onMapAction({ ...a, lng: a.lng + offset })
                 } else {
                     // Multiple locations (e.g. comparison) — compute midpoint + zoom to show all
                     const actions = data.mapActions as MapAction[]
                     const avgLat = actions.reduce((s, a) => s + a.lat, 0) / actions.length
                     const avgLng = actions.reduce((s, a) => s + a.lng, 0) / actions.length
-                    // Compute zoom: use the span between locations to pick appropriate zoom
                     const latSpan = Math.max(...actions.map(a => a.lat)) - Math.min(...actions.map(a => a.lat))
                     const lngSpan = Math.max(...actions.map(a => a.lng)) - Math.min(...actions.map(a => a.lng))
                     const maxSpan = Math.max(latSpan, lngSpan)
-                    // Rough heuristic: 0.01° span ≈ zoom 15, 0.1° ≈ zoom 12, 0.5° ≈ zoom 10
                     const fitZoom = maxSpan < 0.01 ? 15 : maxSpan < 0.05 ? 13 : maxSpan < 0.1 ? 12 : maxSpan < 0.3 ? 11 : 10
                     const offset = computeOffset(fitZoom)
+                    console.log(`[MapAction] ${actions.length} locations:`, actions.map(a => `(${a.lat.toFixed(5)}, ${a.lng.toFixed(5)})`))
+                    console.log(`[MapAction] Midpoint: (${avgLat.toFixed(5)}, ${avgLng.toFixed(5)}), span=${maxSpan.toFixed(4)}, fitZoom=${fitZoom}`)
+                    console.log(`[MapAction] Sidebar offset: ${offset.toFixed(5)}°`)
+                    console.log(`[MapAction] Adjusted center: (${avgLat.toFixed(5)}, ${(avgLng + offset).toFixed(5)})`)
                     onMapAction({ lat: avgLat, lng: avgLng + offset, zoom: fitZoom })
                 }
             }
