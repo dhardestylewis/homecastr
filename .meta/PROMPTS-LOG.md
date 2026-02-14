@@ -340,3 +340,48 @@ must have reference in main TODO if doing that way - did you follow all the pres
 
 rebrand InvestMap to Properlytic everywhere
 
+## 2026-02-14T14:20 — Homecastr Rebrand + LLM Chat Integration
+
+### [2026-02-14 14:20]
+
+rename homecastr everywhere properlytic appears
+
+### [2026-02-14 14:23]
+
+is that everywhere it is written into the UI too?
+
+### [2026-02-14 14:23]
+
+we need to test out the tool calls first by interacting with an LLM which uses those tool calls
+
+### [2026-02-14 14:24]
+
+push up most recent changes to main
+
+### [2026-02-14 14:25]
+
+castr doesnt need to be capitalized in homecastr
+
+### [2026-02-14 14:27]
+
+now lets integrate an llm happy to give you an api key so we can test out these calls, would like to chat with the llm directly from the current address box which should expand down into a full left side screen chat
+
+### [2026-02-14 14:28]
+
+will those tool calls smootly pan and zoom the map to the area/property/hex under discussion?
+
+### [2026-02-14 14:28]
+
+are you keeping track of all my asks in TODO and recording them verbatim into PROMPT LOG?
+
+### [2026-02-14 14:28]
+
+have you pushed up to git
+
+### [2026-02-14 14:29]
+
+what have you done thus far that i can try out in the browser? open your browser to localhost so i can see
+
+### [2026-02-14 14:30]
+
+did you creat a new promt log rather than use the existing one in .meta ?
