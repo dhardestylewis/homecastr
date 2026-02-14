@@ -9,6 +9,7 @@ export interface MapAction {
     lng: number
     zoom: number
     select_hex_id?: string
+    highlighted_hex_ids?: string[]
 }
 
 interface ChatMessage {

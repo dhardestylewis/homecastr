@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import OpenAI from "openai"
+import * as h3 from "h3-js"
 
 // Tool definitions from tavus-tool-definitions.json (inlined for the API route)
 const TOOL_DEFINITIONS: OpenAI.ChatCompletionTool[] = [
@@ -216,7 +217,7 @@ RULES:
 1. For EVERY query: call fly_to_location in the SAME tool call batch as data lookups. Never wait for data results before flying.
 2. For COMPARISONS (e.g. "compare Heights vs Montrose"): call location_to_hex for EACH neighborhood AND ONE fly_to_location centered between both (zoom 13). The location_to_hex results already include all metrics — do NOT also call compare_h3_hexes.
 3. For SUGGESTIONS/RECOMMENDATIONS within a specific area (e.g. "any suggestions in Montrose?"): fly_to_location into that neighborhood (zoom 14-15) AND call rank_h3_hexes sorted by "opportunity" descending with a tight bounding box around that neighborhood. Name each result by its nearest cross-street or landmark.
-4. INVALID REQUESTS: If asked for generic advice ("is this a good time to buy?"), refuse. HOWEVER, if asked to explain terms ("what is predicted value?"), USE the 'explain_metric' tool.
+4. GENERIC REQUESTS: If asked for general advice ("where has the most growth?"), DO NOT REFUSE. Instead, use 'rank_h3_hexes' (without a bbox) to find the top locations globally based on the requested metric. HOWEVER, if asked to explain terms ("what is predicted value?"), USE the 'explain_metric' tool.
 5. Only report numbers from tool results. No editorializing or parenthetical explanations.
 6. Do NOT mention "confidence" or "reliability".
 7. Default forecast_year: 2029, h3_res: 9.
@@ -319,7 +320,38 @@ export async function POST(req: NextRequest) {
                     try {
                         const args = JSON.parse(toolFn.arguments)
                         const result = await executeToolCall(toolFn.name, args)
-                        console.log(`[Chat API] Tool ${toolFn.name} result:`, result.substring(0, 200))
+                        if (toolFn.name === "rank_h3_hexes") {
+                            try {
+                                const resultObj = JSON.parse(result)
+                                if (resultObj.hexes && resultObj.hexes.length > 0) {
+                                    // Create map action to fly to top result and highlight all
+                                    const topHex = resultObj.hexes[0]
+                                    const highlights = resultObj.hexes.map((h: any) => h.h3_id)
+
+                                    if (topHex.location && topHex.location.lat && topHex.location.lng) {
+                                        allMapActions.push({
+                                            lat: topHex.location.lat,
+                                            lng: topHex.location.lng,
+                                            zoom: 14,
+                                            select_hex_id: topHex.h3_id, // Lock top hex
+                                            highlighted_hex_ids: highlights // Highlight all
+                                        })
+                                    }
+                                }
+                            } catch (e) {
+                                console.error("[Chat API] Failed to parse rank_h3_hexes result for map action:", e)
+                            }
+                        } else if (toolFn.name === "location_to_hex") {
+                            // existing logic for single location if needed, or just let fly_to handle it
+                            try {
+                                const resultObj = JSON.parse(result)
+                                if (resultObj.hex && resultObj.hex.location) {
+                                    // We don't necessarily want to force select it if fly_to was also called
+                                    // But if the user asked "show me X", selecting it is nice.
+                                }
+                            } catch (e) { }
+                        }
+
                         conversationMessages.push({
                             role: "tool",
                             tool_call_id: tc.id,
@@ -576,30 +608,53 @@ async function executeToolCall(toolName: string, args: Record<string, any>): Pro
                     : sortBy === "predicted_value" || sortBy === "value" ? "predicted_value"
                         : "opportunity"
 
-                // Build query with optional bbox filter
+                // Build query
                 let query = supabase
                     .from("h3_precomputed_hex_details")
-                    .select("h3_id, h3_res, forecast_year, opportunity, predicted_value, property_count, lat, lng")
+                    // Remove lat/lng from select as they don't exist in this table
+                    .select("h3_id, h3_res, forecast_year, opportunity, predicted_value, property_count")
                     .eq("forecast_year", forecastYear)
                     .eq("h3_res", args.h3_res ?? 9)
                     .not(sortColumn, "is", null)
+
+                // If bbox provided, convert to hex IDs and filter by h3_id. This avoids spatial join on DB side.
+                if (args.bbox) {
+                    const [minLat, maxLat, minLng, maxLng] = args.bbox
+                    console.log(`[Chat Tool] ${toolName} bbox: lat ${minLat}-${maxLat}, lng ${minLng}-${maxLng}`)
+
+                    // Construct polygon (lat/lng)
+                    const polygon = [
+                        [minLat, minLng],
+                        [maxLat, minLng],
+                        [maxLat, maxLng],
+                        [minLat, maxLng],
+                        [minLat, minLng]
+                    ]
+
+                    // Get all hexes in this polygon at requested resolution
+                    const hexIds = h3.polygonToCells(polygon, args.h3_res ?? 9) // default isGeoJson=false -> [lat, lng]
+                    console.log(`[Chat Tool] ${toolName} found ${hexIds.length} candidate hexes in bbox`)
+
+                    if (hexIds.length > 5000) {
+                        console.warn(`[Chat Tool] Too many hexes (${hexIds.length}) for IN clause. Limiting to first 2000.`)
+                        query = query.in("h3_id", hexIds.slice(0, 2000))
+                    } else if (hexIds.length > 0) {
+                        query = query.in("h3_id", hexIds)
+                    } else {
+                        console.warn(`[Chat Tool] No hexes found in bbox. Returning empty.`)
+                        return JSON.stringify({ hexes: [] })
+                    }
+                } else {
+                    console.log(`[Chat Tool] ${toolName} using global search (no bbox)`)
+                }
+
+                // Apply sort and limit last
+                query = query
                     .order(sortColumn, { ascending: false })
                     .limit(limit)
 
-                // If bbox provided, filter by bounds. If NOT provided, default to broad Houston bounds to prevent full-table scan.
-                const [minLat, maxLat, minLng, maxLng] = args.bbox || [29.50, 30.17, -95.96, -94.90]
-
-                query = query
-                    .gte("lat", minLat).lte("lat", maxLat)
-                    .gte("lng", minLng).lte("lng", maxLng)
-
-                if (args.bbox) {
-                    console.log(`[Chat Tool] ${toolName} bbox: lat ${minLat}-${maxLat}, lng ${minLng}-${maxLng}`)
-                } else {
-                    console.log(`[Chat Tool] ${toolName} using default Houston bbox`)
-                }
-
                 console.log(`[Chat Tool] ${toolName} querying: year=${forecastYear}, res=${args.h3_res ?? 9}, sort=${sortColumn}, limit=${limit}`)
+
                 const { data, error } = await query
 
                 if (error) {
@@ -612,11 +667,13 @@ async function executeToolCall(toolName: string, args: Record<string, any>): Pro
                 // Reverse geocode each hex to get a location name (batch, with rate limiting)
                 const hexes = await Promise.all((data || []).map(async (row: any, i: number) => {
                     let locationName = `H3 Cell`
+                    // Compute center for reverse geocoding (since DB lacks lat/lng)
+                    const [lat, lng] = h3.cellToLatLng(row.h3_id)
                     try {
                         // Stagger requests to respect Nominatim rate limits
                         await new Promise(r => setTimeout(r, i * 200))
                         const revRes = await fetch(
-                            `https://nominatim.openstreetmap.org/reverse?lat=${row.lat}&lon=${row.lng}&zoom=16&format=json`,
+                            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&zoom=16&format=json`,
                             { headers: { "User-Agent": "HomecastrUI/1.0" } }
                         )
                         if (revRes.ok) {
@@ -630,7 +687,7 @@ async function executeToolCall(toolName: string, args: Record<string, any>): Pro
                         h3_id: row.h3_id,
                         h3_res: row.h3_res,
                         forecast_year: row.forecast_year,
-                        location: { name: locationName, lat: row.lat, lng: row.lng },
+                        location: { name: locationName, lat, lng }, // Use computed lat/lng
                         metrics: {
                             annual_change_pct: row.opportunity != null ? Math.round(row.opportunity * 10000) / 100 : null,
                             predicted_value: row.predicted_value,

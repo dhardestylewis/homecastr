@@ -316,6 +316,7 @@ export interface MapState {
   zoom: number
   selectedId: string | null
   hoveredId: string | null
+  highlightedIds?: string[]
 }
 
 export interface QueryParams {

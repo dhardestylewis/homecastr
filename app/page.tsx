@@ -39,6 +39,7 @@ function DashboardContent() {
       center: [action.lng, action.lat],
       zoom: action.zoom,
       ...(action.select_hex_id ? { selectedId: action.select_hex_id } : {}),
+      ...(action.highlighted_hex_ids ? { highlightedIds: action.highlighted_hex_ids } : {}),
     })
     toast({
       title: "Map updated",

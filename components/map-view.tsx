@@ -415,6 +415,25 @@ export function MapView({
         }
     }, [mapState.selectedId])
 
+    // Sync highlightedIds
+    useEffect(() => {
+        if (mapState.highlightedIds && mapState.highlightedIds.length > 0) {
+            // Merge valid selectedId + highlightedIds
+            const ids = new Set<string>()
+            if (mapState.selectedId) ids.add(mapState.selectedId)
+            mapState.highlightedIds.forEach(id => ids.add(id))
+
+            // Only update if different
+            const newSelection = Array.from(ids)
+            if (newSelection.length !== selectedHexes.length || !newSelection.every(id => selectedHexes.includes(id))) {
+                setSelectedHexes(newSelection)
+            }
+        } else if (selectedHexes.length > 1 && !mapState.selectedId) {
+            // If we had multi-selection but highlights cleared (and no main selection), clear all
+            setSelectedHexes([])
+        }
+    }, [mapState.highlightedIds, mapState.selectedId])
+
     // Sync transform when mapState changes (e.g. Search or URL change)
     useEffect(() => {
         if (!mapState.center || !mapState.zoom) return

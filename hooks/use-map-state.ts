@@ -23,6 +23,7 @@ export function useMapState() {
     zoom: Number.parseFloat(searchParams.get("zoom") || DEFAULT_MAP_STATE.zoom.toString()),
     selectedId: searchParams.get("id") || null,
     hoveredId: null,
+    highlightedIds: searchParams.get("highlights") ? searchParams.get("highlights")!.split(",") : [],
   }))
 
   // Update URL when selectedId changes - use ref to prevent infinite loops
@@ -41,8 +42,14 @@ export function useMapState() {
     } else {
       params.delete("id")
     }
+
+    if (mapState.highlightedIds && mapState.highlightedIds.length > 0) {
+      params.set("highlights", mapState.highlightedIds.join(","))
+    } else {
+      params.delete("highlights")
+    }
     router.replace(`?${params.toString()}`, { scroll: false })
-  }, [mapState.selectedId, router])
+  }, [mapState.selectedId, mapState.highlightedIds, router])
 
   const setMapState = useCallback((updates: Partial<MapState>) => {
     setMapStateInternal((prev) => ({ ...prev, ...updates }))
