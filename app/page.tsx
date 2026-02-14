@@ -151,11 +151,14 @@ function DashboardContent() {
       })
       setTavusConversationUrl(result.conversation_url)
     } catch (err) {
+      const message = err instanceof Error ? err.message : "Could not connect to Homecastr agent."
+      const isConfigError = message.includes("not set") || message.includes("not configured") || message.includes("Vercel")
       console.error("[TAVUS] Failed to create conversation:", err)
       toast({
-        title: "Homecastr Unavailable",
-        description: "Could not connect to Homecastr agent. Please try again.",
+        title: isConfigError ? "Homecastr not configured" : "Homecastr Unavailable",
+        description: isConfigError ? message : "Could not connect to Homecastr agent. Please try again.",
         variant: "destructive",
+        duration: isConfigError ? 12000 : 5000,
       })
     } finally {
       setIsTavusLoading(false)
@@ -185,11 +188,14 @@ function DashboardContent() {
       })
       setTavusConversationUrl(result.conversation_url)
     } catch (err) {
+      const message = err instanceof Error ? err.message : "Could not connect to Homecastr agent."
+      const isConfigError = message.includes("not set") || message.includes("not configured") || message.includes("Vercel")
       console.error("[TAVUS] Failed to create conversation:", err)
       toast({
-        title: "Homecastr Unavailable",
-        description: "Could not connect to Homecastr agent. Please try again.",
+        title: isConfigError ? "Homecastr not configured" : "Homecastr Unavailable",
+        description: isConfigError ? message : "Could not connect to Homecastr agent. Please try again.",
         variant: "destructive",
+        duration: isConfigError ? 12000 : 5000,
       })
     } finally {
       setIsTavusLoading(false)

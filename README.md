@@ -39,6 +39,19 @@ We are targeting the ~$13T U.S. residential market. Our go-to-market strategy in
 1.  **Public Distribution:** Free consumer layer to drive adoption and "standard-setting."
 2.  **Institutional Pilots:** Paid API access for lenders, servicers, and investors requiring auditable, scenario-level forecasts.
 
+## 🚀 Deployment (Vercel)
+
+For the **Homecastr Live Agent** (Tavus) to work in production:
+
+1. In Vercel: **Project → Settings → Environment Variables**
+2. Add (for **Production** and **Preview** if you use preview URLs):
+   * `TAVUS_API_KEY` — your Tavus API key
+   * `TAVUS_PERSONA_ID` — optional, Tavus persona id
+   * `TAVUS_REPLICA_ID` — optional, Tavus replica id
+3. **Redeploy** after saving (Deployments → … → Redeploy).
+
+If the button shows "Homecastr not configured", the toast will include a reminder to add these in Vercel. Supabase vars (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`) are also required for the map.
+
 ## 🔗 Links
 
 *   **Live App:** [houston-price-prediction.vercel.app](https://houston-price-prediction.vercel.app)

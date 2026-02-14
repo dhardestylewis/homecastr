@@ -26,7 +26,9 @@ export async function createTavusConversation({
   const replicaId = process.env.TAVUS_REPLICA_ID
 
   if (!apiKey) {
-    throw new Error("TAVUS_API_KEY is not configured")
+    throw new Error(
+      "TAVUS_API_KEY is not set. In Vercel: Project → Settings → Environment Variables — add TAVUS_API_KEY (and optionally TAVUS_PERSONA_ID, TAVUS_REPLICA_ID) for Production and Preview, then redeploy."
+    )
   }
 
   // Format values for natural language
@@ -80,11 +82,14 @@ export async function createTavusConversation({
     throw new Error(`Tavus API error: ${response.status} - ${errorText}`)
   }
 
-  const data = await response.json()
-  console.log("[TAVUS] Conversation created:", data.conversation_id)
+  const data = (await response.json()) as { conversation_id?: string; conversation_url?: string }
+  if (!data?.conversation_url) {
+    console.error("[TAVUS] Unexpected response:", data)
+    throw new Error("Tavus did not return a conversation URL. Check your Tavus persona/replica and API key.")
+  }
 
   return {
-    conversation_id: data.conversation_id,
+    conversation_id: data.conversation_id ?? "",
     conversation_url: data.conversation_url,
   }
 }
