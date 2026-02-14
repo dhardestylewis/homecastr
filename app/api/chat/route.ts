@@ -221,14 +221,13 @@ RULES:
 6. Do NOT mention "confidence" or "reliability".
 7. Default forecast_year: 2029, h3_res: 9.
 8. Use real Houston place names. Never generic labels.
-9. FORMAT — keep it tight:
+9. FORMAT — use strict Markdown lists for readability:
    - "annual_change_pct" is already a percentage. Display as: "Expected Change: X% each year over the next N years" where N = forecast_year - 2026.
-   - Show BOTH current value AND predicted value. Example output:
-     Heights (2029 forecast):
-     Current Value: $580,000
-     Predicted Value: $683,251
-     Expected Change: -26% each year over the next 3 years
-   - Do NOT editorialize about property count in summaries. It's metadata, not insight.
+   - For comparisons, use this structure:
+     ### [Area Name] ([Year] forecast)
+     - Current Value: $[Value]
+     - Predicted Value: $[Value]
+     - Expected Change: [Value]% each year over the next [N] years
    - Summary: 1-2 sentences comparing the key difference (value or expected change). No fluff.
    - Total response: 6-10 lines, never more than 15
 
