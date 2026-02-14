@@ -1,0 +1,977 @@
+openapi: 3.1.0
+info:
+  title: Properlytic Tool API (Current DB: H3 + Precomputed Hex Details)
+  version: 1.0.0
+  description: >
+    Allowlisted, typed tool endpoints for conversational Q&A backed by the current Supabase schema:
+
+      - public.get_h3_tile_mvt(z, x, y, query_year, query_res) -> MVT tiles
+      - public.h3_aoi_grid (geom, h3_id, h3_res) -> authoritative point->hex mapping
+      - public.h3_precomputed_hex_details (h3_id, h3_res, forecast_year, opportunity, reliability, predicted_value, property_count, sample_accuracy)
+
+    Tavus compatibility notes:
+      - Tavus LLM tool-calling emits conversation.tool_call events with {name, arguments} and does not execute tools server-side.
+      - Your frontend/backend must listen for tool calls, call these endpoints, then feed results back via conversation.append_llm_context and/or conversation.respond. :contentReference[oaicite:1]{index=1}
+
+servers:
+  - url: https://properlytic.com/api/tools/v1
+
+security:
+  - ToolApiKey: []
+
+tags:
+  - name: Geocode
+    description: Resolve user-entered locations (address/neighborhood/zip/landmark) into lat/lng candidates.
+  - name: Map
+    description: Pure mapping helpers (lat/lng -> slippy tiles) and one-shot location->hex helpers.
+  - name: Tiles
+    description: MVT tiles for the map UI (backed by public.get_h3_tile_mvt).
+  - name: H3
+    description: Hex metrics lookup/search/ranking (backed by h3_aoi_grid + h3_precomputed_hex_details).
+  - name: Compare
+    description: Compare two hexes at the same (forecast_year, h3_res).
+  - name: Explain
+    description: Static explanations of metrics for homeowner/broker language (no DB access).
+  - name: Feedback
+    description: Capture session feedback for product iteration.
+
+paths:
+  /geocode/resolve_place:
+    post:
+      tags: [Geocode]
+      summary: Resolve free-text location into lat/lng candidates
+      description: >
+        Use FIRST when the user provides a location string (address, neighborhood, zip, landmark).
+        Next step for the agent:
+          1) pick the best candidate (or ask the user to choose)
+          2) call /h3/point_to_hex to map lat/lng -> h3_id for your H3 layer.
+      operationId: resolve_place
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResolvePlaceRequest"
+            examples:
+              address:
+                value:
+                  query: "123 Main St, Houston, TX"
+                  city_hint: "Houston"
+                  max_candidates: 5
+              neighborhood:
+                value:
+                  query: "Montrose"
+                  city_hint: "Houston"
+                  max_candidates: 5
+      responses:
+        "200":
+          description: Candidate list with lat/lng (and optional bbox)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResolvePlaceResponse"
+        default:
+          $ref: "#/components/responses/ToolError"
+
+  /map/point_to_tile:
+    post:
+      tags: [Map]
+      summary: Convert lat/lng to Web Mercator tile coordinates (z/x/y) for requested zooms
+      description: >
+        Pure math; no DB access. Use when you want to center the UI map at a chosen candidate.
+      operationId: point_to_tile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PointToTileRequest"
+            examples:
+              ex1:
+                value:
+                  lat: 29.743
+                  lng: -95.391
+                  zooms: [10, 11, 12]
+      responses:
+        "200":
+          description: Tile xyz for each requested zoom
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PointToTileResponse"
+        default:
+          $ref: "#/components/responses/ToolError"
+
+  /h3/point_to_hex:
+    post:
+      tags: [H3]
+      summary: Map a point (lat/lng) to the containing H3 hex from h3_aoi_grid
+      description: >
+        Authoritative mapping between a user location and your H3 layer.
+        Implementation expectation:
+          - Find the hex in public.h3_aoi_grid where ST_Intersects(geom, point) AND h3_res matches.
+      operationId: point_to_hex
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PointToHexRequest"
+            examples:
+              ex1:
+                value:
+                  lat: 29.743
+                  lng: -95.391
+                  h3_res: 9
+                  include_geometry: false
+      responses:
+        "200":
+          description: Containing h3_id (and optional geometry)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PointToHexResponse"
+        default:
+          $ref: "#/components/responses/ToolError"
+
+  /map/location_to_hex:
+    post:
+      tags: [Map]
+      summary: One-shot helper: location text -> best candidate -> (tile xyz) + h3_id (+ optional metrics)
+      description: >
+        Convenience wrapper to reduce agent complexity.
+        Intended internal steps:
+          1) /geocode/resolve_place
+          2) choose top candidate (or apply heuristic)
+          3) /h3/point_to_hex
+          4) /map/point_to_tile (optional)
+          5) /h3/get_hex (optional, if include_metrics=true)
+
+        Use this when the user says "I live near X" or gives an address and you want to immediately
+        show the matching hex and its metrics.
+      operationId: location_to_hex
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LocationToHexRequest"
+            examples:
+              ex1:
+                value:
+                  query: "Montrose Houston"
+                  city_hint: "Houston"
+                  max_candidates: 5
+                  h3_res: 9
+                  forecast_year: 2029
+                  include_metrics: true
+                  zooms: [11]
+                  include_geometry: false
+      responses:
+        "200":
+          description: Selected candidate, mapped h3_id, optional tiles, optional metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocationToHexResponse"
+        default:
+          $ref: "#/components/responses/ToolError"
+
+  /tiles/h3/{z}/{x}/{y}.mvt:
+    get:
+      tags: [Tiles]
+      summary: Mapbox Vector Tile for H3 hexes (public.get_h3_tile_mvt)
+      description: >
+        Returns a Mapbox Vector Tile with layer="default" and attributes:
+          - h3_id, opp, rel, val, count, acc
+        Backed by public.get_h3_tile_mvt(z, x, y, query_year, query_res).
+      operationId: get_h3_tile_mvt
+      parameters:
+        - in: path
+          name: z
+          required: true
+          schema: { type: integer, minimum: 0, maximum: 22 }
+        - in: path
+          name: x
+          required: true
+          schema: { type: integer, minimum: 0 }
+        - in: path
+          name: y
+          required: true
+          schema: { type: integer, minimum: 0 }
+        - in: query
+          name: year
+          required: true
+          schema: { $ref: "#/components/schemas/ForecastYear" }
+        - in: query
+          name: res
+          required: true
+          schema: { $ref: "#/components/schemas/H3Res" }
+      responses:
+        "200":
+          description: Mapbox Vector Tile binary
+          content:
+            application/vnd.mapbox-vector-tile:
+              schema:
+                type: string
+                format: binary
+        default:
+          $ref: "#/components/responses/ToolError"
+
+  /h3/get_hex:
+    post:
+      tags: [H3]
+      summary: Fetch metrics for one H3 hex (and optionally geometry)
+      description: >
+        Joins public.h3_precomputed_hex_details with public.h3_aoi_grid (optional geometry).
+        Use after you have an h3_id (from point_to_hex, location_to_hex, or UI click).
+      operationId: get_h3_hex
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GetH3HexRequest"
+            examples:
+              ex1:
+                value:
+                  h3_id: "8928308280fffff"
+                  h3_res: 9
+                  forecast_year: 2029
+                  include_geometry: false
+      responses:
+        "200":
+          description: Hex card payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetH3HexResponse"
+        default:
+          $ref: "#/components/responses/ToolError"
+
+  /h3/search_hexes:
+    post:
+      tags: [H3]
+      summary: Search hexes in bbox/radius and filter by metrics
+      description: >
+        Use for queries like:
+          - "Find areas near me with high opportunity but decent reliability"
+          - "Show me tiles within 5 miles with at least N properties"
+
+        Notes:
+          - Area filtering should use spatial predicates against h3_aoi_grid.geom.
+          - Metric filters apply to h3_precomputed_hex_details for (forecast_year, h3_res).
+      operationId: search_h3_hexes
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SearchH3HexesRequest"
+            examples:
+              ex1:
+                value:
+                  forecast_year: 2029
+                  h3_res: 9
+                  area:
+                    type: bbox
+                    bbox:
+                      min_lat: 29.72
+                      min_lng: -95.45
+                      max_lat: 29.80
+                      max_lng: -95.33
+                    center:
+                      lat: 0
+                      lng: 0
+                    radius_m: 100
+                  filters:
+                    min_opportunity: 0.6
+                    min_reliability: 0.55
+                    min_property_count: 50
+                  sort: best_risk_adjusted_desc
+                  limit: 25
+                  cursor: ""
+                  include_geometry: false
+      responses:
+        "200":
+          description: Ranked hex results + pagination cursor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchH3HexesResponse"
+        default:
+          $ref: "#/components/responses/ToolError"
+
+  /h3/rank_hexes:
+    post:
+      tags: [H3]
+      summary: Rank hexes by objective (growth vs predictability vs best-risk-adjusted)
+      description: >
+        Use for top-k lists like:
+          - "Where should I look for the highest appreciation?"
+          - "Show me the most predictable areas"
+
+        Objective interpretation should be deterministic and documented in the response:
+          - higher_growth: rank by opportunity (or predicted_value growth proxy, if defined)
+          - more_predictable: rank by reliability (and/or uncertainty proxy)
+          - best_risk_adjusted: combined score (document formula server-side)
+      operationId: rank_h3_hexes
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RankH3HexesRequest"
+            examples:
+              ex1:
+                value:
+                  forecast_year: 2029
+                  h3_res: 9
+                  area:
+                    type: bbox
+                    bbox:
+                      min_lat: 29.70
+                      min_lng: -95.55
+                      max_lat: 29.85
+                      max_lng: -95.20
+                    center:
+                      lat: 0
+                      lng: 0
+                    radius_m: 100
+                  objective: best_risk_adjusted
+                  constraints:
+                    min_property_count: 200
+                    min_sample_accuracy: 0.5
+                  limit: 15
+                  cursor: ""
+                  include_geometry: false
+      responses:
+        "200":
+          description: Ranked hex list + pagination cursor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RankH3HexesResponse"
+        default:
+          $ref: "#/components/responses/ToolError"
+
+  /compare/h3_hexes:
+    post:
+      tags: [Compare]
+      summary: Compare two hexes at the same forecast_year and h3_res
+      description: >
+        Use for questions like "Compare Montrose vs Heights" AFTER you have two h3_ids
+        (from location_to_hex, UI click, or explicit ids).
+      operationId: compare_h3_hexes
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompareH3Request"
+            examples:
+              ex1:
+                value:
+                  forecast_year: 2029
+                  h3_res: 9
+                  left_h3_id: "8928308280fffff"
+                  right_h3_id: "8928308281bffff"
+                  include_geometry: false
+      responses:
+        "200":
+          description: Side-by-side comparison with lay-language highlights
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CompareH3Response"
+        default:
+          $ref: "#/components/responses/ToolError"
+
+  /explain/metric:
+    post:
+      tags: [Explain]
+      summary: Explain a metric in homeowner/broker language (no DB access)
+      operationId: explain_metric
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExplainMetricRequest"
+            examples:
+              ex1:
+                value:
+                  metric: reliability
+                  audience: homeowner
+      responses:
+        "200":
+          description: Voice-ready short + UI long explanation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExplainMetricResponse"
+        default:
+          $ref: "#/components/responses/ToolError"
+
+  /feedback/record:
+    post:
+      tags: [Feedback]
+      summary: Record feedback about an answer or data quality
+      operationId: record_feedback
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecordFeedbackRequest"
+            examples:
+              ex1:
+                value:
+                  session_id: "sess_abc123"
+                  question: "Where should I look for the strongest growth?"
+                  tool_used: "rank_h3_hexes"
+                  helpful: true
+                  notes: "Wanted a simpler explanation of reliability."
+      responses:
+        "200":
+          description: Acknowledged
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecordFeedbackResponse"
+        default:
+          $ref: "#/components/responses/ToolError"
+
+components:
+  securitySchemes:
+    ToolApiKey:
+      type: http
+      scheme: bearer
+      bearerFormat: ToolApiKey
+
+  responses:
+    ToolError:
+      description: Tool error response
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+  schemas:
+    # --------------------
+    # Shared primitives
+    # --------------------
+    ToolEnvelope:
+      type: object
+      additionalProperties: false
+      required: [request_id, tool_version, latency_ms]
+      properties:
+        request_id:
+          type: string
+          description: Server-generated unique id for tracing
+        tool_version:
+          type: string
+          example: "v1"
+        latency_ms:
+          type: integer
+          description: Total server processing time in milliseconds
+        warnings:
+          type: array
+          items: { type: string }
+
+    Audience:
+      type: string
+      enum: [homeowner, broker, analyst]
+
+    ForecastYear:
+      type: integer
+      minimum: 1900
+      maximum: 2200
+
+    H3Res:
+      type: integer
+      minimum: 0
+      maximum: 15
+
+    LatLng:
+      type: object
+      additionalProperties: false
+      required: [lat, lng]
+      properties:
+        lat: { type: number }
+        lng: { type: number }
+
+    BBox:
+      type: object
+      additionalProperties: false
+      required: [min_lat, min_lng, max_lat, max_lng]
+      properties:
+        min_lat: { type: number }
+        min_lng: { type: number }
+        max_lat: { type: number }
+        max_lng: { type: number }
+
+    AreaSelector:
+      type: object
+      additionalProperties: false
+      required: [type, bbox, center, radius_m]
+      properties:
+        type:
+          type: string
+          enum: [bbox, radius]
+        bbox:
+          $ref: "#/components/schemas/BBox"
+        center:
+          $ref: "#/components/schemas/LatLng"
+        radius_m:
+          type: integer
+          minimum: 100
+          maximum: 20000
+          description: Used only when type=radius
+
+    # --------------------
+    # Geocode
+    # --------------------
+    ResolvePlaceRequest:
+      type: object
+      additionalProperties: false
+      required: [query, city_hint, max_candidates]
+      properties:
+        query:
+          type: string
+          description: Free text location (address / neighborhood / zip / landmark)
+        city_hint:
+          type: string
+          description: Optional disambiguation context; pass "" if unknown.
+          default: ""
+        max_candidates:
+          type: integer
+          minimum: 1
+          maximum: 10
+          default: 5
+
+    PlaceCandidate:
+      type: object
+      additionalProperties: false
+      required: [label, lat, lng, confidence, kind, bbox]
+      properties:
+        label:
+          type: string
+          description: Display label (formatted address or place name)
+        lat: { type: number }
+        lng: { type: number }
+        bbox:
+          $ref: "#/components/schemas/BBox"
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        kind:
+          type: string
+          enum: [address, neighborhood, zip, landmark, city, unknown]
+
+    ResolvePlaceResponse:
+      allOf:
+        - $ref: "#/components/schemas/ToolEnvelope"
+        - type: object
+          additionalProperties: false
+          required: [candidates]
+          properties:
+            candidates:
+              type: array
+              items: { $ref: "#/components/schemas/PlaceCandidate" }
+
+    # --------------------
+    # Map helpers
+    # --------------------
+    PointToTileRequest:
+      type: object
+      additionalProperties: false
+      required: [lat, lng, zooms]
+      properties:
+        lat: { type: number }
+        lng: { type: number }
+        zooms:
+          type: array
+          minItems: 1
+          maxItems: 8
+          items: { type: integer, minimum: 0, maximum: 22 }
+
+    TileXYZ:
+      type: object
+      additionalProperties: false
+      required: [z, x, y]
+      properties:
+        z: { type: integer }
+        x: { type: integer }
+        y: { type: integer }
+
+    PointToTileResponse:
+      allOf:
+        - $ref: "#/components/schemas/ToolEnvelope"
+        - type: object
+          additionalProperties: false
+          required: [tiles]
+          properties:
+            tiles:
+              type: array
+              items: { $ref: "#/components/schemas/TileXYZ" }
+
+    # --------------------
+    # H3 mapping + metrics
+    # --------------------
+    PointToHexRequest:
+      type: object
+      additionalProperties: false
+      required: [lat, lng, h3_res, include_geometry]
+      properties:
+        lat: { type: number }
+        lng: { type: number }
+        h3_res: { $ref: "#/components/schemas/H3Res" }
+        include_geometry:
+          type: boolean
+          default: false
+
+    PointToHexResponse:
+      allOf:
+        - $ref: "#/components/schemas/ToolEnvelope"
+        - type: object
+          additionalProperties: false
+          required: [h3_id, h3_res, geometry_geojson]
+          properties:
+            h3_id:
+              type: string
+            h3_res:
+              $ref: "#/components/schemas/H3Res"
+            geometry_geojson:
+              type: object
+              nullable: true
+              description: Optional polygon geometry
+
+    LocationToHexRequest:
+      type: object
+      additionalProperties: false
+      required:
+        [query, city_hint, max_candidates, h3_res, forecast_year, include_metrics, zooms, include_geometry]
+      properties:
+        query: { type: string }
+        city_hint:
+          type: string
+          default: ""
+        max_candidates:
+          type: integer
+          minimum: 1
+          maximum: 10
+          default: 5
+        h3_res: { $ref: "#/components/schemas/H3Res" }
+        forecast_year: { $ref: "#/components/schemas/ForecastYear" }
+        include_metrics:
+          type: boolean
+          default: true
+        zooms:
+          type: array
+          minItems: 1
+          maxItems: 8
+          items: { type: integer, minimum: 0, maximum: 22 }
+          default: [11]
+        include_geometry:
+          type: boolean
+          default: false
+
+    H3Metrics:
+      type: object
+      additionalProperties: false
+      required: [opportunity, reliability, predicted_value, property_count, sample_accuracy]
+      properties:
+        opportunity:
+          type: number
+          description: h3_precomputed_hex_details.opportunity
+        reliability:
+          type: number
+          description: h3_precomputed_hex_details.reliability
+        predicted_value:
+          type: number
+          description: h3_precomputed_hex_details.predicted_value
+        property_count:
+          type: integer
+          description: h3_precomputed_hex_details.property_count
+        sample_accuracy:
+          type: number
+          description: h3_precomputed_hex_details.sample_accuracy
+
+    H3HexCard:
+      type: object
+      additionalProperties: false
+      required: [h3_id, h3_res, forecast_year, metrics, geometry_geojson, reasons]
+      properties:
+        h3_id: { type: string }
+        h3_res: { $ref: "#/components/schemas/H3Res" }
+        forecast_year: { $ref: "#/components/schemas/ForecastYear" }
+        metrics: { $ref: "#/components/schemas/H3Metrics" }
+        geometry_geojson:
+          type: object
+          nullable: true
+        reasons:
+          type: array
+          items: { type: string }
+          description: Lay-language ranking reasons
+
+    LocationToHexResponse:
+      allOf:
+        - $ref: "#/components/schemas/ToolEnvelope"
+        - type: object
+          additionalProperties: false
+          required: [chosen, tiles, h3]
+          properties:
+            chosen:
+              $ref: "#/components/schemas/PlaceCandidate"
+            tiles:
+              type: array
+              items: { $ref: "#/components/schemas/TileXYZ" }
+            h3:
+              type: object
+              additionalProperties: false
+              required: [h3_id, h3_res, metrics]
+              properties:
+                h3_id: { type: string }
+                h3_res: { $ref: "#/components/schemas/H3Res" }
+                metrics:
+                  $ref: "#/components/schemas/H3Metrics"
+                  nullable: true
+
+    GetH3HexRequest:
+      type: object
+      additionalProperties: false
+      required: [h3_id, h3_res, forecast_year, include_geometry]
+      properties:
+        h3_id: { type: string }
+        h3_res: { $ref: "#/components/schemas/H3Res" }
+        forecast_year: { $ref: "#/components/schemas/ForecastYear" }
+        include_geometry:
+          type: boolean
+          default: false
+
+    GetH3HexResponse:
+      allOf:
+        - $ref: "#/components/schemas/ToolEnvelope"
+        - type: object
+          additionalProperties: false
+          required: [hex]
+          properties:
+            hex:
+              $ref: "#/components/schemas/H3HexCard"
+
+    H3Filters:
+      type: object
+      additionalProperties: false
+      required: [min_opportunity, min_reliability, min_predicted_value, min_property_count, min_sample_accuracy]
+      properties:
+        min_opportunity: { type: number, default: 0 }
+        min_reliability: { type: number, default: 0 }
+        min_predicted_value: { type: number, default: 0 }
+        min_property_count: { type: integer, minimum: 0, default: 0 }
+        min_sample_accuracy: { type: number, default: 0 }
+
+    H3SortKey:
+      type: string
+      enum:
+        - opportunity_desc
+        - reliability_desc
+        - predicted_value_desc
+        - property_count_desc
+        - sample_accuracy_desc
+        - best_risk_adjusted_desc
+
+    SearchH3HexesRequest:
+      type: object
+      additionalProperties: false
+      required:
+        [forecast_year, h3_res, area, filters, sort, limit, cursor, include_geometry]
+      properties:
+        forecast_year: { $ref: "#/components/schemas/ForecastYear" }
+        h3_res: { $ref: "#/components/schemas/H3Res" }
+        area: { $ref: "#/components/schemas/AreaSelector" }
+        filters: { $ref: "#/components/schemas/H3Filters" }
+        sort: { $ref: "#/components/schemas/H3SortKey" }
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 50
+          default: 25
+        cursor:
+          type: string
+          description: Opaque pagination cursor; pass "" for first page.
+          default: ""
+        include_geometry:
+          type: boolean
+          default: false
+
+    SearchH3HexesResponse:
+      allOf:
+        - $ref: "#/components/schemas/ToolEnvelope"
+        - type: object
+          additionalProperties: false
+          required: [results, next_cursor]
+          properties:
+            results:
+              type: array
+              items: { $ref: "#/components/schemas/H3HexCard" }
+            next_cursor:
+              type: string
+              nullable: true
+
+    RankObjective:
+      type: string
+      enum: [higher_growth, more_predictable, best_risk_adjusted]
+
+    RankConstraints:
+      type: object
+      additionalProperties: false
+      required: [min_property_count, min_sample_accuracy]
+      properties:
+        min_property_count: { type: integer, minimum: 0, default: 0 }
+        min_sample_accuracy: { type: number, default: 0 }
+
+    RankH3HexesRequest:
+      type: object
+      additionalProperties: false
+      required:
+        [forecast_year, h3_res, area, objective, constraints, limit, cursor, include_geometry]
+      properties:
+        forecast_year: { $ref: "#/components/schemas/ForecastYear" }
+        h3_res: { $ref: "#/components/schemas/H3Res" }
+        area: { $ref: "#/components/schemas/AreaSelector" }
+        objective: { $ref: "#/components/schemas/RankObjective" }
+        constraints: { $ref: "#/components/schemas/RankConstraints" }
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 50
+          default: 25
+        cursor:
+          type: string
+          default: ""
+        include_geometry:
+          type: boolean
+          default: false
+
+    RankH3HexesResponse:
+      allOf:
+        - $ref: "#/components/schemas/ToolEnvelope"
+        - type: object
+          additionalProperties: false
+          required: [results, next_cursor]
+          properties:
+            results:
+              type: array
+              items: { $ref: "#/components/schemas/H3HexCard" }
+            next_cursor:
+              type: string
+              nullable: true
+
+    CompareH3Request:
+      type: object
+      additionalProperties: false
+      required: [forecast_year, h3_res, left_h3_id, right_h3_id, include_geometry]
+      properties:
+        forecast_year: { $ref: "#/components/schemas/ForecastYear" }
+        h3_res: { $ref: "#/components/schemas/H3Res" }
+        left_h3_id: { type: string }
+        right_h3_id: { type: string }
+        include_geometry:
+          type: boolean
+          default: false
+
+    CompareH3Response:
+      allOf:
+        - $ref: "#/components/schemas/ToolEnvelope"
+        - type: object
+          additionalProperties: false
+          required: [left, right, highlights]
+          properties:
+            left: { $ref: "#/components/schemas/H3HexCard" }
+            right: { $ref: "#/components/schemas/H3HexCard" }
+            highlights:
+              type: array
+              items: { type: string }
+
+    # --------------------
+    # Explain + Feedback
+    # --------------------
+    ExplainableMetric:
+      type: string
+      enum: [opportunity, reliability, predicted_value, property_count, sample_accuracy]
+
+    ExplainMetricRequest:
+      type: object
+      additionalProperties: false
+      required: [metric, audience]
+      properties:
+        metric: { $ref: "#/components/schemas/ExplainableMetric" }
+        audience: { $ref: "#/components/schemas/Audience" }
+
+    ExplainMetricResponse:
+      allOf:
+        - $ref: "#/components/schemas/ToolEnvelope"
+        - type: object
+          additionalProperties: false
+          required: [metric, short, long]
+          properties:
+            metric: { $ref: "#/components/schemas/ExplainableMetric" }
+            short:
+              type: string
+              description: 1–2 sentences, voice-ready.
+            long:
+              type: string
+              description: UI tooltip/help-drawer copy.
+
+    RecordFeedbackRequest:
+      type: object
+      additionalProperties: false
+      required: [session_id, question, tool_used, helpful, notes]
+      properties:
+        session_id: { type: string }
+        question: { type: string }
+        tool_used: { type: string }
+        helpful: { type: boolean }
+        notes: { type: string, default: "" }
+
+    RecordFeedbackResponse:
+      allOf:
+        - $ref: "#/components/schemas/ToolEnvelope"
+        - type: object
+          additionalProperties: false
+          required: [ok]
+          properties:
+            ok: { type: boolean }
+
+    # --------------------
+    # Errors
+    # --------------------
+    ErrorCode:
+      type: string
+      enum:
+        - invalid_request
+        - unauthorized
+        - forbidden
+        - not_found
+        - rate_limited
+        - tool_timeout
+        - internal_error
+
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [request_id, error]
+      properties:
+        request_id: { type: string }
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, details]
+          properties:
+            code: { $ref: "#/components/schemas/ErrorCode" }
+            message: { type: string }
+            details:
+              type: object
+              additionalProperties: true
