@@ -81,9 +81,16 @@ export function ChatPanel({ isOpen, onClose, onMapAction }: ChatPanelProps) {
 
             // Execute map actions (fly-to, select hex)
             if (data.mapActions && data.mapActions.length > 0) {
+                // Offset longitude to account for the 400px chat sidebar covering the left side
+                // At zoom Z, 1 pixel ≈ 360 / (256 * 2^Z) degrees of longitude
+                // 200px offset (half of 400px sidebar) at various zooms:
+                const computeOffset = (zoom: number) => (200 * 360) / (256 * Math.pow(2, zoom))
+
                 if (data.mapActions.length === 1) {
-                    // Single location — fly directly
-                    onMapAction(data.mapActions[0])
+                    // Single location — fly directly, offset for sidebar
+                    const a = data.mapActions[0]
+                    const offset = computeOffset(a.zoom)
+                    onMapAction({ ...a, lng: a.lng + offset })
                 } else {
                     // Multiple locations (e.g. comparison) — compute midpoint + zoom to show all
                     const actions = data.mapActions as MapAction[]
@@ -95,7 +102,8 @@ export function ChatPanel({ isOpen, onClose, onMapAction }: ChatPanelProps) {
                     const maxSpan = Math.max(latSpan, lngSpan)
                     // Rough heuristic: 0.01° span ≈ zoom 15, 0.1° ≈ zoom 12, 0.5° ≈ zoom 10
                     const fitZoom = maxSpan < 0.01 ? 15 : maxSpan < 0.05 ? 13 : maxSpan < 0.1 ? 12 : maxSpan < 0.3 ? 11 : 10
-                    onMapAction({ lat: avgLat, lng: avgLng, zoom: fitZoom })
+                    const offset = computeOffset(fitZoom)
+                    onMapAction({ lat: avgLat, lng: avgLng + offset, zoom: fitZoom })
                 }
             }
         } catch (error: any) {
