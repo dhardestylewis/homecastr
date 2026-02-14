@@ -210,6 +210,7 @@ const TOOL_DEFINITIONS: OpenAI.ChatCompletionTool[] = [
 ]
 
 const SYSTEM_PROMPT = `You are Homecastr, a real estate data assistant for Houston, TX (Harris County). You look up property value forecasts and neighborhood metrics from our database.
+// Force recompile: 2026-02-14 15:20
 
 RULES:
 1. For EVERY query: call fly_to_location in the SAME tool call batch as data lookups. Never wait for data results before flying.
@@ -276,7 +277,7 @@ export async function POST(req: NextRequest) {
             console.log(`[Chat API] Round ${round + 1} response:`, {
                 hasContent: !!assistantMessage.content,
                 contentPreview: assistantMessage.content?.substring(0, 100),
-                toolCalls: assistantMessage.tool_calls?.map(tc => tc.function.name) || [],
+                toolCalls: assistantMessage.tool_calls?.map(tc => tc.type === 'function' ? (tc as any).function.name : 'unknown') || [],
             })
 
             // No tool calls — we have our final text response
@@ -297,14 +298,16 @@ export async function POST(req: NextRequest) {
             conversationMessages.push(assistantMessage)
 
             for (const tc of assistantMessage.tool_calls) {
-                if (tc.function.name === "fly_to_location") {
+                if (tc.type !== 'function') continue
+                const toolFn = (tc as any).function
+                if (toolFn.name === "fly_to_location") {
                     // UI tool — extract for client-side, return dummy result to LLM
                     try {
-                        const args = JSON.parse(tc.function.arguments)
+                        const args = JSON.parse(toolFn.arguments)
                         allMapActions.push(args)
                         console.log(`[Chat API] fly_to_location:`, args)
                     } catch (e) {
-                        console.error(`[Chat API] Failed to parse fly_to_location args:`, tc.function.arguments)
+                        console.error(`[Chat API] Failed to parse fly_to_location args:`, toolFn.arguments)
                     }
                     conversationMessages.push({
                         role: "tool",
@@ -313,18 +316,18 @@ export async function POST(req: NextRequest) {
                     })
                 } else {
                     // API tool — query real data
-                    allToolsUsed.push(tc.function.name)
+                    allToolsUsed.push(toolFn.name)
                     try {
-                        const args = JSON.parse(tc.function.arguments)
-                        const result = await executeToolCall(tc.function.name, args)
-                        console.log(`[Chat API] Tool ${tc.function.name} result:`, result.substring(0, 200))
+                        const args = JSON.parse(toolFn.arguments)
+                        const result = await executeToolCall(toolFn.name, args)
+                        console.log(`[Chat API] Tool ${toolFn.name} result:`, result.substring(0, 200))
                         conversationMessages.push({
                             role: "tool",
                             tool_call_id: tc.id,
                             content: result,
                         })
                     } catch (e) {
-                        console.error(`[Chat API] Failed to process tool ${tc.function.name}:`, e)
+                        console.error(`[Chat API] Failed to process tool ${toolFn.name}:`, e)
                         conversationMessages.push({
                             role: "tool",
                             tool_call_id: tc.id,
