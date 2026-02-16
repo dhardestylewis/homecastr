@@ -55,7 +55,7 @@ export default function H3Map({ year = 2026, colorMode = "growth" }: H3MapProps)
                 const layerId = `h3-res${res}-fill`;
 
                 // Growth mode color scale (opportunity-based)
-                const growthColorExpr = [
+                const growthColorExpr: any = [
                     'interpolate',
                     ['linear'],
                     ['get', 'opportunity_pct'],
@@ -65,7 +65,7 @@ export default function H3Map({ year = 2026, colorMode = "growth" }: H3MapProps)
                 ];
 
                 // Value mode color scale (med_predicted_value-based)
-                const valueColorExpr = [
+                const valueColorExpr: any = [
                     'interpolate',
                     ['linear'],
                     ['coalesce', ['get', 'med_predicted_value'], 0],
