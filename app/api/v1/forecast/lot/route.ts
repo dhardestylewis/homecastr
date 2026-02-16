@@ -31,8 +31,7 @@ export async function GET(req: NextRequest) {
             acct,
             forecasts: forecasts.map(f => ({
                 year: f.yr,
-                valuation: f.valuation,
-                is_imputed: f.is_imputed
+                valuation: f.valuation
             }))
         })
     } catch (error: any) {

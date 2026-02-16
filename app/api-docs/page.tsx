@@ -135,7 +135,7 @@ export default function ApiDocsPage() {
                                     </button>
                                 </div>
                                 <p className="text-xs text-muted-foreground">
-                                    Save this key — it won&apos;t be shown again. Use it as a <code className="text-primary">x-api-key</code> header.
+                                    Save this key. It won&apos;t be shown again. Use it as a <code className="text-primary">x-api-key</code> header.
                                 </p>
                             </div>
                         ) : (
@@ -176,7 +176,7 @@ export default function ApiDocsPage() {
                             <div className="space-y-6">
                                 <p className="text-muted-foreground leading-relaxed">
                                     Retrieve 4-year predictive forecasts for any accounted residential property in Harris County.
-                                    Includes Year-over-Year valuations and imputation flags.
+                                    Includes year-over-year valuations.
                                 </p>
 
                                 <div className="space-y-4">
@@ -204,10 +204,10 @@ export default function ApiDocsPage() {
                                     {`{
   "acct": "1036810000007",
   "forecasts": [
-    { "year": 2026, "valuation": 412500, "is_imputed": false },
-    { "year": 2027, "valuation": 431000, "is_imputed": true },
-    { "year": 2028, "valuation": 452000, "is_imputed": true },
-    { "year": 2029, "valuation": 475000, "is_imputed": true }
+    { "year": 2026, "valuation": 412500 },
+    { "year": 2027, "valuation": 431000 },
+    { "year": 2028, "valuation": 452000 },
+    { "year": 2029, "valuation": 475000 }
   ]
 }`}
                                 </pre>
