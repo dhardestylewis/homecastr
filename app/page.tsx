@@ -61,6 +61,24 @@ function DashboardContent() {
     })
   }, [setMapState, toast])
 
+  // Listen for Tavus tool events (dispatched from window by TavusMiniWindow)
+  useEffect(() => {
+    const handleTavusAction = (e: Event) => {
+      const detail = (e as CustomEvent).detail
+      if (detail.type === "fly_to") {
+        setMapState({
+          center: [detail.lng, detail.lat],
+          zoom: detail.zoom,
+          ...(detail.select_hex_id ? { selectedId: detail.select_hex_id } : {}),
+        })
+        toast({ title: "Homecastr Agent", description: "Moving map..." })
+      }
+      // Add 'rank' logic here if needed (uses search tool under the hood)
+    }
+    window.addEventListener("tavus-map-action", handleTavusAction)
+    return () => window.removeEventListener("tavus-map-action", handleTavusAction)
+  }, [setMapState, toast])
+
   // Reverse Geocode Effect
   useEffect(() => {
     if (!mapState.selectedId) {
