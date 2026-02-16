@@ -64,16 +64,15 @@ function DashboardContent() {
   // Listen for Tavus tool events (dispatched from window by TavusMiniWindow)
   useEffect(() => {
     const handleTavusAction = (e: Event) => {
-      const detail = (e as CustomEvent).detail
-      if (detail.type === "fly_to") {
+      const { action, params } = (e as CustomEvent).detail
+      if (action === "fly_to_location") {
         setMapState({
-          center: [detail.lng, detail.lat],
-          zoom: detail.zoom,
-          ...(detail.select_hex_id ? { selectedId: detail.select_hex_id } : {}),
+          center: [params.lng, params.lat],
+          zoom: params.zoom || 12,
+          ...(params.select_hex_id ? { selectedId: params.select_hex_id } : {}),
         })
         toast({ title: "Homecastr Agent", description: "Moving map..." })
       }
-      // Add 'rank' logic here if needed (uses search tool under the hood)
     }
     window.addEventListener("tavus-map-action", handleTavusAction)
     return () => window.removeEventListener("tavus-map-action", handleTavusAction)
@@ -258,7 +257,7 @@ function DashboardContent() {
           />
         ) : filters.usePMTiles ? (
           <div className="absolute inset-0 z-0">
-            <H3Map year={currentYear} colorMode={filters.colorMode} />
+            <H3Map year={currentYear} colorMode={filters.colorMode} mapState={mapState} />
           </div>
         ) : (
           <MapView
