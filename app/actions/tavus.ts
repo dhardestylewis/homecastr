@@ -55,35 +55,12 @@ export async function createTavusConversation({
 
     const custom_greeting = `Hi! I see you're checking out this property in Houston. How can I help you understand its future value?`
 
-    const body: Record<string, unknown> = {
-      conversational_context,
-      custom_greeting,
-      conversation_name: "Homecastr Live Agent",
-      // Lock to two-person view: just the user and the replica (no multi-party)
-      max_participants: 2,
-      properties: {
-        max_call_duration: 1800, // 30 minutes
-        participant_left_timeout: 30,
-        participant_absent_timeout: 120,
-        enable_recording: true,
-        language: "english",
+    // 1. Create a transient Persona with the correct system prompt & tools
+    let activePersonaId = personaId;
 
-        // Prompt & Persona
-        system_prompt: `You are Homecastr, a real estate data assistant for Houston, TX (Harris County) being driven by an AI video avatar.
-Your goal is to explain this specific property's investment potential using the provided metrics (Opportunity Score, Cap Rate, Predicted Value).
-
-TONE & PERSONA:
-1. You are professional, concise, and data-driven.
-2. Only report numbers from the context provided. Never guess or make up numbers.
-3. Do NOT mention "confidence" or "reliability" unless asked directly.
-4. Use real estate terminology but explain it simply if needed.
-5. If asked about other properties/neighborhoods, politely explain you only have data for this specific location right now.
-
-CONTEXT:
-The user is looking at a specific map location with the data provided in the prompt.`,
-
-        // Tools for map control
-        tools: [
+    if (!activePersonaId) {
+      try {
+        const toolDefinitions = [
           {
             type: "function",
             function: {
@@ -118,13 +95,70 @@ The user is looking at a specific map location with the data provided in the pro
               }
             }
           }
-        ],
+        ];
+
+        const personaBody = {
+          persona_name: `Homecastr Session ${Date.now()}`,
+          system_prompt: `You are Homecastr, a real estate data assistant for Houston, TX (Harris County) being driven by an AI video avatar.
+Your goal is to explain this specific property's investment potential using the provided metrics (Opportunity Score, Cap Rate, Predicted Value).
+
+TONE & PERSONA:
+1. You are professional, concise, and data-driven.
+2. Only report numbers from the context provided. Never guess or make up numbers.
+3. Do NOT mention "confidence" or "reliability" unless asked directly.
+4. Use real estate terminology but explain it simply if needed.
+5. If asked about other properties/neighborhoods, politely explain you only have data for this specific location right now.
+
+CONTEXT:
+The user is looking at a specific map location with the data provided in the prompt.`,
+          layers: {
+            llm: {
+              model: "tavus-gpt-oss",
+              tools: toolDefinitions
+            }
+          }
+        };
+
+        const personaRes = await fetch("https://tavusapi.com/v2/personas", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Api-Key": apiKey,
+          },
+          body: JSON.stringify(personaBody),
+        });
+
+        if (!personaRes.ok) {
+          const errText = await personaRes.text();
+          console.error(`[TAVUS] Persona Creation Failed: ${personaRes.status} - ${errText}`);
+          return { error: `Failed to create persona: ${errText}` };
+        }
+
+        const personaData = await personaRes.json();
+        activePersonaId = personaData.persona_id;
+        console.log(`[TAVUS] Created transient persona: ${activePersonaId}`);
+      } catch (e) {
+        console.error("[TAVUS] Error creating persona:", e);
+        return { error: "Failed to initialize agent persona." };
+      }
+    }
+
+    // 2. Create the conversation using that Persona
+    const body: Record<string, unknown> = {
+      persona_id: activePersonaId,
+      conversational_context,
+      custom_greeting,
+      conversation_name: "Homecastr Live Agent",
+      max_participants: 2,
+      properties: {
+        max_call_duration: 1800,
+        participant_left_timeout: 30,
+        participant_absent_timeout: 120,
+        enable_recording: true,
+        language: "english",
       },
     }
 
-    if (personaId) {
-      body.persona_id = personaId
-    }
     if (replicaId) {
       body.replica_id = replicaId
     }
