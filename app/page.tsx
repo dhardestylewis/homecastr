@@ -166,6 +166,7 @@ function DashboardContent() {
         predictedValue: details.predictedValue,
         opportunityScore: details.opportunityScore,
         capRate: details.capRate,
+        address: searchBarValue && !searchBarValue.includes("Loading") ? searchBarValue : "this neighborhood",
       })
 
       if (result.error || !result.conversation_url) {
@@ -205,6 +206,7 @@ function DashboardContent() {
         predictedValue: details?.proforma?.predicted_value ?? null,
         opportunityScore: details?.opportunity?.value ?? null,
         capRate: details?.proforma?.cap_rate ?? null,
+        address: searchBarValue && !searchBarValue.includes("Loading") && !searchBarValue.startsWith("8") ? searchBarValue : "this neighborhood",
       })
 
       if (result.error || !result.conversation_url) {

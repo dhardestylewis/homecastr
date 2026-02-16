@@ -12,6 +12,7 @@ interface CreateTavusConversationParams {
   predictedValue: number | null
   opportunityScore: number | null
   capRate: number | null
+  address?: string | null
 }
 
 interface TavusConversationResponse {
@@ -24,6 +25,7 @@ export async function createTavusConversation({
   predictedValue,
   opportunityScore,
   capRate,
+  address,
 }: CreateTavusConversationParams): Promise<TavusConversationResponse> {
   try {
     const apiKey = process.env.TAVUS_API_KEY
@@ -40,23 +42,18 @@ export async function createTavusConversation({
       return { error: "Both TAVUS_PERSONA_ID and TAVUS_REPLICA_ID are missing. Please configure at least one." }
     }
 
-    // Format values for natural language
-    const prediction = predictedValue != null
-      ? `$${predictedValue.toLocaleString("en-US", { maximumFractionDigits: 0 })}`
-      : "an estimated value"
-    const opportunity = opportunityScore != null
-      ? `${opportunityScore.toFixed(1)}%`
-      : "N/A"
-    const capRateStr = capRate != null
-      ? `${(capRate * 100).toFixed(2)}%`
-      : "N/A"
+    // 1. Context Sanitization: Use tools for real data, don't pass pre-computed numbers.
+    const locationContext = address && !address.includes("neighborhood") ? `at ${address}` : "in Houston";
 
-    const conversational_context = `The user is looking at a property in Houston with an Opportunity Score of ${opportunity} and a Cap Rate of ${capRateStr}. Our models predict a value of ${prediction} by 2030.`
+    const conversational_context = `The user is exploring properties ${locationContext} in Houston, TX. 
+    IMPORTANT: You have zero initial metrics. You MUST call 'location_to_hex' or 'get_h3_hex' immediately to find the real market data for the current selection.
+    Do NOT guess or make up numbers. Use your tools for everything.`;
 
-    const custom_greeting = `Hi! I see you're checking out this property in Houston. How can I help you understand its future value?`
+    const custom_greeting = `Hi! I see you're checking out properties ${locationContext}. How can I help you understand the market trajectory here?`
 
-    // 1. Create a transient Persona with the correct system prompt & tools
-    let activePersonaId = personaId;
+    // 2. Persona Initialization
+    // We force a transient persona for now to ensure our new "Human Speech" rules are active.
+    let activePersonaId = null;
 
     if (!activePersonaId) {
       try {
@@ -64,54 +61,104 @@ export async function createTavusConversation({
           {
             type: "function",
             function: {
-              name: "fly_to_location",
-              description: "Smoothly pan and zoom the map to a specific location. Use this after resolving a place or when discussing a specific area.",
+              name: "resolve_place",
+              description: "Resolve a free-text location into lat/lng results.",
               parameters: {
                 type: "object",
                 properties: {
-                  lat: { type: "number", description: "Target latitude." },
-                  lng: { type: "number", description: "Target longitude." },
-                  zoom: { type: "integer", description: "Target zoom level (9-18). Use 14 for neighborhoods, 16 for specific addresses." },
-                  select_hex_id: { type: "string", description: "Optional H3 hex id to select/highlight on the map after flying." },
+                  query: { type: "string" },
+                  city_hint: { type: "string" },
+                  max_candidates: { type: "integer" }
                 },
-                required: ["lat", "lng", "zoom"],
-              },
-            },
+                required: ["query", "city_hint", "max_candidates"]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "location_to_hex",
+              description: "Resolve text location -> map to h3_id -> return metrics.",
+              parameters: {
+                type: "object",
+                properties: {
+                  query: { type: "string" },
+                  forecast_year: { type: "integer" },
+                  include_metrics: { type: "boolean" }
+                },
+                required: ["query", "forecast_year", "include_metrics"]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "get_h3_hex",
+              description: "Fetch metrics for a single H3 hex.",
+              parameters: {
+                type: "object",
+                properties: {
+                  h3_id: { type: "string" },
+                  forecast_year: { type: "integer" }
+                },
+                required: ["h3_id", "forecast_year"]
+              }
+            }
           },
           {
             type: "function",
             function: {
               name: "rank_h3_hexes",
-              description: "Find and rank H3 hexes in an area. Use this to find 'top areas' for growth or value.",
+              description: "Rank H3 hexes in an area for growth or value.",
               parameters: {
                 type: "object",
                 properties: {
-                  forecast_year: { type: "integer", description: "Forecast year (default 2029)." },
-                  h3_res: { type: "integer", description: "H3 resolution (default 9)." },
-                  objective: { type: "string", description: "Ranking objective: higher_growth, more_predictable, best_risk_adjusted." },
-                  limit: { type: "integer", description: "Max results." }
+                  forecast_year: { type: "integer" },
+                  h3_res: { type: "integer" },
+                  objective: { type: "string" },
+                  limit: { type: "integer" }
                 },
                 required: ["objective"]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "fly_to_location",
+              description: "Pan and zoom the map to a specific location.",
+              parameters: {
+                type: "object",
+                properties: {
+                  lat: { type: "number" },
+                  lng: { type: "number" },
+                  zoom: { type: "integer" },
+                  select_hex_id: { type: "string" }
+                },
+                required: ["lat", "lng", "zoom"]
               }
             }
           }
         ];
 
         const personaBody = {
-          persona_name: `Homecastr Session ${Date.now()}`,
+          persona_name: `Homecastr Voice ${Date.now()}`,
           pipeline_mode: "full",
-          system_prompt: `You are Homecastr, a real estate data assistant for Houston, TX (Harris County) being driven by an AI video avatar.
-Your goal is to explain this specific property's investment potential using the provided metrics (Opportunity Score, Cap Rate, Predicted Value).
+          system_prompt: `You are Homecastr, a real estate analyst. You are TALKING to a user.
 
-TONE & PERSONA:
-1. You are professional, concise, and data-driven.
-2. Only report numbers from the context provided. Never guess or make up numbers.
-3. Do NOT mention "confidence" or "reliability" unless asked directly.
-4. Use real estate terminology but explain it simply if needed.
-5. If asked about other properties/neighborhoods, politely explain you only have data for this specific location right now.
+VOICE ETIQUETTE (CRITICAL):
+1. SPEAK LIKE A HUMAN: Do NOT read tool results verbatim. Do NOT read JSON blocks.
+2. NEVER mention IDs: Never say "H3 Cell", "Hex ID", or long strings of letters/numbers. Just say "this area" or the neighborhood name.
+3. CONCISE: Report only 1 or 2 metrics at a time (e.g., just the Value and the Growth). Wait for the user to ask for more.
+4. PROACTIVITY: As soon as a tool returns metrics, translate them into a natural sentence. "I found that Midtown is looking at an estimated value of $370k by 2030."
+5. NO LOOPS: If you have data, share it. Do not tell the user you are waiting if the result is already in your tool history.
 
-CONTEXT:
-The user is looking at a specific map location with the data provided in the prompt.`,
+RULES:
+- TREND ANALYSIS: Use 'forecast_year: 2030' by default for trends.
+- BASELINE (2026): If the year is 2026, ONLY report the "Current Market Value (2026)". Do NOT show "Predicted Value" or "Annual Change" as they are identical to the current state.
+- Post-2026: For future years, always provide BOTH Current (2026) and Predicted ([Year]).
+- DOLLARS: Mention specific dollar values clearly.
+- NO FILLER: No conversational filler like "reaching out to my modules." Just get the data.`,
           layers: {
             llm: {
               model: "tavus-gpt-oss",
