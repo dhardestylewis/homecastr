@@ -35,6 +35,11 @@ export async function createTavusConversation({
       return { error: "TAVUS_API_KEY is not configured on the server." }
     }
 
+    if (!personaId && !replicaId) {
+      console.error("[TAVUS] Missing Persona/Replica ID")
+      return { error: "Both TAVUS_PERSONA_ID and TAVUS_REPLICA_ID are missing. Please configure at least one." }
+    }
+
     // Format values for natural language
     const prediction = predictedValue != null
       ? `$${predictedValue.toLocaleString("en-US", { maximumFractionDigits: 0 })}`
