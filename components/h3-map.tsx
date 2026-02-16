@@ -28,7 +28,7 @@ export default function H3Map({ year = 2026, colorMode = "growth" }: H3MapProps)
 
         map.current = new maplibregl.Map({
             container: mapContainer.current,
-            style: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
+            style: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
             center: [-95.36, 29.76], // Houston
             zoom: 10,
             pitch: 0,
