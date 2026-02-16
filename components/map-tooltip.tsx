@@ -158,8 +158,13 @@ export function MapTooltip({
                                 </div>
                             </div>
                             <div className="p-3 border-b border-border/50 bg-muted/30">
-                                <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">
-                                    {h3Resolution <= 7 ? "District Scale" : h3Resolution <= 9 ? "Neighborhood Scale" : h3Resolution <= 10 ? "Block Scale" : "Property Scale"} (Res {h3Resolution})
+                                <div className="flex justify-between items-start">
+                                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">
+                                        {h3Resolution <= 7 ? "District Scale" : h3Resolution <= 9 ? "Neighborhood Scale" : h3Resolution <= 10 ? "Block Scale" : "Property Scale"} (Res {h3Resolution})
+                                    </div>
+                                    <div className="text-[9px] px-1.5 py-0.5 bg-primary/10 text-primary rounded-full font-bold">
+                                        {displayProps.n_accts} Prop
+                                    </div>
                                 </div>
                                 {coordinates && (
                                     <div className="font-mono text-xs text-muted-foreground truncate">
@@ -197,13 +202,9 @@ export function MapTooltip({
                                             {formatOpportunity(displayProps.O)}
                                         </div>
                                     </div>
-                                    <div>
+                                    <div className="col-span-2">
                                         <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold truncate">Properties</div>
                                         <div className="text-sm font-medium text-foreground truncate">{displayProps.n_accts}</div>
-                                    </div>
-                                    <div>
-                                        <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold truncate">Confidence</div>
-                                        <div className="text-sm font-medium text-foreground truncate">{formatReliability(displayProps.R)}</div>
                                     </div>
                                 </div>
                             </div>
@@ -294,14 +295,10 @@ export function MapTooltip({
                                 )
                             )}
 
-                            <div className="pt-1 mt-0 border-t border-border/50 grid grid-cols-2 gap-4 text-center">
-                                <div>
-                                    <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold">Properties</div>
-                                    <div className="text-xs font-medium text-foreground">{displayProps.n_accts}</div>
-                                </div>
-                                <div>
-                                    <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold">Confidence</div>
-                                    <div className="text-xs font-medium text-foreground">{formatReliability(displayProps.R)}</div>
+                            <div className="pt-1 mt-0 border-t border-border/50 text-center">
+                                <div className="text-[9px] text-muted-foreground flex justify-center items-center gap-1.5">
+                                    <Bot className="w-3 h-3 text-primary/50" />
+                                    <span>AI Predictive Confidence: <span className="text-foreground font-medium">{formatReliability(displayProps.R)}</span></span>
                                 </div>
                             </div>
 

@@ -61,9 +61,9 @@ export default function H3Map({ year = 2026, colorMode = "growth", mapState }: H
                     'interpolate',
                     ['linear'],
                     ['get', 'opportunity_pct'],
-                    -50, '#8b5cf6',  // Purple for negative
-                    0, '#cbd5e1',    // Light slate for neutral (better on light map)
-                    50, '#3b82f6'    // Blue for positive
+                    -50, '#be123c',  // Rose
+                    0, '#e2e8f0',    // Soft Slate (Neutral)
+                    50, '#059669'    // Emerald/Sage
                 ];
 
                 // Value mode color scale (med_predicted_value-based)
@@ -71,9 +71,9 @@ export default function H3Map({ year = 2026, colorMode = "growth", mapState }: H
                     'interpolate',
                     ['linear'],
                     ['coalesce', ['get', 'med_predicted_value'], 0],
-                    100000, '#3d1f5c',   // Deep purple (low)
-                    500000, '#c44536',   // Red-orange (mid)
-                    1500000, '#f5e663'   // Yellow (high)
+                    100000, '#4a1d96', // Deep Purple
+                    500000, '#be123c', // Rose
+                    1500000, '#d97706' // Warm Amber
                 ];
 
                 map.current?.addLayer({
@@ -173,18 +173,18 @@ export default function H3Map({ year = 2026, colorMode = "growth", mapState }: H
             'interpolate',
             ['linear'],
             ['get', 'opportunity_pct'],
-            -50, '#8b5cf6',
-            0, '#cbd5e1',
-            50, '#3b82f6'
+            -50, '#be123c',
+            0, '#e2e8f0',
+            50, '#059669'
         ];
 
         const valueColorExpr: any = [
             'interpolate',
             ['linear'],
             ['coalesce', ['get', 'med_predicted_value'], 0],
-            100000, '#3d1f5c',
-            500000, '#c44536',
-            1500000, '#f5e663'
+            100000, '#4a1d96',
+            500000, '#be123c',
+            1500000, '#d97706'
         ];
 
         resLevels.forEach(res => {

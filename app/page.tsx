@@ -533,7 +533,7 @@ function DashboardContent() {
           <button
             onClick={handleFloatingConsultAI}
             className={cn(
-              "fixed bottom-5 z-[9999] flex items-center gap-2.5 px-5 py-3 rounded-2xl bg-[#16161e] hover:bg-[#1e1e2a] border border-white/15 hover:border-primary/40 text-white shadow-2xl transition-all duration-300 hover:scale-105 active:scale-95 group",
+              "fixed bottom-5 z-[9999] flex items-center gap-2.5 px-5 py-3 rounded-2xl glass-panel hover:bg-accent/50 text-foreground shadow-2xl transition-all duration-300 hover:scale-105 active:scale-95 group",
               isChatOpen ? "left-[420px]" : "left-5"
             )}
           >
@@ -541,8 +541,8 @@ function DashboardContent() {
               <Bot className="w-4 h-4 text-primary" />
             </div>
             <div className="flex flex-col items-start">
-              <span className="text-xs font-semibold text-white/90">Talk to Homecastr Live Agent</span>
-              <span className="text-[10px] text-white/40">Powered by Tavus</span>
+              <span className="text-xs font-semibold">Talk to Homecastr Live Agent</span>
+              <span className="text-[10px] text-muted-foreground">Powered by Tavus</span>
             </div>
           </button>
         )}
@@ -550,7 +550,7 @@ function DashboardContent() {
         {/* Homecastr Loading Indicator */}
         {isTavusLoading && (
           <div className={cn(
-            "fixed bottom-5 z-[10000] bg-[#16161e] text-white/90 rounded-2xl px-5 py-4 shadow-2xl border border-white/10 flex items-center gap-3 transition-all duration-300",
+            "fixed bottom-5 z-[10000] glass-panel text-foreground rounded-2xl px-5 py-4 shadow-2xl flex items-center gap-3 transition-all duration-300",
             isChatOpen ? "left-[420px]" : "left-5"
           )}>
             <div className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
