@@ -134,7 +134,7 @@ function DashboardContent() {
     setFilters({ colorMode: mode })
   }, [setFilters])
 
-  // Homecastr handler (called with pre-fetched details from tooltip buttons)
+  /* Homecastr handler */
   const handleConsultAI = useCallback(async (details: {
     predictedValue: number | null
     opportunityScore: number | null
@@ -149,12 +149,17 @@ function DashboardContent() {
         opportunityScore: details.opportunityScore,
         capRate: details.capRate,
       })
+
+      if (result.error || !result.conversation_url) {
+        throw new Error(result.error || "Failed to create conversation")
+      }
+
       setTavusConversationUrl(result.conversation_url)
     } catch (err) {
       console.error("[TAVUS] Failed to create conversation:", err)
       toast({
         title: "Homecastr Unavailable",
-        description: "Could not connect to Homecastr agent. Please try again.",
+        description: err instanceof Error ? err.message : "Could not connect to Homecastr agent.",
         variant: "destructive",
       })
     } finally {
@@ -162,7 +167,7 @@ function DashboardContent() {
     }
   }, [isTavusLoading, toast])
 
-  // Floating button handler — fetches details on the fly from map center or selected hex
+  /* Floating button handler */
   const handleFloatingConsultAI = useCallback(async () => {
     if (isTavusLoading) return
 
@@ -183,12 +188,17 @@ function DashboardContent() {
         opportunityScore: details?.opportunity?.value ?? null,
         capRate: details?.proforma?.cap_rate ?? null,
       })
+
+      if (result.error || !result.conversation_url) {
+        throw new Error(result.error || "Failed to create conversation")
+      }
+
       setTavusConversationUrl(result.conversation_url)
     } catch (err) {
       console.error("[TAVUS] Failed to create conversation:", err)
       toast({
         title: "Homecastr Unavailable",
-        description: "Could not connect to Homecastr agent. Please try again.",
+        description: err instanceof Error ? err.message : "Could not connect to Homecastr agent.",
         variant: "destructive",
       })
     } finally {
