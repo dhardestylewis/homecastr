@@ -68,6 +68,42 @@ TONE & PERSONA:
 
 CONTEXT:
 The user is looking at a specific map location with the data provided in the prompt.`,
+      tools: [
+        {
+          type: "function",
+          function: {
+            name: "fly_to_location",
+            description: "Smoothly pan and zoom the map to a specific location. Use this after resolving a place or when discussing a specific area.",
+            parameters: {
+              type: "object",
+              properties: {
+                lat: { type: "number", description: "Target latitude." },
+                lng: { type: "number", description: "Target longitude." },
+                zoom: { type: "integer", description: "Target zoom level (9-18). Use 14 for neighborhoods, 16 for specific addresses." },
+                select_hex_id: { type: "string", description: "Optional H3 hex id to select/highlight on the map after flying." },
+              },
+              required: ["lat", "lng", "zoom"],
+            },
+          },
+        },
+        {
+          type: "function",
+          function: {
+            name: "rank_h3_hexes",
+            description: "Find and rank H3 hexes in an area. Use this to find 'top areas' for growth or value.",
+            parameters: {
+              type: "object",
+              properties: {
+                forecast_year: { type: "integer", description: "Forecast year (default 2029)." },
+                h3_res: { type: "integer", description: "H3 resolution (default 9)." },
+                objective: { type: "string", description: "Ranking objective: higher_growth, more_predictable, best_risk_adjusted." },
+                limit: { type: "integer", description: "Max results." }
+              },
+              required: ["objective"]
+            }
+          }
+        }
+      ],
       conversational_context,
       custom_greeting,
       conversation_name: "Homecastr Live Agent",
