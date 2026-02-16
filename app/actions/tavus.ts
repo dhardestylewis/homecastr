@@ -99,6 +99,7 @@ export async function createTavusConversation({
 
         const personaBody = {
           persona_name: `Homecastr Session ${Date.now()}`,
+          pipeline_mode: "full",
           system_prompt: `You are Homecastr, a real estate data assistant for Houston, TX (Harris County) being driven by an AI video avatar.
 Your goal is to explain this specific property's investment potential using the provided metrics (Opportunity Score, Cap Rate, Predicted Value).
 
