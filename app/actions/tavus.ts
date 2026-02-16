@@ -56,7 +56,20 @@ export async function createTavusConversation({
     const custom_greeting = `Hi! I see you're checking out this property in Houston. How can I help you understand its future value?`
 
     const body: Record<string, unknown> = {
-      system_prompt: `You are Homecastr, a real estate data assistant for Houston, TX (Harris County) being driven by an AI video avatar.
+      conversational_context,
+      custom_greeting,
+      conversation_name: "Homecastr Live Agent",
+      // Lock to two-person view: just the user and the replica (no multi-party)
+      max_participants: 2,
+      properties: {
+        max_call_duration: 1800, // 30 minutes
+        participant_left_timeout: 30,
+        participant_absent_timeout: 120,
+        enable_recording: true,
+        language: "english",
+
+        // Prompt & Persona
+        system_prompt: `You are Homecastr, a real estate data assistant for Houston, TX (Harris County) being driven by an AI video avatar.
 Your goal is to explain this specific property's investment potential using the provided metrics (Opportunity Score, Cap Rate, Predicted Value).
 
 TONE & PERSONA:
@@ -68,52 +81,44 @@ TONE & PERSONA:
 
 CONTEXT:
 The user is looking at a specific map location with the data provided in the prompt.`,
-      tools: [
-        {
-          type: "function",
-          function: {
-            name: "fly_to_location",
-            description: "Smoothly pan and zoom the map to a specific location. Use this after resolving a place or when discussing a specific area.",
-            parameters: {
-              type: "object",
-              properties: {
-                lat: { type: "number", description: "Target latitude." },
-                lng: { type: "number", description: "Target longitude." },
-                zoom: { type: "integer", description: "Target zoom level (9-18). Use 14 for neighborhoods, 16 for specific addresses." },
-                select_hex_id: { type: "string", description: "Optional H3 hex id to select/highlight on the map after flying." },
+
+        // Tools for map control
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "fly_to_location",
+              description: "Smoothly pan and zoom the map to a specific location. Use this after resolving a place or when discussing a specific area.",
+              parameters: {
+                type: "object",
+                properties: {
+                  lat: { type: "number", description: "Target latitude." },
+                  lng: { type: "number", description: "Target longitude." },
+                  zoom: { type: "integer", description: "Target zoom level (9-18). Use 14 for neighborhoods, 16 for specific addresses." },
+                  select_hex_id: { type: "string", description: "Optional H3 hex id to select/highlight on the map after flying." },
+                },
+                required: ["lat", "lng", "zoom"],
               },
-              required: ["lat", "lng", "zoom"],
             },
           },
-        },
-        {
-          type: "function",
-          function: {
-            name: "rank_h3_hexes",
-            description: "Find and rank H3 hexes in an area. Use this to find 'top areas' for growth or value.",
-            parameters: {
-              type: "object",
-              properties: {
-                forecast_year: { type: "integer", description: "Forecast year (default 2029)." },
-                h3_res: { type: "integer", description: "H3 resolution (default 9)." },
-                objective: { type: "string", description: "Ranking objective: higher_growth, more_predictable, best_risk_adjusted." },
-                limit: { type: "integer", description: "Max results." }
-              },
-              required: ["objective"]
+          {
+            type: "function",
+            function: {
+              name: "rank_h3_hexes",
+              description: "Find and rank H3 hexes in an area. Use this to find 'top areas' for growth or value.",
+              parameters: {
+                type: "object",
+                properties: {
+                  forecast_year: { type: "integer", description: "Forecast year (default 2029)." },
+                  h3_res: { type: "integer", description: "H3 resolution (default 9)." },
+                  objective: { type: "string", description: "Ranking objective: higher_growth, more_predictable, best_risk_adjusted." },
+                  limit: { type: "integer", description: "Max results." }
+                },
+                required: ["objective"]
+              }
             }
           }
-        }
-      ],
-      conversational_context,
-      custom_greeting,
-      conversation_name: "Homecastr Live Agent",
-      // Lock to two-person view: just the user and the replica (no multi-party)
-      max_participants: 2,
-      properties: {
-        max_call_duration: 1800, // 30 minutes
-        participant_left_timeout: 30,
-        participant_absent_timeout: 120,
-        language: "english",
+        ],
       },
     }
 
