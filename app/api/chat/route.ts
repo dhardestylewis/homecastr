@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import OpenAI from "openai"
 import * as h3 from "h3-js"
+import { executeTopLevelTool } from "@/app/actions/tools"
 
 // Tool definitions from tavus-tool-definitions.json (inlined for the API route)
 const TOOL_DEFINITIONS: OpenAI.ChatCompletionTool[] = [
@@ -68,7 +69,7 @@ const TOOL_DEFINITIONS: OpenAI.ChatCompletionTool[] = [
                     city_hint: { type: "string", description: "Disambiguation context; pass empty string if unknown." },
                     max_candidates: { type: "integer", description: "Number of candidates to consider (1-10)." },
                     h3_res: { type: "integer", description: "H3 resolution (0-15)." },
-                    forecast_year: { type: "integer", description: "Forecast year to fetch metrics for." },
+                    forecast_year: { type: "integer", description: "Forecast year (e.g., 2030 for a 4-year trend). Use 2026 ONLY if asking for current market value." },
                     include_metrics: { type: "boolean", description: "Whether to include metrics for the chosen hex." },
                     zooms: { type: "array", description: "Zoom levels for tile xyz (0-22).", items: { type: "integer" } },
                     include_geometry: { type: "boolean", description: "Whether to include hex polygon geometry." },
@@ -210,29 +211,18 @@ const TOOL_DEFINITIONS: OpenAI.ChatCompletionTool[] = [
     },
 ]
 
-const SYSTEM_PROMPT = `You are Homecastr, a real estate data assistant for Houston, TX (Harris County). You look up property value forecasts and neighborhood metrics from our database.
-// Force recompile: 2026-02-14 15:20
+const SYSTEM_PROMPT = `You are Homecastr, a real estate analyst for Houston, TX.
 
 RULES:
-1. For EVERY query: call fly_to_location in the SAME tool call batch as data lookups. Never wait for data results before flying.
-2. For COMPARISONS (e.g. "compare Heights vs Montrose"): call location_to_hex for EACH neighborhood AND ONE fly_to_location centered between both (zoom 13). The location_to_hex results already include all metrics — do NOT also call compare_h3_hexes.
-3. SUGGESTIONS/RECOMMENDATIONS: If asked about a neighborhood ("Montrose value"), fly_to_location into that neighborhood (zoom 14-15) AND call 'rank_h3_hexes' for that neighborhood with a tight bounding box AND h3_res: 10 (to match zoom). Highlight the relevant hexes. Name each result by its nearest cross-street or landmark.
-4. GENERIC REQUESTS: If asked for general advice ("where has the most growth?"), DO NOT REFUSE. Instead, use 'rank_h3_hexes' (without a bbox) to find the top locations globally based on the requested metric. HOWEVER, if asked to explain terms ("what is predicted value?"), USE the 'explain_metric' tool.
-5. Only report numbers from tool results. No editorializing or parenthetical explanations.
-6. Do NOT mention "confidence" or "reliability".
-7. Default forecast_year: 2029, h3_res: 9.
-8. Use real Houston place names. Never generic labels.
-9. FORMAT — use strict Markdown lists for readability:
-   - "annual_change_pct" is already a percentage. Display as: "Expected Change: X% each year over the next N years" where N = forecast_year - 2026.
-   - For comparisons, use this structure:
-     ### [Area Name] ([Year] forecast)
-     - Current Value: $[Value]
-     - Predicted Value: $[Value]
-     - Expected Change: [Value]% each year over the next [N] years
-   - Summary: 1-2 sentences comparing the key difference (value or expected change). No fluff.
-   - Total response: 6-10 lines, never more than 15
-
-You query real data from the Homecastr database. Always use tools — never guess or make up numbers.`
+1. PROACTIVITY: Report results immediately once a tool returns. Never say "I'm waiting" or "Give me a second."
+2. BASELINE REPORTING (2026): If the forecast_year is 2026, ONLY report the "Current Market Value (2026)". Do NOT show "Predicted Value" or "Annual Change" as they are identical to the current state.
+3. TREND REPORTING (Post-2026): For future years, always provide:
+   - Current Market Value (2026)
+   - Predicted Value ([Year])
+   - Avg. Annual Change (%)
+4. TOOL EFFICIENCY: Use 'location_to_hex' for one-shot lookups. Avoid redundant tool calls.
+5. FLY FIRST: Batch 'fly_to_location' with data tools.
+6. ANALYTICAL TONE: Be concise. Mention specific dollar values. Speak like a professional analyst, not a JSON parser. Use Markdown.`
 
 export async function POST(req: NextRequest) {
     try {
@@ -319,7 +309,7 @@ export async function POST(req: NextRequest) {
                     allToolsUsed.push(toolFn.name)
                     try {
                         const args = JSON.parse(toolFn.arguments)
-                        const result = await executeToolCall(toolFn.name, args)
+                        const result = await executeTopLevelTool(toolFn.name, args)
                         if (toolFn.name === "rank_h3_hexes") {
                             try {
                                 const resultObj = JSON.parse(result)
@@ -388,409 +378,4 @@ export async function POST(req: NextRequest) {
     }
 }
 
-/**
- * Execute a tool call against real data sources (Supabase + Nominatim + h3-js).
- */
-async function executeToolCall(toolName: string, args: Record<string, any>): Promise<string> {
-    const { getSupabaseServerClient } = await import("@/lib/supabase/server")
-    const h3 = await import("h3-js")
-
-    switch (toolName) {
-        case "resolve_place": {
-            // Use Nominatim to geocode the query (same as existing geocode action)
-            try {
-                const params = new URLSearchParams({
-                    q: args.query + (args.city_hint ? `, ${args.city_hint}` : ", Houston, TX"),
-                    format: "json",
-                    limit: String(args.max_candidates || 3),
-                    addressdetails: "1",
-                    viewbox: "-95.96,30.17,-94.90,29.50",
-                    bounded: "1",
-                })
-                const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
-                    headers: { "User-Agent": "HomecastrUI/1.0" },
-                })
-                if (!res.ok) return JSON.stringify({ candidates: [], error: "Geocode failed" })
-                const data = await res.json()
-                const candidates = (data || []).map((item: any) => ({
-                    label: item.display_name,
-                    lat: parseFloat(item.lat),
-                    lng: parseFloat(item.lon),
-                    confidence: 0.9,
-                    kind: item.type || "place",
-                    bbox: item.boundingbox || null,
-                }))
-                console.log(`[Chat Tool] resolve_place "${args.query}": ${candidates.length} results`)
-                return JSON.stringify({ candidates })
-            } catch (e: any) {
-                console.error("[Chat Tool] resolve_place error:", e.message)
-                return JSON.stringify({ candidates: [], error: e.message })
-            }
-        }
-
-        case "point_to_hex": {
-            try {
-                const res = args.h3_res ?? 9
-                const hexId = h3.latLngToCell(args.lat, args.lng, res)
-                return JSON.stringify({ h3_id: hexId, h3_res: res })
-            } catch (e: any) {
-                return JSON.stringify({ error: e.message })
-            }
-        }
-
-        case "point_to_tile": {
-            // Simple tile math
-            const tiles = (args.zooms || []).map((z: number) => {
-                const x = Math.floor(((args.lng + 180) / 360) * Math.pow(2, z))
-                const latRad = (args.lat * Math.PI) / 180
-                const y = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * Math.pow(2, z))
-                return { z, x, y }
-            })
-            return JSON.stringify({ tiles })
-        }
-
-        case "get_h3_hex": {
-            try {
-                const supabase = await getSupabaseServerClient()
-                const forecastYear = args.forecast_year || 2029
-                const yearsOut = forecastYear - 2026
-                const [forecastResult, currentResult] = await Promise.all([
-                    supabase
-                        .from("h3_precomputed_hex_details")
-                        .select("h3_id, h3_res, forecast_year, opportunity, predicted_value, property_count, lat, lng")
-                        .eq("h3_id", args.h3_id)
-                        .eq("forecast_year", forecastYear)
-                        .single(),
-                    supabase
-                        .from("h3_precomputed_hex_details")
-                        .select("predicted_value")
-                        .eq("h3_id", args.h3_id)
-                        .eq("forecast_year", 2026)
-                        .single(),
-                ])
-
-                const data = forecastResult.data
-                const error = forecastResult.error
-                const currentValue = currentResult.data?.predicted_value ?? null
-
-                if (error || !data) {
-                    console.error("[Chat Tool] get_h3_hex error:", error?.message)
-                    return JSON.stringify({ hex: null, error: error?.message || "Not found" })
-                }
-
-                // Reverse geocode the hex center for a location name
-                let locationName = `H3 Cell ${args.h3_id}`
-                try {
-                    const revRes = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${data.lat}&lon=${data.lng}&zoom=16&format=json`, {
-                        headers: { "User-Agent": "HomecastrUI/1.0" },
-                    })
-                    if (revRes.ok) {
-                        const revData = await revRes.json()
-                        const addr = revData.address || {}
-                        locationName = addr.suburb || addr.neighbourhood || addr.road || revData.display_name?.split(",")[0] || locationName
-                    }
-                } catch { /* ignore reverse geocode failure */ }
-
-                console.log(`[Chat Tool] get_h3_hex ${args.h3_id}: value=$${data.predicted_value}, opp=${data.opportunity}`)
-                return JSON.stringify({
-                    hex: {
-                        h3_id: data.h3_id,
-                        h3_res: data.h3_res,
-                        forecast_year: data.forecast_year,
-                        years_out: yearsOut,
-                        location: { name: locationName, lat: data.lat, lng: data.lng },
-                        metrics: {
-                            annual_change_pct: data.opportunity != null ? Math.round(data.opportunity * 10000) / 100 : null,
-                            current_value: currentValue,
-                            predicted_value: data.predicted_value,
-                            property_count: data.property_count,
-                        },
-                    },
-                })
-            } catch (e: any) {
-                console.error("[Chat Tool] get_h3_hex exception:", e.message)
-                return JSON.stringify({ hex: null, error: e.message })
-            }
-        }
-
-        case "location_to_hex": {
-            try {
-                // Step 1: Geocode the query
-                const params = new URLSearchParams({
-                    q: args.query + ", Houston, TX",
-                    format: "json",
-                    limit: "1",
-                    addressdetails: "1",
-                    viewbox: "-95.96,30.17,-94.90,29.50",
-                    bounded: "1",
-                })
-                const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
-                    headers: { "User-Agent": "HomecastrUI/1.0" },
-                })
-                if (!geoRes.ok) return JSON.stringify({ error: "Geocode failed" })
-                const geoData = await geoRes.json()
-                if (!geoData || geoData.length === 0) return JSON.stringify({ error: "Location not found" })
-
-                const place = geoData[0]
-                const lat = parseFloat(place.lat)
-                const lng = parseFloat(place.lon)
-                const res = args.h3_res ?? 9
-
-                // Step 2: Convert to H3 hex
-                const hexId = h3.latLngToCell(lat, lng, res)
-
-                // Step 3: Query metrics from Supabase
-                let metrics = null
-                if (args.include_metrics !== false) {
-                    const supabase = await getSupabaseServerClient()
-                    const forecastYear = args.forecast_year || 2029
-                    const yearsOut = forecastYear - 2026
-                    const [forecastResult, currentResult] = await Promise.all([
-                        supabase
-                            .from("h3_precomputed_hex_details")
-                            .select("opportunity, predicted_value, property_count")
-                            .eq("h3_id", hexId)
-                            .eq("forecast_year", forecastYear)
-                            .single(),
-                        supabase
-                            .from("h3_precomputed_hex_details")
-                            .select("predicted_value")
-                            .eq("h3_id", hexId)
-                            .eq("forecast_year", 2026)
-                            .single(),
-                    ])
-                    const data = forecastResult.data
-                    if (data) {
-                        metrics = {
-                            annual_change_pct: data.opportunity != null ? Math.round(data.opportunity * 10000) / 100 : null,
-                            current_value: currentResult.data?.predicted_value ?? null,
-                            predicted_value: data.predicted_value,
-                            property_count: data.property_count,
-                            years_out: yearsOut,
-                        }
-                    }
-                }
-
-                const addr = place.address || {}
-                const locationLabel = addr.suburb || addr.neighbourhood || addr.city_district || place.display_name.split(",")[0]
-
-                console.log(`[Chat Tool] location_to_hex "${args.query}" → ${hexId} at (${lat}, ${lng}), metrics:`, metrics)
-                return JSON.stringify({
-                    chosen: {
-                        label: locationLabel + ", Houston, TX",
-                        lat,
-                        lng,
-                        kind: place.type || "place",
-                    },
-                    h3: {
-                        h3_id: hexId,
-                        h3_res: res,
-                        metrics,
-                    },
-                })
-            } catch (e: any) {
-                console.error("[Chat Tool] location_to_hex error:", e.message)
-                return JSON.stringify({ error: e.message })
-            }
-        }
-
-        case "search_h3_hexes":
-        case "rank_h3_hexes": {
-            try {
-                console.log(`[Chat Tool] ${toolName} called with args:`, JSON.stringify(args))
-                const supabase = await getSupabaseServerClient()
-                const forecastYear = args.forecast_year || 2029
-                const limit = Math.min(args.limit || 5, 10)
-                const sortBy = args.objective || args.sort || "opportunity"
-
-                // Map sort field to column name
-                const sortColumn = sortBy === "reliability" ? "reliability"
-                    : sortBy === "predicted_value" || sortBy === "value" ? "predicted_value"
-                        : "opportunity"
-
-                // Build query
-                let query = supabase
-                    .from("h3_precomputed_hex_details")
-                    // Remove lat/lng from select as they don't exist in this table
-                    .select("h3_id, h3_res, forecast_year, opportunity, predicted_value, property_count")
-                    .eq("forecast_year", forecastYear)
-                    .eq("h3_res", args.h3_res ?? 9)
-                    .not(sortColumn, "is", null)
-
-                // If bbox provided, convert to hex IDs and filter by h3_id. This avoids spatial join on DB side.
-                if (args.bbox) {
-                    const [minLat, maxLat, minLng, maxLng] = args.bbox
-                    console.log(`[Chat Tool] ${toolName} bbox: lat ${minLat}-${maxLat}, lng ${minLng}-${maxLng}`)
-
-                    // Construct polygon (lat/lng)
-                    const polygon = [
-                        [minLat, minLng],
-                        [maxLat, minLng],
-                        [maxLat, maxLng],
-                        [minLat, maxLng],
-                        [minLat, minLng]
-                    ]
-
-                    // Get all hexes in this polygon at requested resolution
-                    const hexIds = h3.polygonToCells(polygon, args.h3_res ?? 9) // default isGeoJson=false -> [lat, lng]
-                    console.log(`[Chat Tool] ${toolName} found ${hexIds.length} candidate hexes in bbox`)
-
-                    if (hexIds.length > 5000) {
-                        console.warn(`[Chat Tool] Too many hexes (${hexIds.length}) for IN clause. Limiting to first 2000.`)
-                        query = query.in("h3_id", hexIds.slice(0, 2000))
-                    } else if (hexIds.length > 0) {
-                        query = query.in("h3_id", hexIds)
-                    } else {
-                        console.warn(`[Chat Tool] No hexes found in bbox. Returning empty.`)
-                        return JSON.stringify({ hexes: [] })
-                    }
-                } else {
-                    console.log(`[Chat Tool] ${toolName} using global search (no bbox)`)
-                }
-
-                // Apply sort and limit last
-                query = query
-                    .order(sortColumn, { ascending: false })
-                    .limit(limit)
-
-                console.log(`[Chat Tool] ${toolName} querying: year=${forecastYear}, res=${args.h3_res ?? 9}, sort=${sortColumn}, limit=${limit}`)
-
-                const { data, error } = await query
-
-                if (error) {
-                    console.error(`[Chat Tool] ${toolName} DB error:`, error.message)
-                    return JSON.stringify({ hexes: [], error: error.message })
-                }
-
-                console.log(`[Chat Tool] ${toolName} got ${data?.length ?? 0} rows`)
-
-                // Reverse geocode each hex to get a location name (batch, with rate limiting)
-                const hexes = await Promise.all((data || []).map(async (row: any, i: number) => {
-                    let locationName = `H3 Cell`
-                    // Compute center for reverse geocoding (since DB lacks lat/lng)
-                    const [lat, lng] = h3.cellToLatLng(row.h3_id)
-                    try {
-                        // Stagger requests to respect Nominatim rate limits
-                        await new Promise(r => setTimeout(r, i * 200))
-                        const revRes = await fetch(
-                            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&zoom=16&format=json`,
-                            { headers: { "User-Agent": "HomecastrUI/1.0" } }
-                        )
-                        if (revRes.ok) {
-                            const revData = await revRes.json()
-                            const addr = revData.address || {}
-                            locationName = addr.suburb || addr.neighbourhood || addr.road || revData.display_name?.split(",")[0] || locationName
-                        }
-                    } catch { /* ignore */ }
-
-                    return {
-                        h3_id: row.h3_id,
-                        h3_res: row.h3_res,
-                        forecast_year: row.forecast_year,
-                        location: { name: locationName, lat, lng }, // Use computed lat/lng
-                        metrics: {
-                            annual_change_pct: row.opportunity != null ? Math.round(row.opportunity * 10000) / 100 : null,
-                            predicted_value: row.predicted_value,
-                            property_count: row.property_count,
-                        },
-                        reasons: [`Rank #${i + 1} by ${sortBy}`],
-                    }
-                }))
-
-                console.log(`[Chat Tool] ${toolName}: ${hexes.length} results sorted by ${sortColumn}`)
-                return JSON.stringify({ hexes, cursor: null })
-            } catch (e: any) {
-                console.error(`[Chat Tool] ${toolName} error:`, e.message)
-                return JSON.stringify({ hexes: [], error: e.message })
-            }
-        }
-
-        case "compare_h3_hexes": {
-            try {
-                const supabase = await getSupabaseServerClient()
-                const forecastYear = args.forecast_year || 2029
-
-                const [leftRes, rightRes] = await Promise.all([
-                    supabase
-                        .from("h3_precomputed_hex_details")
-                        .select("h3_id, opportunity, reliability, predicted_value, property_count, lat, lng")
-                        .eq("h3_id", args.left_h3_id)
-                        .eq("forecast_year", forecastYear)
-                        .single(),
-                    supabase
-                        .from("h3_precomputed_hex_details")
-                        .select("h3_id, opportunity, reliability, predicted_value, property_count, lat, lng")
-                        .eq("h3_id", args.right_h3_id)
-                        .eq("forecast_year", forecastYear)
-                        .single(),
-                ])
-
-                const left = leftRes.data
-                const right = rightRes.data
-
-                // Reverse geocode both
-                const getName = async (lat: number, lng: number) => {
-                    try {
-                        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&zoom=16&format=json`, {
-                            headers: { "User-Agent": "HomecastrUI/1.0" },
-                        })
-                        if (res.ok) {
-                            const d = await res.json()
-                            return d.address?.suburb || d.address?.neighbourhood || d.display_name?.split(",")[0] || "Unknown"
-                        }
-                    } catch { }
-                    return "Unknown"
-                }
-
-                const [leftName, rightName] = await Promise.all([
-                    left ? getName(left.lat, left.lng) : "Unknown",
-                    right ? getName(right.lat, right.lng) : "Unknown",
-                ])
-
-                const highlights: string[] = []
-                if (left && right) {
-                    if ((left.opportunity ?? 0) > (right.opportunity ?? 0)) highlights.push(`${leftName} has a higher expected annual change`)
-                    else if ((right.opportunity ?? 0) > (left.opportunity ?? 0)) highlights.push(`${rightName} has a higher expected annual change`)
-                    if ((left.predicted_value ?? 0) > (right.predicted_value ?? 0)) highlights.push(`${leftName} has higher predicted value`)
-                    else if ((right.predicted_value ?? 0) > (left.predicted_value ?? 0)) highlights.push(`${rightName} has higher predicted value`)
-                }
-
-                const toMetrics = (d: any) => d ? {
-                    annual_change_pct: d.opportunity != null ? Math.round(d.opportunity * 10000) / 100 : null,
-                    predicted_value: d.predicted_value,
-                    property_count: d.property_count,
-                } : null
-
-                console.log(`[Chat Tool] compare: ${leftName} vs ${rightName}`)
-                return JSON.stringify({
-                    left: { h3_id: args.left_h3_id, name: leftName, metrics: toMetrics(left) },
-                    right: { h3_id: args.right_h3_id, name: rightName, metrics: toMetrics(right) },
-                    highlights,
-                })
-            } catch (e: any) {
-                console.error("[Chat Tool] compare error:", e.message)
-                return JSON.stringify({ error: e.message })
-            }
-        }
-
-        case "explain_metric": {
-            const explanations: Record<string, string> = {
-                opportunity: "Expected annual change shows how much property values are projected to change each year over the next 4 years. For example, +5% means values are expected to rise about 5% per year.",
-                predicted_value: "The predicted median home value in this area by the forecast year, based on historical trends and market conditions.",
-                property_count: "The number of properties in this hex cell used to calculate the forecast. More properties generally means a more reliable prediction.",
-                sample_accuracy: "How accurately our model predicted past values in this area. Higher accuracy means the model performs well here.",
-            }
-            return JSON.stringify({
-                short: explanations[args.metric] || `${args.metric} is a key real estate metric.`,
-                long: explanations[args.metric] || `${args.metric} is used to evaluate real estate investment potential.`,
-            })
-        }
-
-        case "record_feedback":
-            return JSON.stringify({ recorded: true, id: "fb_" + Date.now() })
-
-        default:
-            return JSON.stringify({ status: "ok", note: `Tool ${toolName} executed` })
-    }
-}
 
