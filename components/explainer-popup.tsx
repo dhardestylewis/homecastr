@@ -80,7 +80,7 @@ export function ExplainerPopup() {
                                 Welcome to Homecastr
                             </h2>
                             <p className="text-muted-foreground mt-1 text-sm font-medium">
-                                Smarter data. Clearer forecasts.
+                                Smarter models. Clearer forecasts.
                             </p>
                         </div>
                     </div>
@@ -92,11 +92,11 @@ export function ExplainerPopup() {
                             <div className="space-y-3">
                                 <h3 className="font-semibold text-lg text-primary">About the Map</h3>
                                 <p className="text-sm text-foreground leading-relaxed">
-                                    Homecastr aggregates property data into hexagonal grids to reveal granular market dynamics.
-                                    We define "Value" not just by price, but by predictive confidence and stability over time.
+                                    Homecastr is a foundation model that forecasts value at the home level.
+                                    We provide probable price bands to help you with your home buying and selling decisions, generated from many scenarios of the future.
                                 </p>
                                 <p className="text-sm text-foreground leading-relaxed">
-                                    Use this tool to identify high-growth areas, compare neighborhoods, and visualize AI-driven future value projections.
+                                    Use this tool to identify high-growth, compare neighborhoods, and see what the future might be.
                                 </p>
                             </div>
 
