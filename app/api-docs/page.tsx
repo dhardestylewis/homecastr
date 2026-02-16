@@ -1,8 +1,49 @@
+"use client"
 
-import React from 'react'
-import { Bot, Code2, Database, Globe, Lock, Terminal } from 'lucide-react'
+import React, { useState } from 'react'
+import { Bot, Code2, Database, Globe, Lock, Terminal, Check, Copy, Key } from 'lucide-react'
 
 export default function ApiDocsPage() {
+    const [email, setEmail] = useState("")
+    const [apiKey, setApiKey] = useState<string | null>(null)
+    const [loading, setLoading] = useState(false)
+    const [error, setError] = useState<string | null>(null)
+    const [copied, setCopied] = useState(false)
+
+    const generateKey = async () => {
+        if (!email || !email.includes("@")) {
+            setError("Please enter a valid email address.")
+            return
+        }
+        setLoading(true)
+        setError(null)
+        try {
+            const res = await fetch("/api/v1/keys", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email }),
+            })
+            const data = await res.json()
+            if (data.error) {
+                setError(data.error)
+            } else {
+                setApiKey(data.key)
+            }
+        } catch {
+            setError("Something went wrong. Please try again.")
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    const copyKey = () => {
+        if (apiKey) {
+            navigator.clipboard.writeText(apiKey)
+            setCopied(true)
+            setTimeout(() => setCopied(false), 2000)
+        }
+    }
+
     return (
         <div className="min-h-screen bg-background text-foreground font-sans selection:bg-primary/20">
             {/* Header / Nav */}
@@ -18,9 +59,9 @@ export default function ApiDocsPage() {
                         <a href="/" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Dashboard</a>
                         <a href="#endpoints" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Endpoints</a>
                         <div className="h-4 w-px bg-border/40" />
-                        <button className="text-sm font-medium px-4 py-1.5 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
-                            Request Key
-                        </button>
+                        <a href="#get-key" className="text-sm font-medium px-4 py-1.5 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
+                            Get Free Key
+                        </a>
                     </nav>
                 </div>
             </header>
@@ -73,6 +114,53 @@ export default function ApiDocsPage() {
                     </div>
                 </div>
 
+                {/* Get API Key Section */}
+                <section id="get-key" className="mb-32">
+                    <div className="max-w-xl mx-auto text-center">
+                        <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-6">
+                            <Key className="w-7 h-7 text-primary" />
+                        </div>
+                        <h2 className="text-3xl font-bold tracking-tight mb-3">Get Your API Key</h2>
+                        <p className="text-muted-foreground mb-8">Instant access. No credit card required.</p>
+
+                        {apiKey ? (
+                            <div className="space-y-4">
+                                <div className="p-4 rounded-xl bg-[#1e1e24] border border-white/10 font-mono text-sm text-slate-300 flex items-center justify-between gap-3">
+                                    <span className="truncate">{apiKey}</span>
+                                    <button
+                                        onClick={copyKey}
+                                        className="flex-shrink-0 p-2 rounded-lg hover:bg-white/10 transition-colors"
+                                    >
+                                        {copied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4 text-slate-400" />}
+                                    </button>
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                    Save this key — it won&apos;t be shown again. Use it as a <code className="text-primary">x-api-key</code> header.
+                                </p>
+                            </div>
+                        ) : (
+                            <div className="flex gap-3 max-w-md mx-auto">
+                                <input
+                                    type="email"
+                                    value={email}
+                                    onChange={e => setEmail(e.target.value)}
+                                    onKeyDown={e => e.key === "Enter" && generateKey()}
+                                    placeholder="you@company.com"
+                                    className="flex-1 px-4 py-2.5 rounded-xl bg-muted/30 border border-border/50 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                                />
+                                <button
+                                    onClick={generateKey}
+                                    disabled={loading}
+                                    className="px-6 py-2.5 rounded-xl bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 transition-colors disabled:opacity-50"
+                                >
+                                    {loading ? "..." : "Generate"}
+                                </button>
+                            </div>
+                        )}
+                        {error && <p className="text-red-500 text-sm mt-3">{error}</p>}
+                    </div>
+                </section>
+
                 <hr className="border-border/40 my-20" id="endpoints" />
 
                 {/* Endpoints Section */}
@@ -101,7 +189,7 @@ export default function ApiDocsPage() {
                                         <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Parameters</h4>
                                         <div className="flex items-center justify-between py-2 border-b border-border/40 text-sm">
                                             <code className="text-primary">acct</code>
-                                            <span className="text-muted-foreground">Unique account ID string (e.g. "123...")</span>
+                                            <span className="text-muted-foreground">Unique account ID string (e.g. &quot;123...&quot;)</span>
                                         </div>
                                     </div>
                                 </div>
@@ -137,7 +225,7 @@ export default function ApiDocsPage() {
                         <div className="grid lg:grid-cols-2 gap-12">
                             <div className="space-y-6">
                                 <p className="text-muted-foreground leading-relaxed">
-                                    Access aggregated neighborhood metrics via Uber's H3 indexing system. Includes opportunity scores,
+                                    Access aggregated neighborhood metrics via Uber&apos;s H3 indexing system. Includes opportunity scores,
                                     reliability metrics, and statistical confidence bands (P10/P50/P90).
                                 </p>
 
@@ -188,12 +276,12 @@ export default function ApiDocsPage() {
             <footer className="border-t border-border/40 py-12 bg-muted/10">
                 <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-6">
                     <div className="text-sm text-muted-foreground">
-                        © 2026 Homecastr. All rights reserved. Built for Harris County.
+                        © 2026 Homecastr. All rights reserved.
                     </div>
                     <div className="flex gap-8 text-sm font-medium text-muted-foreground">
                         <a href="/privacy" className="hover:text-foreground">Privacy</a>
                         <a href="/terms" className="hover:text-foreground">Terms</a>
-                        <a href="mailto:support@homecastr.ai" className="hover:text-foreground">Support</a>
+                        <a href="/support" className="hover:text-foreground">Support</a>
                     </div>
                 </div>
             </footer>
