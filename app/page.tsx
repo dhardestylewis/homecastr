@@ -70,6 +70,7 @@ function DashboardContent() {
           center: [params.lng, params.lat],
           zoom: params.zoom || 12,
           ...(params.select_hex_id ? { selectedId: params.select_hex_id } : {}),
+          ...(params.selected_hex_ids ? { highlightedIds: params.selected_hex_ids } : {}),
         })
         toast({ title: "Homecastr Agent", description: "Moving map..." })
       }

@@ -95,9 +95,24 @@ export function VectorMap({
         handleHexClick, handleHexHover, aggregateDetails
     } = useMapInteraction({
         year,
+        mapState, // Pass mapState for internal sync
         onFeatureSelect,
         onFeatureHover
     })
+
+    // SYNC TOOLTIP POSITION WHEN SELECTED EXTERNALLY
+    // Unlike MapView which builds its own state, VectorMap uses the hook.
+    // However, projection (getCenter/unproject) needs the map instance.
+    useEffect(() => {
+        if (!mapRef.current || !isLoaded || !mapState.selectedId) return
+
+        if (!fixedTooltipPos) {
+            const [lat, lng] = cellToLatLng(mapState.selectedId)
+            const point = mapRef.current.project([lng, lat])
+            const clamped = getSmartTooltipPos(point.x, point.y, window.innerWidth, window.innerHeight)
+            setFixedTooltipPos({ globalX: clamped.x, globalY: clamped.y })
+        }
+    }, [mapState.selectedId, isLoaded])
 
 
     const router = useRouter()

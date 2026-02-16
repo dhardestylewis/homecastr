@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useMemo, useCallback } from "react"
 import { getH3CellDetails } from "@/app/actions/h3-details"
-import type { DetailsResponse, FeatureProperties } from "@/lib/types"
+import type { DetailsResponse, FeatureProperties, MapState } from "@/lib/types"
 
 // ========================================
 // SHARED MAP INTERACTION HOOK
@@ -12,11 +12,12 @@ import type { DetailsResponse, FeatureProperties } from "@/lib/types"
 
 export interface UseMapInteractionProps {
     year: number
+    mapState: MapState
     onFeatureSelect: (id: string | null) => void
     onFeatureHover: (id: string | null) => void
 }
 
-export function useMapInteraction({ year, onFeatureSelect, onFeatureHover }: UseMapInteractionProps) {
+export function useMapInteraction({ year, mapState, onFeatureSelect, onFeatureHover }: UseMapInteractionProps) {
     // ========================================
     // CORE SELECTION STATE
     // ========================================
@@ -74,6 +75,43 @@ export function useMapInteraction({ year, onFeatureSelect, onFeatureHover }: Use
     useEffect(() => {
         setLocalYear(year)
     }, [year])
+
+    // ========================================
+    // EXTERNAL SELECTION SYNC (mapState -> local)
+    // ========================================
+    useEffect(() => {
+        if (!mapState.selectedId) {
+            if (selectedHexes.length === 1) {
+                setSelectedHexes([])
+                setLockedMode(false)
+            }
+        } else {
+            if (!selectedHexes.includes(mapState.selectedId)) {
+                setSelectedHexes([mapState.selectedId])
+                setLockedMode(true)
+                setIsMinimized(false)
+            }
+        }
+    }, [mapState.selectedId])
+
+    useEffect(() => {
+        if (mapState.highlightedIds && mapState.highlightedIds.length > 0) {
+            // Merge selection + highlights
+            const ids = new Set<string>()
+            if (mapState.selectedId) ids.add(mapState.selectedId)
+            mapState.highlightedIds.forEach(id => ids.add(id))
+
+            const next = Array.from(ids)
+            if (next.length !== selectedHexes.length || !next.every(id => selectedHexes.includes(id))) {
+                setSelectedHexes(next)
+                setLockedMode(true)
+                setIsMinimized(false)
+            }
+        } else if (selectedHexes.length > 1 && !mapState.selectedId) {
+            setSelectedHexes([])
+            setLockedMode(false)
+        }
+    }, [mapState.highlightedIds, mapState.selectedId])
 
     // ========================================
     // MOBILE DETECTION

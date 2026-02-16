@@ -409,15 +409,18 @@ export function MapView({
             }
         } else {
             // Selected externally (e.g. initial URL load or future functionality)
-            // Only update if not already matching to avoid loops (though array ref check helps)
             if (!selectedHexes.includes(mapState.selectedId)) {
                 setSelectedHexes([mapState.selectedId])
-                // We might want to auto-center or tooltip here, but let's stick to just state sync for now
+                // Trigger visual inspector
+                setIsMinimized(false)
+                setFixedTooltipPos(null) // Re-calculate from geo center
+                const [lat, lng] = cellToLatLng(mapState.selectedId)
+                setSelectedHexGeoCenter({ lat, lng })
             }
         }
     }, [mapState.selectedId])
 
-    // Sync highlightedIds
+    // Sync highlightedIds (Multi-hex neighborhood selection)
     useEffect(() => {
         if (mapState.highlightedIds && mapState.highlightedIds.length > 0) {
             // Merge valid selectedId + highlightedIds
@@ -425,14 +428,23 @@ export function MapView({
             if (mapState.selectedId) ids.add(mapState.selectedId)
             mapState.highlightedIds.forEach(id => ids.add(id))
 
-            // Only update if different
             const newSelection = Array.from(ids)
             if (newSelection.length !== selectedHexes.length || !newSelection.every(id => selectedHexes.includes(id))) {
                 setSelectedHexes(newSelection)
+                // If we have a selection, ensure drawer is open
+                setIsMinimized(false)
+
+                // If no primary selected, use the first highlight as anchor for tooltip
+                if (!mapState.selectedId && newSelection.length > 0) {
+                    const [lat, lng] = cellToLatLng(newSelection[0])
+                    setSelectedHexGeoCenter({ lat, lng })
+                    setFixedTooltipPos(null)
+                }
             }
         } else if (selectedHexes.length > 1 && !mapState.selectedId) {
-            // If we had multi-selection but highlights cleared (and no main selection), clear all
             setSelectedHexes([])
+            setFixedTooltipPos(null)
+            setSelectedHexGeoCenter(null)
         }
     }, [mapState.highlightedIds, mapState.selectedId])
 

@@ -212,5 +212,38 @@ export default function H3Map({ year = 2026, colorMode = "growth", mapState }: H
         });
     }, [mapState?.center, mapState?.zoom]);
 
+    // Handle Highlighting and Selection in PMTiles
+    useEffect(() => {
+        if (!map.current || !map.current.isStyleLoaded() || !mapState) return;
+
+        const selectedId = mapState.selectedId;
+        const highlightedIds = mapState.highlightedIds || [];
+        const allHighlightIds = Array.from(new Set([
+            ...(selectedId ? [selectedId] : []),
+            ...highlightedIds
+        ]));
+
+        resLevels.forEach(res => {
+            const hoverLayerId = `h3-res${res}-hover`;
+            if (map.current?.getLayer(hoverLayerId)) {
+                if (allHighlightIds.length > 0) {
+                    // Match any of the highlighted IDs
+                    map.current.setFilter(hoverLayerId, [
+                        'all',
+                        ['==', ['get', 'forecast_year'], currentYear.current],
+                        ['match', ['get', 'h3_id'], allHighlightIds, true, false]
+                    ]);
+                } else {
+                    // Clear highlights
+                    map.current.setFilter(hoverLayerId, [
+                        'all',
+                        ['==', ['get', 'forecast_year'], currentYear.current],
+                        ['==', 'h3_id', '']
+                    ]);
+                }
+            }
+        });
+    }, [mapState?.selectedId, mapState?.highlightedIds]);
+
     return <div ref={mapContainer} style={{ width: '100%', height: '100%' }} />;
 }
