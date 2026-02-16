@@ -1,8 +1,12 @@
 
 import { NextRequest, NextResponse } from "next/server"
 import { getH3CellDetails } from "@/app/actions/h3-details"
+import { requireApiKey } from "@/lib/api-auth"
 
 export async function GET(req: NextRequest) {
+    const authError = await requireApiKey(req)
+    if (authError) return authError
+
     const { searchParams } = new URL(req.url)
     const h3_id = searchParams.get("h3_id")
     const year = parseInt(searchParams.get("year") || "2026")
