@@ -981,8 +981,11 @@ export function VectorMap({
     }, [mapState.center, mapState.zoom, isLoaded])
 
     // TOOLTIP POSITIONING & RENDER PARITY
-    const displayId = hoveredHex || selectedHexes[0] || null
-    const displayDetails = hoveredDetails || selectionDetails
+    // If locked (selection active), we prioritize the selection for content AND position (via fixedTooltipPos)
+    // to prevents "flickering" or showing hover data while pinned to selection.
+    const lockedModeActive = selectedHexes.length > 0
+    const displayId = lockedModeActive ? selectedHexes[0] : (hoveredHex || null)
+    const displayDetails = lockedModeActive ? selectionDetails : (hoveredDetails || null)
     const h3Resolution = mapRef.current ? Math.floor(mapRef.current.getZoom()) : 0
 
     return (
@@ -1000,8 +1003,17 @@ export function VectorMap({
 
             {/* SHARED TOOLTIP UI - Match MapView pattern */}
             {(() => {
-                const lockedModeActive = selectedHexes.length > 0
-                const displayProps = lockedModeActive ? tooltipData?.properties : tooltipData?.properties
+                const displayProps = lockedModeActive ? (tooltipData?.properties?.id === selectedHexes[0] ? tooltipData.properties : null) : tooltipData?.properties
+                // Note: displayProps might be stale if we hover away. 
+                // Ideally we should look up props for the selected ID if we have them. 
+                // But VectorMap relies on 'tooltipData' from hover event.
+                // If we are locked, we might not have 'tooltipData' for the selected hex if we moved mouse.
+                // However, 'selectionDetails' (passed from parent) should has the data we need for the CHART.
+                // For the HEADER (value/growth), we used 'displayProps' from the vector tile features.
+                // If we don't hover it, we don't have it? 
+                // MapView solves this by fetching data. VectorMap relies on vector tile properties for instant display.
+                // If we are locked, we should probably stick to what we have.
+
                 const displayPos = lockedModeActive && fixedTooltipPos ? fixedTooltipPos : tooltipData
 
                 if (!isLoaded || !displayPos || !displayId) return null
@@ -1059,6 +1071,7 @@ export function VectorMap({
                                 capRate: details?.proforma?.cap_rate ?? null,
                             })
                         } : undefined}
+                        googleMapsApiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY}
                     />
                 )
             })()}

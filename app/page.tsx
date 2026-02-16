@@ -5,7 +5,7 @@ import { MapView } from "@/components/map-view"
 import { VectorMap } from "@/components/vector-map"
 import H3Map from "@/components/h3-map"
 import { Legend } from "@/components/legend"
-import { cn } from "@/lib/utils"
+import { cn, getZoomForRes } from "@/lib/utils"
 
 import { SearchBox } from "@/components/search-box"
 import { useFilters } from "@/hooks/use-filters"
@@ -30,6 +30,8 @@ const TavusMiniWindow = dynamic(
   () => import("@/components/tavus-mini-window").then((mod) => mod.TavusMiniWindow),
   { ssr: false }
 ) as React.ComponentType<{ conversationUrl: string; onClose: () => void; chatOpen?: boolean }>
+
+
 
 function DashboardContent() {
   const { filters, setFilters, resetFilters } = useFilters()
@@ -64,15 +66,125 @@ function DashboardContent() {
   // Listen for Tavus tool events (dispatched from window by TavusMiniWindow)
   useEffect(() => {
     const handleTavusAction = (e: Event) => {
-      const { action, params } = (e as CustomEvent).detail
+      const { action, params, result } = (e as CustomEvent).detail
+
+      console.log(`[PAGE] Received Tavus action: ${action}`, { params, result })
+
       if (action === "fly_to_location") {
-        setMapState({
-          center: [params.lng, params.lat],
-          zoom: params.zoom || 12,
-          ...(params.select_hex_id ? { selectedId: params.select_hex_id } : {}),
-          ...(params.selected_hex_ids ? { highlightedIds: params.selected_hex_ids } : {}),
+        setMapState(prev => {
+          // If we have highlightedIds (e.g. from location_to_hex), preserve them unless new ones are provided.
+          const nextHighlightedIds = params.selected_hex_ids || prev.highlightedIds
+
+          // ZOOM SAFETY: If we have highlighted IDs (neighborhood mode), don't let AI force a zoom that hides them (e.g. Zoom 12 is too far out for Res 9 hexes? No, Res 9 needs ~13. Zoom 12 might be okay but let's check).
+          // Actually, Res 9 hexes are rendered at Zoom 12?
+          // getZoomForRes(9) -> 13.2.
+          // If AI says Zoom 12, and we have Res 9 hexes, we should probably prefer 13.
+          // Let's rely on the AI's zoom mostly, but if we have IDs and no specific selection, ensure we can see them.
+          let nextZoom = params.zoom || 12
+          if (nextHighlightedIds && nextHighlightedIds.length > 0 && nextZoom < 13) {
+            nextZoom = 13 // Force at least 13 if we are highlighting things
+          }
+
+          return {
+            center: [params.lng, params.lat],
+            zoom: nextZoom,
+            selectedId: params.select_hex_id || prev.selectedId, // Preserve selectedId if not overwriting
+            highlightedIds: nextHighlightedIds
+          }
         })
         toast({ title: "Homecastr Agent", description: "Moving map..." })
+      } else if (action === "inspect_location") {
+        setMapState({
+          center: [params.lng, params.lat],
+          zoom: params.zoom || 15,
+          selectedId: params.h3_id
+        })
+        toast({ title: "Homecastr Agent", description: "Inspecting property..." })
+      } else if (action === "inspect_neighborhood") {
+        setMapState(prev => {
+          // If we already have a selectedId and it's in the new set, keep it.
+          // Otherwise, default to the first one to ensure tooltip appears.
+          const newHighlights = params.h3_ids || []
+          const keepSelected = prev.selectedId && newHighlights.includes(prev.selectedId)
+
+          return {
+            ...prev,
+            center: [params.lng, params.lat],
+            zoom: params.zoom || 13,
+            highlightedIds: newHighlights,
+            selectedId: keepSelected ? prev.selectedId : (newHighlights[0] || null)
+          }
+        })
+        toast({ title: "Homecastr Agent", description: "Inspecting neighborhood..." })
+      } else if (action === "location_to_hex") {
+        if (result?.h3?.h3_id) {
+          const isNeighborhood = result.h3.context === "neighborhood_average" || (result.h3.neighbors && result.h3.neighbors.length > 1)
+          const targetRes = result.h3.h3_res || 9
+          const targetZoom = getZoomForRes(targetRes)
+
+          setMapState(prev => ({
+            ...prev,
+            center: [result.chosen.lng, result.chosen.lat],
+            zoom: targetZoom,
+            selectedId: result.h3.h3_id,
+            // If we have neighbors (neighborhood context), highlight them all
+            highlightedIds: result.h3.neighbors || undefined
+          }))
+          toast({ title: "Homecastr Agent", description: `Found ${result.chosen.label}` })
+        }
+      } else if (action === "add_location_to_selection") {
+        const resultIds = result?.h3?.h3_ids || (result?.h3?.h3_id ? [result.h3.h3_id] : [])
+        // Fallback for neighborhood context from resolveLocationToHex
+        const neighborIds = result?.h3?.neighbors || []
+
+        const idsToAdd = [...resultIds, ...neighborIds]
+
+        if (idsToAdd.length > 0) {
+          // If we have a single new location with lat/lng, maybe zoom/pan? 
+          // But for "Compare top 3", we likely just want to highlight them.
+          // Let's decide zoom based on the FIRST added item if we don't have a bounding box.
+
+          setMapState(prev => {
+            const currentHighlights = prev.highlightedIds || (prev.selectedId ? [prev.selectedId] : [])
+            const combined = Array.from(new Set([...currentHighlights, ...idsToAdd]))
+
+            // If we have an H3 ID but no explicit lat/lng (e.g. adding by ID), derive it
+            let targetCenter = result.chosen?.lat ? [result.chosen.lng, result.chosen.lat] : undefined
+            if (!targetCenter && result.h3?.h3_id) {
+              const [lat, lng] = cellToLatLng(result.h3.h3_id)
+              targetCenter = [lng, lat]
+            }
+
+            return {
+              ...prev,
+              highlightedIds: combined,
+              ...(targetCenter && result.h3?.h3_id ? {
+                center: targetCenter as [number, number],
+                zoom: getZoomForRes(result.h3.h3_res || 9),
+                selectedId: result.h3.h3_id // Select the new location so the tooltip appears!
+              } : {})
+            }
+          })
+          toast({ title: "Homecastr Agent", description: `Added ${result.chosen?.label || idsToAdd.length + " locations"} to comparison` })
+        }
+      } else if (action === "clear_selection") {
+        setMapState(prev => ({
+          ...prev,
+          selectedId: null,
+          highlightedIds: undefined
+        }))
+        toast({ title: "Homecastr Agent", description: "Selection cleared" })
+      } else if (action === "rank_h3_hexes") {
+        if (result?.hexes?.length > 0) {
+          const topHex = result.hexes[0]
+          setMapState({
+            center: [topHex.location.lng, topHex.location.lat],
+            zoom: 12,
+            highlightedIds: result.hexes.map((h: any) => h.h3_id),
+            selectedId: topHex.h3_id
+          })
+          toast({ title: "Homecastr Agent", description: "Ranking locations..." })
+        }
       }
     }
     window.addEventListener("tavus-map-action", handleTavusAction)
