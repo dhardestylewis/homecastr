@@ -429,6 +429,18 @@ function DashboardContent() {
             className="w-full"
           />
 
+          <div className="flex justify-between items-center px-1">
+            <a
+              href="/api-docs"
+              className="text-[10px] text-muted-foreground hover:text-primary transition-colors flex items-center gap-1 font-medium"
+              target="_blank"
+            >
+              <Terminal className="w-3 h-3" />
+              API Documentation
+            </a>
+            <div className="text-[10px] text-muted-foreground/50 font-mono">v1.4.0-beige</div>
+          </div>
+
           {/* Migration Toggle */}
           <button
             onClick={() => setFilters({ useVectorMap: !filters.useVectorMap })}
