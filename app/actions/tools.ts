@@ -163,104 +163,33 @@ export async function executeTopLevelTool(toolName: string, args: Record<string,
         }
 
         case "location_to_hex": {
-            try {
-                // Better geocoding logic: don't force "Houston city" if neighborhood or other city is specified
-                const querySuffix = (args.query.toLowerCase().includes("houston") || args.query.toLowerCase().includes("tx")) ? "" : ", TX"
-                const params = new URLSearchParams({
-                    q: args.query + querySuffix,
-                    format: "json",
-                    limit: "1",
-                    addressdetails: "1",
-                    viewbox: "-95.96,30.17,-94.90,29.50", // Houston metro bounding box
-                    bounded: "1",
-                })
-                const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
-                    headers: { "User-Agent": "HomecastrUI/1.0" },
-                })
-                if (!geoRes.ok) return JSON.stringify({ error: "Geocode failed" })
-                const geoData = await geoRes.json()
-                if (!geoData || geoData.length === 0) return JSON.stringify({ error: "Location not found" })
+            return await resolveLocationToHex(args, "location_to_hex")
+        }
 
-                const place = geoData[0]
-                const lat = parseFloat(place.lat)
-                const lng = parseFloat(place.lon)
-                const res = args.h3_res ?? 9
-                const hexId = h3.latLngToCell(lat, lng, res)
-
-                let metrics = null
-                let neighborhoodContext = false
-
-                if (args.include_metrics !== false) {
-                    const supabase = await getSupabaseServerClient()
-                    const forecastYear = args.forecast_year || 2029
-                    const yearsOut = forecastYear - 2026
-
-                    const fetchMetrics = async (targetId: string) => {
-                        const [fRes, cRes] = await Promise.all([
-                            supabase
-                                .from("h3_precomputed_hex_details")
-                                .select("opportunity, predicted_value, property_count")
-                                .eq("h3_id", targetId)
-                                .eq("forecast_year", forecastYear)
-                                .single(),
-                            supabase
-                                .from("h3_precomputed_hex_details")
-                                .select("predicted_value")
-                                .eq("h3_id", targetId)
-                                .eq("forecast_year", 2026)
-                                .single(),
-                        ])
-                        return { forecast: fRes.data, current: cRes.data?.predicted_value ?? null }
-                    }
-
-                    // Attempt primary hex
-                    const primary = await fetchMetrics(hexId)
-                    if (primary.forecast && primary.forecast.property_count > 0) {
-                        metrics = calculateMetrics(primary.forecast, primary.current, yearsOut)
-                    } else {
-                        // Neighborhood Context: If center point is non-residential (0 properties), search neighbors
-                        // Increase radius to 3 (~2km) to handle city centers
-                        const neighbors = h3.gridDisk(hexId, 3)
-                        const { data: nearbyHexes } = await supabase
-                            .from("h3_precomputed_hex_details")
-                            .select("h3_id, property_count")
-                            .eq("forecast_year", forecastYear)
-                            .in("h3_id", neighbors)
-                            .gt("property_count", 0)
-                            .order("property_count", { ascending: false })
-                            .limit(1)
-
-                        if (nearbyHexes && nearbyHexes.length > 0) {
-                            const bestHexId = nearbyHexes[0].h3_id
-                            const fallbackResult = await fetchMetrics(bestHexId)
-                            if (fallbackResult.forecast) {
-                                metrics = calculateMetrics(fallbackResult.forecast, fallbackResult.current, yearsOut)
-                                neighborhoodContext = true
-                            }
-                        }
-                    }
-                }
-
-                const addr = place.address || {}
-                const locationLabel = addr.suburb || addr.neighbourhood || addr.city_district || place.display_name.split(",")[0]
-
+        case "add_location_to_selection": {
+            // Support direct ID addition (single or multiple)
+            if (args.h3_ids && args.h3_ids.length > 0) {
                 return JSON.stringify({
-                    chosen: {
-                        label: locationLabel + suffixForLabel(addr),
-                        lat,
-                        lng,
-                        kind: place.type || "place",
-                    },
-                    h3: {
-                        h3_id: hexId,
-                        h3_res: res,
-                        metrics,
-                        context: neighborhoodContext ? "neighborhood_average" : "exact_location"
-                    },
+                    action: "add_location_to_selection",
+                    chosen: { label: `${args.h3_ids.length} locations`, kind: "collection" },
+                    h3: { h3_ids: args.h3_ids, context: "collection" }
                 })
-            } catch (e: any) {
-                return JSON.stringify({ error: e.message })
             }
+            if (args.h3_id) {
+                return JSON.stringify({
+                    action: "add_location_to_selection",
+                    chosen: { label: "Selected Location", kind: "hex" },
+                    h3: { h3_id: args.h3_id, context: "hex" }
+                })
+            }
+            return await resolveLocationToHex(args, "add_location_to_selection")
+        }
+
+        case "clear_selection": {
+            return JSON.stringify({
+                success: true,
+                action: "clear_selection"
+            })
         }
 
         case "search_h3_hexes":
@@ -435,6 +364,28 @@ export async function executeTopLevelTool(toolName: string, args: Record<string,
             })
         }
 
+        case "inspect_location": {
+            return JSON.stringify({
+                success: true,
+                action: "inspecting specific property",
+                h3_id: args.h3_id,
+                lat: args.lat,
+                lng: args.lng,
+                zoom: args.zoom
+            })
+        }
+
+        case "inspect_neighborhood": {
+            return JSON.stringify({
+                success: true,
+                action: "inspecting neighborhood",
+                h3_ids: args.h3_ids,
+                lat: args.lat,
+                lng: args.lng,
+                zoom: args.zoom
+            })
+        }
+
         case "record_feedback":
             return JSON.stringify({ recorded: true, id: "fb_" + Date.now() })
 
@@ -448,4 +399,113 @@ function suffixForLabel(addr: any) {
     if (addr.town) return `, ${addr.town}, TX`
     if (addr.village) return `, ${addr.village}, TX`
     return ", Houston, TX"
+}
+
+// Extracted logic for reusability between location_to_hex and add_location_to_selection
+async function resolveLocationToHex(args: any, actionName: string) {
+    try {
+        // Better geocoding logic: don't force "Houston city" if neighborhood or other city is specified
+        const querySuffix = (args.query.toLowerCase().includes("houston") || args.query.toLowerCase().includes("tx")) ? "" : ", TX"
+        const params = new URLSearchParams({
+            q: args.query + querySuffix,
+            format: "json",
+            limit: "1",
+            addressdetails: "1",
+            viewbox: "-95.96,30.17,-94.90,29.50", // Houston metro bounding box
+            bounded: "1",
+        })
+        const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
+            headers: { "User-Agent": "HomecastrUI/1.0" },
+        })
+        if (!geoRes.ok) return JSON.stringify({ error: "Geocode failed" })
+        const geoData = await geoRes.json()
+        if (!geoData || geoData.length === 0) return JSON.stringify({ error: "Location not found" })
+
+        const place = geoData[0]
+        const lat = parseFloat(place.lat)
+        const lng = parseFloat(place.lon)
+        const res = args.h3_res ?? 9
+        const hexId = h3.latLngToCell(lat, lng, res)
+
+        let metrics = null
+        let neighborhoodContext = false
+
+        if (args.include_metrics !== false) {
+            const supabase = await getSupabaseServerClient()
+            const forecastYear = args.forecast_year || 2029
+            const yearsOut = forecastYear - 2026
+
+            const fetchMetrics = async (targetId: string) => {
+                const [fRes, cRes] = await Promise.all([
+                    supabase
+                        .from("h3_precomputed_hex_details")
+                        .select("opportunity, predicted_value, property_count")
+                        .eq("h3_id", targetId)
+                        .eq("forecast_year", forecastYear)
+                        .single(),
+                    supabase
+                        .from("h3_precomputed_hex_details")
+                        .select("predicted_value")
+                        .eq("h3_id", targetId)
+                        .eq("forecast_year", 2026)
+                        .single(),
+                ])
+                return { forecast: fRes.data, current: cRes.data?.predicted_value ?? null }
+            }
+
+            // Attempt primary hex
+            const primary = await fetchMetrics(hexId)
+            if (primary.forecast && primary.forecast.property_count > 0) {
+                metrics = calculateMetrics(primary.forecast, primary.current, yearsOut)
+            } else {
+                // Neighborhood Context: If center point is non-residential (0 properties), search neighbors
+                // Increase radius to 3 (~2km) to handle city centers
+                const neighbors = h3.gridDisk(hexId, 3)
+                const { data: nearbyHexes } = await supabase
+                    .from("h3_precomputed_hex_details")
+                    .select("h3_id, property_count")
+                    .eq("forecast_year", forecastYear)
+                    .in("h3_id", neighbors)
+                    .gt("property_count", 0)
+                    .order("property_count", { ascending: false })
+                    .limit(1)
+
+                if (nearbyHexes && nearbyHexes.length > 0) {
+                    const bestHexId = nearbyHexes[0].h3_id
+                    const fallbackResult = await fetchMetrics(bestHexId)
+                    if (fallbackResult.forecast) {
+                        metrics = calculateMetrics(fallbackResult.forecast, fallbackResult.current, yearsOut)
+                        neighborhoodContext = true
+                    }
+                }
+            }
+        }
+
+        const addr = place.address || {}
+        const locationLabel = addr.suburb || addr.neighbourhood || addr.city_district || place.display_name.split(",")[0]
+
+        // For neighborhood context, return the surrounding hexes so the UI can highlight them
+        const neighborhoodIds = neighborhoodContext || (place.type === 'suburb' || place.type === 'neighbourhood')
+            ? h3.gridDisk(hexId, 2) // Return 2-ring neighborhood (19 hexes)
+            : [hexId]
+
+        return JSON.stringify({
+            action: actionName, // Include action name for frontend to distinguish
+            chosen: {
+                label: locationLabel + suffixForLabel(addr),
+                lat,
+                lng,
+                kind: place.type || "place",
+            },
+            h3: {
+                h3_id: hexId,
+                h3_res: res,
+                metrics,
+                context: neighborhoodContext ? "neighborhood_average" : "exact_location",
+                neighbors: neighborhoodIds
+            },
+        })
+    } catch (e: any) {
+        return JSON.stringify({ error: e.message })
+    }
 }

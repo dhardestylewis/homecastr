@@ -50,10 +50,12 @@ export async function createTavusConversation({
     
     SYSTEM RULES:
     1. Use tools for EVERYTHING. Do not guess.
-    2. When discussing a neighborhood or cluster, use 'fly_to_location' with 'selected_hex_ids' containing multiple relevant IDs to show coverage.
+    2. When discussing a neighborhood or cluster, use 'fly_to_location' with 'selected_hex_ids' containing multiple relevant IDs to visually indicate the area.
     3. This triggers the Visual Inspector (drawer) automatically for the user.
     4. Speak naturally like a human. Report 1-2 metrics max per turn.
-    5. Do NOT mention hex IDs or technical jargon. Do not say "H3 Cell".`;
+    5. Do NOT mention hex IDs or technical jargon. Do not say "H3 Cell".
+    6. To compare locations, use 'add_location_to_selection'. To reset, use 'clear_selection'.
+    7. CHAINING: If you 'rank_h3_hexes', you can immediately 'add_location_to_selection' using the 'h3_ids' list you just found to visualize them.`;
 
     const custom_greeting = `Hi! I see you're checking out properties ${locationContext}. How can I help you understand the market trajectory here?`
 
@@ -150,40 +152,56 @@ export async function createTavusConversation({
               }
             }
           },
+
+          // DEPRECATED: inspect_location and inspect_neighborhood are now handled by location_to_hex and add_location_to_selection
+          // allowing the agent to be more efficient.
+          /*
           {
             type: "function",
             function: {
               name: "inspect_location",
-              description: "Focus on a specific property and OPEN the visual inspector (drawer).",
-              parameters: {
-                type: "object",
-                properties: {
-                  lat: { type: "number" },
-                  lng: { type: "number" },
-                  zoom: { type: "integer" },
-                  h3_id: { type: "string" }
-                },
-                required: ["lat", "lng", "zoom", "h3_id"]
-              }
+              ...
             }
           },
           {
             type: "function",
             function: {
               name: "inspect_neighborhood",
-              description: "Focus on a neighborhood and OPEN the visual inspector (drawer) with aggregated metrics.",
+              ...
+            }
+          }
+          */
+          {
+            type: "function",
+            function: {
+              name: "add_location_to_selection",
+              description: "Add a location (or specific hexes) to the current map selection for comparison.",
               parameters: {
                 type: "object",
                 properties: {
-                  lat: { type: "number" },
-                  lng: { type: "number" },
-                  zoom: { type: "integer" },
-                  h3_ids: {
-                    type: "array",
-                    items: { type: "string" }
-                  }
+                  query: { type: "string", description: "City or neighborhood name (optional if h3_id provided)" },
+                  h3_id: { type: "string", description: "Specific Hex ID to add (from search results)" },
+                  h3_ids: { type: "array", items: { type: "string" }, description: "List of Hex IDs to add (e.g. top ranked)" },
+                  forecast_year: { type: "integer" },
+                  include_metrics: { type: "boolean" }
                 },
-                required: ["lat", "lng", "zoom", "h3_ids"]
+                anyOf: [
+                  { required: ["query"] },
+                  { required: ["h3_id"] },
+                  { required: ["h3_ids"] }
+                ]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "clear_selection",
+              description: "Clear all current map selections and reset the view.",
+              parameters: {
+                type: "object",
+                properties: {},
+                required: []
               }
             }
           }
@@ -206,7 +224,14 @@ RULES:
 - BASELINE (2026): If the year is 2026, ONLY report the "Current Market Value (2026)". Do NOT show "Predicted Value" or "Annual Change" as they are identical to the current state.
 - Post-2026: For future years, always provide BOTH Current (2026) and Predicted ([Year]).
 - DOLLARS: Mention specific dollar values clearly.
-- NO FILLER: No conversational filler like "reaching out to my modules." Just get the data.`,
+- NO REDUNDANCY: If you successfully call 'location_to_hex', you DO NOT need to call 'resolve_place' or 'fly_to_location' afterwards. The map will update automatically.
+- NO FILLER: No conversational filler like "reaching out to my modules." Just get the data.
+
+COMPARISON WORKFLOW (CRITICAL):
+1. INITIAL SEARCH: Use 'location_to_hex' to find the first location.
+2. COMPARISON: When the user asks to compare with another location, use 'add_location_to_selection'. DO NOT use 'location_to_hex' again (it resets the view). DO NOT use 'clear_selection'.
+3. ACCUMULATE: 'add_location_to_selection' adds the new location to the map so the user can see both.
+4. TARGETING: If you are adding a list of locations (e.g. top 3), the map will highlight them all.`,
           layers: {
             llm: {
               model: "tavus-gpt-oss",

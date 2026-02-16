@@ -5,6 +5,7 @@ import { createPortal } from "react-dom"
 import { TrendingUp, TrendingDown, Minus, Building2, Bot } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { FanChart } from "@/components/fan-chart"
+import { StreetViewCarousel } from "@/components/street-view-carousel"
 import type { DetailsResponse, FeatureProperties, FanChartData } from "@/lib/types"
 
 // Helper functions (extracted from MapView)
@@ -68,6 +69,8 @@ interface MapTooltipProps {
     coordinates?: [number, number]
     // Tavus AI Analyst callback
     onConsultAI?: () => void
+    // Google Maps API Key
+    googleMapsApiKey?: string
 }
 
 export function MapTooltip({
@@ -95,7 +98,8 @@ export function MapTooltip({
     onTouchMove,
     onTouchEnd,
     coordinates,
-    onConsultAI
+    onConsultAI,
+    googleMapsApiKey
 }: MapTooltipProps) {
 
     const getTrendIcon = (trend: "up" | "down" | "stable" | undefined) => {
@@ -164,6 +168,14 @@ export function MapTooltip({
                                 )}
                             </div>
                         </>
+                    )}
+
+                    {/* Street View Carousel */}
+                    {displayProps.has_data && googleMapsApiKey && (
+                        <StreetViewCarousel
+                            h3Ids={selectedHexes.length > 0 ? selectedHexes : hoveredDetails?.id ? [hoveredDetails.id] : []}
+                            apiKey={googleMapsApiKey}
+                        />
                     )}
 
                     {/* Content Body */}

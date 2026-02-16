@@ -7,13 +7,14 @@ import { cellToBoundary, latLngToCell, cellToLatLng } from "h3-js"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { cn } from "@/lib/utils"
-import { getOpportunityColor, getValueColor, formatOpportunity, formatCurrency, formatReliability } from "@/lib/utils/colors"
+import { getOpportunityColor, getValueColor, formatOpportunity, formatCurrency } from "@/lib/utils/colors"
 import { TrendingUp, TrendingDown, Minus, Building2, X, Bot } from "lucide-react"
 import type { FilterState, FeatureProperties, MapState, DetailsResponse } from "@/lib/types"
 import { getH3CellDetails } from "@/app/actions/h3-details"
 import { getH3ChildTimelines } from "@/app/actions/h3-children"
 import { getH3DataBatch } from "@/app/actions/h3-data-batch"
 import { FanChart } from "./fan-chart"
+import { MapTooltip } from "./map-tooltip"
 import { aggregateProperties, aggregateDetails } from "@/lib/utils/aggregation"
 import { useRouter } from "next/navigation"
 
@@ -34,6 +35,25 @@ function useIsMobile() {
         return () => window.removeEventListener('resize', check)
     }, [])
     return isMobile
+}
+
+function detailsToProperties(d: DetailsResponse): FeatureProperties {
+    return {
+        id: d.id,
+        O: d.opportunity.value ?? 0,
+        R: d.reliability.value,
+        n_accts: d.metrics.n_accts,
+        med_mean_ape_pct: d.metrics.med_mean_ape_pct ?? 0,
+        med_mean_pred_cv_pct: d.metrics.med_mean_pred_cv_pct ?? 0,
+        stability_flag: false,
+        robustness_flag: false,
+        has_data: true,
+        med_n_years: d.metrics.med_n_years ?? 0,
+        med_predicted_value: d.proforma?.predicted_value ?? undefined,
+        med_noi: d.proforma?.noi ?? undefined,
+        med_dscr: d.proforma?.dscr ?? undefined,
+        med_score: d.riskScoring?.score ?? undefined
+    }
 }
 
 
@@ -413,7 +433,9 @@ export function MapView({
     const CACHE_VERSION = 2
 
     // Derived values
-    const selectedHex = selectedHexes.length > 0 ? selectedHexes[selectedHexes.length - 1] : null
+    const selectedHex = (mapState.selectedId && selectedHexes.includes(mapState.selectedId))
+        ? mapState.selectedId
+        : (selectedHexes.length > 0 ? selectedHexes[selectedHexes.length - 1] : null)
     const effectiveMobileMode = onMobileSelectionModeChange ? mobileSelectionMode : internalMobileMode
     const setEffectiveMobileMode = onMobileSelectionModeChange ? onMobileSelectionModeChange : setInternalMobileMode
 
@@ -424,6 +446,20 @@ export function MapView({
     useEffect(() => setMounted(true), [])
 
     // --- EFFECTS ---
+
+    // Sync Camera (FlyTo/JumpTo) from external mapState
+    useEffect(() => {
+        const newScale = getScaleFromZoom(mapState.zoom)
+        const { worldSize } = getZoomConstants(newScale)
+
+        const targetMerc = latLngToMercator(mapState.center[0], mapState.center[1])
+        const baseMerc = latLngToMercator(basemapCenter.lng, basemapCenter.lat)
+
+        const offsetX = (baseMerc.x - targetMerc.x) * worldSize
+        const offsetY = (baseMerc.y - targetMerc.y) * worldSize
+
+        setTransform({ scale: newScale, offsetX, offsetY })
+    }, [mapState.center, mapState.zoom, basemapCenter])
 
     // Sync external mapState selection (mapState.selectedId) -> internal selection (selectedHexes)
     useEffect(() => {
@@ -592,6 +628,11 @@ export function MapView({
 
 
     // Clear selection when H3 resolution changes (prevents stale highlight at wrong scale)
+    // Clear selection when H3 resolution changes (prevents stale highlight at wrong scale)
+    // DISABLED: This causes Tavus selections (which happen at a specific resolution) to disappear 
+    // when the user zooms in/out, which changes the map resolution. 
+    // We want the selection to PERSIST. 
+    /*
     useEffect(() => {
         if (selectedHex && selectedHexResolution !== null && h3Resolution !== selectedHexResolution) {
             setSelectedHexes([]) // Changed from setSelectedHex(null)
@@ -601,7 +642,7 @@ export function MapView({
             setComparisonDetails(null)
         }
     }, [h3Resolution, selectedHex, selectedHexResolution])
-
+    */
 
     // --- COMPARISON & PREVIEW LOGIC ---
 
@@ -1381,11 +1422,22 @@ export function MapView({
             const primaryHex = selectedHexes[0]
             const nonPrimaryHexes = selectedHexes.slice(1)
 
-            // Draw non-primary first (amber)
-            ctx.strokeStyle = '#f97316' // Orange (matches fan chart comparison line)
-            ctx.lineWidth = 2.5
-            nonPrimaryHexes.forEach(h => {
-                const vertices = getH3CellCanvasVertices(h, canvasSize.width, canvasSize.height, transform, basemapCenter)
+            // Helper to draw a hex by ID (whether in filteredHexes or not)
+            const drawHexById = (id: string, color: string, width: number) => {
+                ctx.strokeStyle = color
+                ctx.lineWidth = width
+
+                // Try to find in filteredHexes first (optimization)
+                const existing = filteredHexes.find(h => h.id === id)
+                let vertices: Array<[number, number]>
+
+                if (existing) {
+                    vertices = existing.vertices
+                } else {
+                    // Fallback: Project on the fly (for different resolution or off-screen)
+                    vertices = getH3CellCanvasVertices(id, canvasSize.width, canvasSize.height, transform, basemapCenter)
+                }
+
                 ctx.beginPath()
                 vertices.forEach((v, i) => {
                     if (i === 0) ctx.moveTo(v[0], v[1])
@@ -1393,20 +1445,13 @@ export function MapView({
                 })
                 ctx.closePath()
                 ctx.stroke()
-            })
+            }
+
+            // Draw non-primary first (amber)
+            nonPrimaryHexes.forEach(h => drawHexById(h, '#f97316', 2.5))
 
             // Draw primary LAST (teal on top)
-            ctx.strokeStyle = '#14b8a6' // Teal
-            ctx.lineWidth = 3
-            const vertices = getH3CellCanvasVertices(primaryHex, canvasSize.width, canvasSize.height, transform, basemapCenter)
-            ctx.beginPath()
-            vertices.forEach((v, i) => {
-                if (i === 0) ctx.moveTo(v[0], v[1])
-                else ctx.lineTo(v[0], v[1])
-            })
-            ctx.closePath()
-            ctx.stroke()
-            ctx.stroke()
+            drawHexById(primaryHex, '#14b8a6', 3)
         }
 
         // Draw Shift Preview Hexes (Dashed Amber)
@@ -1679,6 +1724,19 @@ export function MapView({
                 newSet = [hoveredHex]
                 setComparisonHex(null)
                 setComparisonDetails(null)
+
+                // IMPORTANT: If user manually clicks, we should likely CLEAR any "Voice Highlighted" IDs
+                // so they don't persist confusingly.
+                // We do this by calling onFeatureSelect with just the new ID, which page.tsx syncs.
+                // But wait, page.tsx syncs mapState.selectedId -> highlightedIds?
+                // Actually page.tsx usually sets highlightedIds based on voice.
+                // If we want to clear them, we might need a callback or just trust that 
+                // setting selectedHexes here is local, and we need to tell the parent.
+
+                // If we want to clear specific "highlightedIds" from the parent (MapState),
+                // we might need to be explicit.
+                // For now, let's assume sticking to onFeatureSelect(newID) is enough,
+                // BUT we also need to know if we should clear the *others*.
             }
 
             setSelectedHexes(newSet)
@@ -1686,6 +1744,9 @@ export function MapView({
             // Update Primary & Tooltip Pos
             if (newSet.length > 0) {
                 const primary = newSet[newSet.length - 1]
+                // Pass a flag or just the ID? 
+                // If we want to Clear others, we might need to check if we are in "add" mode.
+                // If not in add mode (isMulti), we effectively want to replace everything.
                 onFeatureSelect(primary)
                 // Update Geo Center for connector
                 const [lat, lng] = cellToLatLng(primary)
@@ -1966,7 +2027,12 @@ export function MapView({
                 // This might have been missing or relied on tooltipData?
                 const selectedProps = selectedHex ? hexPropertyMap.current.get(selectedHex) : null
 
-                const displayProps = lockedMode ? selectedProps : tooltipData?.properties
+                let displayProps = lockedMode ? selectedProps : tooltipData?.properties
+
+                // Area-Wide Tooltip: If multi-select, show aggregate details
+                if (lockedMode && selectedHexes.length > 1 && selectionDetails) {
+                    displayProps = detailsToProperties(selectionDetails)
+                }
                 const displayDetails = lockedMode ? selectionDetails : hoveredDetails
                 const displayPos = lockedMode && fixedTooltipPos ? fixedTooltipPos : tooltipData
 
@@ -1982,238 +2048,51 @@ export function MapView({
 
                 if (!mounted || !effectivePos || !displayProps) return null
 
-                // Update: use effectivePos instead of displayPos below
-                const finalPos = effectivePos
-
-                return createPortal(
-                    <div
-                        className={cn(
-                            "z-[9999] glass-panel shadow-2xl overflow-hidden",
-                            isMobile
-                                ? "fixed bottom-0 left-0 right-0 w-full rounded-t-xl rounded-b-none border-t border-x-0 border-b-0 pointer-events-auto transition-transform duration-300 ease-out touch-none"
-                                : "fixed rounded-xl w-[320px]",
-                            lockedMode && !isMobile ? "pointer-events-auto cursor-move" : "pointer-events-none",
-                            showDragHint && "animate-pulse"
-                        )}
-                        style={isMobile ? {
-                            // If minimized, translate down to show only handle (approx 24px visible)
-                            // handle is ~20px + padding ~ 8px = 28px
-                            transform: `translateY(calc(${isMinimized ? '100% - 24px' : '0px'} + ${dragOffset}px))`,
-                            transition: touchStart === null ? 'transform 0.3s ease-out' : 'none'
-                        } : {
-                            left: finalPos?.globalX ?? 0,
-                            top: finalPos?.globalY ?? 0,
-                            // Transform not needed for flip anymore as getSmartTooltipPos handles it.
-                            // But we keep translation for Minimize logic ? No, Minimize is mobile-only.
-                            // We might want verify transition?
-                        }}
-                        onMouseDown={lockedMode && !isMobile ? (e) => {
+                return (
+                    <MapTooltip
+                        x={effectivePos.globalX ?? 0}
+                        y={effectivePos.globalY ?? 0}
+                        displayProps={displayProps}
+                        displayDetails={displayDetails}
+                        primaryDetails={primaryDetails}
+                        selectionDetails={selectionDetails}
+                        comparisonDetails={comparisonDetails}
+                        previewDetails={previewDetails}
+                        selectedHexes={selectedHexes}
+                        hoveredDetails={hoveredDetails}
+                        year={year}
+                        h3Resolution={h3Resolution}
+                        isLoadingDetails={isLoadingDetails}
+                        isMobile={isMobile}
+                        isMinimized={isMinimized}
+                        lockedMode={lockedMode}
+                        showDragHint={showDragHint}
+                        dragOffset={dragOffset}
+                        touchStart={touchStart}
+                        onYearChange={onYearChange}
+                        onMouseDown={lockedMode && !isMobile ? (e: React.MouseEvent) => {
                             setIsTooltipDragging(true)
                             e.preventDefault()
                         } : undefined}
                         onTouchStart={isMobile ? handleTooltipTouchStart : undefined}
                         onTouchMove={isMobile ? handleTooltipTouchMove : undefined}
                         onTouchEnd={isMobile ? handleTooltipTouchEnd : undefined}
-                    >
-                        {displayProps.has_data ? (
-                            <div className="flex flex-col">
-                                {/* Mobile Drag Handle */}
-                                {isMobile && (
-                                    <div className="w-full flex justify-center py-2 bg-muted/40 backdrop-blur-md border-b-0 cursor-grab active:cursor-grabbing">
-                                        <div className="w-10 h-1 bg-muted-foreground/30 rounded-full" />
-                                    </div>
-                                )}
-
-                                {/* Desktop Headers (Hidden on Mobile) */}
-                                {!isMobile && (
-                                    <>
-                                        <div className="flex items-center justify-between px-3 py-2 border-b border-border/50 bg-muted/40 backdrop-blur-md">
-                                            <div className="flex items-center gap-2">
-                                                <Building2 className="w-3.5 h-3.5 text-primary" />
-                                                <span className="font-bold text-[10px] tracking-wide text-foreground uppercase">Homecastr</span>
-                                                {lockedMode && (
-                                                    <span className="px-1.5 py-0.5 bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 text-[8px] font-semibold uppercase tracking-wider rounded">Locked</span>
-                                                )}
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                {lockedMode && <span className="text-[9px] text-muted-foreground">ESC to exit</span>}
-                                            </div>
-                                        </div>
-                                        <div className="p-3 border-b border-border/50 bg-muted/30">
-                                            <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">
-                                                {h3Resolution <= 7 ? "District Scale" : h3Resolution <= 9 ? "Neighborhood Scale" : h3Resolution <= 10 ? "Block Scale" : "Property Scale"} (Res {h3Resolution})
-                                            </div>
-                                            <div className="font-mono text-xs text-muted-foreground truncate">
-                                                {cellToLatLng(displayProps.id).map((n: number) => n.toFixed(5)).join(", ")}
-                                            </div>
-                                        </div>
-                                    </>
-                                )}
-
-                                {/* Content Body */}
-                                {isMobile ? (
-                                    /* Mobile Layout: 2x2 Grid + Chart Side-by-Side */
-                                    <div className="p-3 flex gap-2 items-stretch h-[140px]">
-                                        {/* Left: Stats Grid (45%) - Centered */}
-                                        <div className="flex flex-col justify-center items-center w-[45%] shrink-0">
-                                            <div className="grid grid-cols-2 gap-x-2 gap-y-1 w-full text-center">
-                                                <div>
-                                                    <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold truncate">Value</div>
-                                                    <div className="text-sm font-bold text-foreground tracking-tight truncate">
-                                                        {displayProps.med_predicted_value ? formatCurrency(displayProps.med_predicted_value) : "N/A"}
-                                                    </div>
-                                                </div>
-                                                <div>
-                                                    <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold truncate">Growth</div>
-                                                    <div className={cn("text-sm font-bold tracking-tight truncate", displayProps.O >= 0 ? "text-green-500" : "text-destructive")}>
-                                                        {formatOpportunity(displayProps.O)}
-                                                    </div>
-                                                </div>
-                                                <div>
-                                                    <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold truncate">Properties</div>
-                                                    <div className="text-sm font-medium text-foreground truncate">{displayProps.n_accts}</div>
-                                                </div>
-                                                <div>
-                                                    <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold truncate">Confidence</div>
-                                                    <div className="text-sm font-medium text-foreground truncate">{formatReliability(displayProps.R)}</div>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Right: Fan Chart (Remaining) */}
-                                        <div className="flex-1 min-w-0 h-full relative">
-                                            {displayDetails?.fanChart ? (
-                                                <div className="h-full w-full">
-                                                    <FanChart
-                                                        data={displayDetails.fanChart}
-                                                        currentYear={year}
-                                                        height={130}
-                                                        historicalValues={displayDetails.historicalValues}
-                                                        comparisonData={selectedHexes.length > 1 ? previewDetails?.fanChart : comparisonDetails?.fanChart}
-                                                        comparisonHistoricalValues={selectedHexes.length > 1 ? previewDetails?.historicalValues : comparisonDetails?.historicalValues}
-                                                        onYearChange={onYearChange}
-                                                    />
-                                                </div>
-                                            ) : (
-                                                <div className="h-full flex items-center justify-center">
-                                                    {isLoadingDetails && <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />}
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                ) : (
-                                    /* Desktop Layout: Stacked */
-                                    <div className="p-4 space-y-5">
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <div className="text-center pl-6">
-                                                <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">
-                                                    {year <= 2025 ? "Actual" : "Predicted"} ({year})
-                                                </div>
-                                                <div className="text-xl font-bold text-foreground tracking-tight">
-                                                    {displayProps.med_predicted_value ? formatCurrency(displayProps.med_predicted_value) : "N/A"}
-                                                </div>
-                                                {displayDetails?.historicalValues && (
-                                                    <div className="text-[10px] text-muted-foreground mt-1">
-                                                        Current (2025): <span className="text-foreground">{formatCurrency(displayDetails.historicalValues[displayDetails.historicalValues.length - 1])}</span>
-                                                    </div>
-                                                )}
-                                            </div>
-                                            <div className="text-center pr-6">
-                                                <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Growth</div>
-                                                <div className={cn("text-xl font-bold tracking-tight flex items-center justify-center gap-1", displayProps.O >= 0 ? "text-green-500" : "text-destructive")}>
-                                                    {formatOpportunity(displayProps.O)}
-                                                    {getTrendIcon(displayProps.O >= 0 ? "up" : "down")}
-                                                </div>
-                                                <div className="text-[10px] text-muted-foreground mt-1">
-                                                    Avg. Annual {year > 2025 ? "Forecast" : "History"}
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {(displayDetails?.fanChart || primaryDetails?.fanChart) ? (
-                                            <div className="space-y-2">
-                                                <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold flex justify-between">
-                                                    <span>Value Timeline</span>
-                                                    <span className="text-primary/70">{year}</span>
-                                                </div>
-                                                <div className="h-44 -mx-2 mb-2">
-                                                    <FanChart
-                                                        // Line 1: Primary (Anchor) - always first hex's data
-                                                        // Fallback to displayDetails (hovered) if no primary (i.e. no selection)
-                                                        data={(primaryDetails?.fanChart || displayDetails?.fanChart)!}
-                                                        currentYear={year}
-                                                        height={160}
-                                                        historicalValues={primaryDetails?.historicalValues || displayDetails?.historicalValues}
-
-                                                        // Line 2: Selection Aggregate (Orange)
-                                                        comparisonData={selectedHexes.length > 1 ? selectionDetails?.fanChart : null}
-                                                        comparisonHistoricalValues={selectedHexes.length > 1 ? selectionDetails?.historicalValues : null}
-
-                                                        // Line 3: Preview (Fuchsia) - Aggregate of Selection + Candidate
-                                                        // Show hoveredDetails explicitly as Candidate only if it's NOT already selected
-                                                        previewData={previewDetails?.fanChart || (selectedHexes.length > 0 && hoveredDetails && !selectedHexes.includes(hoveredDetails.id) ? hoveredDetails?.fanChart : null)}
-                                                        previewHistoricalValues={previewDetails?.historicalValues || (selectedHexes.length > 0 && hoveredDetails && !selectedHexes.includes(hoveredDetails.id) ? hoveredDetails?.historicalValues : null)}
-
-                                                        onYearChange={onYearChange}
-                                                    />
-                                                </div>
-                                            </div>
-                                        ) : (
-                                            isLoadingDetails && (
-                                                <div className="h-32 flex items-center justify-center">
-                                                    <div className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-                                                </div>
-                                            )
-                                        )}
-
-                                        <div className="pt-1 mt-0 border-t border-border/50 grid grid-cols-2 gap-4 text-center">
-                                            <div>
-                                                <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold">Properties</div>
-                                                <div className="text-xs font-medium text-foreground">{displayProps.n_accts}</div>
-                                            </div>
-                                            <div>
-                                                <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold">Confidence</div>
-                                                <div className="text-xs font-medium text-foreground">{formatReliability(displayProps.R)}</div>
-                                            </div>
-                                        </div>
-
-                                        {/* Talk to Homecastr Live Agent Button */}
-                                        {lockedMode && onConsultAI && (
-                                            <div className="pt-2 mt-1 border-t border-border/50">
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation()
-                                                        onConsultAI({
-                                                            predictedValue: displayDetails?.proforma?.predicted_value ?? null,
-                                                            opportunityScore: displayDetails?.opportunity?.value ?? null,
-                                                            capRate: displayDetails?.proforma?.cap_rate ?? null,
-                                                        })
-                                                    }}
-                                                    className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-primary/15 hover:bg-primary/25 border border-primary/30 text-primary text-xs font-semibold transition-all hover:scale-[1.02] active:scale-[0.98]"
-                                                >
-                                                    <Bot className="w-3.5 h-3.5" />
-                                                    Talk to Homecastr
-                                                </button>
-                                            </div>
-                                        )}
-                                    </div>
-                                )
-                                }
-                            </div>
-                        ) : (
-                            <div className="p-3">
-                                <div className="font-medium text-muted-foreground text-xs">No Residential Properties</div>
-                            </div>
-                        )
-                        }
-                    </div >,
-                    document.body
+                        coordinates={selectedHexGeoCenter ? [selectedHexGeoCenter.lat, selectedHexGeoCenter.lng] : (hoveredHex ? cellToLatLng(hoveredHex) : undefined)}
+                        onConsultAI={onConsultAI ? () => {
+                            onConsultAI({
+                                predictedValue: displayDetails?.proforma?.predicted_value ?? null,
+                                opportunityScore: displayDetails?.opportunity?.value ?? null,
+                                capRate: displayDetails?.proforma?.cap_rate ?? null,
+                            })
+                        } : undefined}
+                        googleMapsApiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY}
+                    />
                 )
             })()}
 
             <div className="absolute top-[120px] left-4 md:top-[120px] md:left-4 md:right-auto flex flex-row md:flex-col gap-2 z-30">
                 {/* Mobile Selection Mode Toggles - REMOVED (Moved to Parent) */}
             </div>
-        </div >
+        </div>
     )
 }
