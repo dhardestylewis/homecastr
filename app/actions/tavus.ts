@@ -143,10 +143,47 @@ export async function createTavusConversation({
                   selected_hex_ids: {
                     type: "array",
                     items: { type: "string" },
-                    description: "Optional list of hex IDs to highlight and investigate (e.g. for a neighborhood)."
+                    description: "Optional list of hex IDs to highlight."
                   }
                 },
                 required: ["lat", "lng", "zoom"]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "inspect_location",
+              description: "Focus on a specific property and OPEN the visual inspector (drawer).",
+              parameters: {
+                type: "object",
+                properties: {
+                  lat: { type: "number" },
+                  lng: { type: "number" },
+                  zoom: { type: "integer" },
+                  h3_id: { type: "string" }
+                },
+                required: ["lat", "lng", "zoom", "h3_id"]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "inspect_neighborhood",
+              description: "Focus on a neighborhood and OPEN the visual inspector (drawer) with aggregated metrics.",
+              parameters: {
+                type: "object",
+                properties: {
+                  lat: { type: "number" },
+                  lng: { type: "number" },
+                  zoom: { type: "integer" },
+                  h3_ids: {
+                    type: "array",
+                    items: { type: "string" }
+                  }
+                },
+                required: ["lat", "lng", "zoom", "h3_ids"]
               }
             }
           }
