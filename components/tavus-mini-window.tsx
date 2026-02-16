@@ -67,6 +67,25 @@ export function TavusMiniWindow({ conversationUrl, onClose, chatOpen = false }: 
           setHasError("Connection failed. Please try again.")
         })
 
+        // Listen for Tavus tool calls via Daily's "app-message"
+        call.on("app-message", (e: any) => {
+          if (e.data?.event_type === "conversation.tool_call") {
+            const { tool_name, parameters } = e.data
+            console.log("[TAVUS] Tool Call:", tool_name, parameters)
+
+            if (tool_name === "fly_to_location") {
+              // Dispatch event to main map component
+              window.dispatchEvent(new CustomEvent("tavus-map-action", {
+                detail: { type: "fly_to", ...parameters }
+              }))
+            } else if (tool_name === "rank_h3_hexes") {
+              window.dispatchEvent(new CustomEvent("tavus-map-action", {
+                detail: { type: "rank", ...parameters }
+              }))
+            }
+          }
+        })
+
         // Auto-join immediately — no lobby, no pre-join screen
         await call.join({ url: conversationUrl })
       } catch (err) {
@@ -82,7 +101,7 @@ export function TavusMiniWindow({ conversationUrl, onClose, chatOpen = false }: 
     return () => {
       cancelled = true
       if (callRef.current) {
-        callRef.current.leave().catch(() => {})
+        callRef.current.leave().catch(() => { })
         callRef.current.destroy()
         callRef.current = null
       }
@@ -138,7 +157,7 @@ export function TavusMiniWindow({ conversationUrl, onClose, chatOpen = false }: 
 
   const handleLeave = useCallback(() => {
     if (callRef.current) {
-      callRef.current.leave().catch(() => {})
+      callRef.current.leave().catch(() => { })
     }
     onClose()
   }, [onClose])
