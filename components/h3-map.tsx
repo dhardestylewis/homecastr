@@ -4,15 +4,17 @@ import React, { useEffect, useRef } from 'react';
 import maplibregl, { AddLayerObject } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { Protocol } from 'pmtiles';
+import type { MapState } from '@/lib/types';
 
 const PMTILES_URL = 'http://localhost:3000/tiles/h3_data.pmtiles';
 
 interface H3MapProps {
     year?: number;
     colorMode?: "growth" | "value";
+    mapState?: MapState;
 }
 
-export default function H3Map({ year = 2026, colorMode = "growth" }: H3MapProps) {
+export default function H3Map({ year = 2026, colorMode = "growth", mapState }: H3MapProps) {
     const mapContainer = useRef<HTMLDivElement>(null);
     const map = useRef<maplibregl.Map | null>(null);
     const currentYear = useRef<number>(year);
@@ -60,7 +62,7 @@ export default function H3Map({ year = 2026, colorMode = "growth" }: H3MapProps)
                     ['linear'],
                     ['get', 'opportunity_pct'],
                     -50, '#8b5cf6',  // Purple for negative
-                    0, '#f5f5f5',    // White for neutral
+                    0, '#cbd5e1',    // Light slate for neutral (better on light map)
                     50, '#3b82f6'    // Blue for positive
                 ];
 
@@ -172,7 +174,7 @@ export default function H3Map({ year = 2026, colorMode = "growth" }: H3MapProps)
             ['linear'],
             ['get', 'opportunity_pct'],
             -50, '#8b5cf6',
-            0, '#f5f5f5',
+            0, '#cbd5e1',
             50, '#3b82f6'
         ];
 
@@ -196,6 +198,19 @@ export default function H3Map({ year = 2026, colorMode = "growth" }: H3MapProps)
             }
         });
     }, [colorMode]);
+
+    // Sync with external mapState (Search / Tavus / URL)
+    useEffect(() => {
+        if (!map.current || !mapState) return;
+
+        console.log(`[H3Map] Syncing camera to:`, mapState.center, mapState.zoom);
+
+        map.current.flyTo({
+            center: mapState.center,
+            zoom: mapState.zoom,
+            essential: true
+        });
+    }, [mapState?.center, mapState?.zoom]);
 
     return <div ref={mapContainer} style={{ width: '100%', height: '100%' }} />;
 }
