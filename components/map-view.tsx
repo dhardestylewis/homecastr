@@ -351,55 +351,83 @@ export function MapView({
     onMobileSelectionModeChange,
     onConsultAI
 }: MapViewProps) {
+    // --- STATE & REFS ---
     const basemapCenter = useMemo(() => ({ lng: -95.3698, lat: 29.7604 }), [])
     const [h3Resolution, setH3Resolution] = useState<number>(0)
-    const lastResolutionRef = useRef<number>(0) // Track resolution to clear data on change
-
+    const lastResolutionRef = useRef<number>(0)
     const hexCanvasRef = useRef<HTMLCanvasElement>(null)
-    const highlightCanvasRef = useRef<HTMLCanvasElement>(null) // New: Dedicated layer for interactions
+    const highlightCanvasRef = useRef<HTMLCanvasElement>(null)
     const containerRef = useRef<HTMLDivElement>(null)
     const basemapCanvasRef = useRef<HTMLCanvasElement>(null)
-
     const tileCache = useRef<Map<string, HTMLImageElement>>(new Map())
-
-    // Cache data by "res-year" key
-    // CACHE VERSION: Increment to bust stale cache after server-side changes
-    const CACHE_VERSION = 2
     const h3DataCache = useRef<Map<string, Array<any>>>(new Map())
-
-    // Fast Lookup Map for O(1) access: H3ID -> Properties
     const hexPropertyMap = useRef<Map<string, FeatureProperties>>(new Map())
-
-    // Touch Handling Refs
     const lastTouchPosRef = useRef<{ x: number; y: number } | null>(null)
     const lastPinchDistRef = useRef<number | null>(null)
-
     const animationFrameRef = useRef<number | null>(null)
-
     const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 })
-
-    // Responsive check
     const isMobile = useIsMobile()
 
-    // Initialize transform from mapState (URL/Props)
+    // Map State
     const [transform, setTransform] = useState<TransformState>(() => {
         const initialScale = getScaleFromZoom(mapState.zoom)
-        // We can't calculate exact offsets until we know canvas size (which starts at 800x600 but resizes)
-        // But we can approximate using the default size to start close.
-        // Or better: use a useEffect to sync once canvas is ready? 
-        // For now, let's just default to 0 and let the useEffect below sync it.
-        return {
-            offsetX: 0,
-            offsetY: 0,
-            scale: initialScale,
-        }
+        return { offsetX: 0, offsetY: 0, scale: initialScale }
     })
 
+    // Selection & Hover
+    const [hoveredHex, setHoveredHex] = useState<string | null>(null)
+    const [selectedHexes, setSelectedHexes] = useState<string[]>([])
+    const [selectionDetails, setSelectionDetails] = useState<DetailsResponse | null>(null)
+    const [hoveredDetails, setHoveredDetails] = useState<DetailsResponse | null>(null)
+    const [selectedHexGeoCenter, setSelectedHexGeoCenter] = useState<{ lat: number; lng: number } | null>(null)
+    const [fixedTooltipPos, setFixedTooltipPos] = useState<{ globalX: number; globalY: number } | null>(null)
+    const [tooltipData, setTooltipData] = useState<{ x: number; y: number; globalX: number; globalY: number; properties: FeatureProperties } | null>(null)
+
+    // Comparison & Analysis
+    const [comparisonHex, setComparisonHex] = useState<string | null>(null)
+    const [comparisonDetails, setComparisonDetails] = useState<DetailsResponse | null>(null)
+    const [primaryDetails, setPrimaryDetails] = useState<DetailsResponse | null>(null)
+    const [ephemeralHoverDetails, setEphemeralHoverDetails] = useState<DetailsResponse | null>(null)
+
+    // UI State
+    const [isLoadingData, setIsLoadingData] = useState(false)
+    const [isLoadingDetails, setIsLoadingDetails] = useState(false)
+    const [isDragging, setIsDragging] = useState(false)
+    const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
+    const [isTooltipDragging, setIsTooltipDragging] = useState(false)
+    const [showDragHint, setShowDragHint] = useState(false)
+    const [isShiftHeld, setIsShiftHeld] = useState(false)
+    const [shiftPreviewHexes, setShiftPreviewHexes] = useState<string[]>([])
+    const [shiftPreviewDetails, setShiftPreviewDetails] = useState<DetailsResponse | null>(null)
+    const [internalMobileMode, setInternalMobileMode] = useState<'replace' | 'add' | 'range'>('replace')
+    const [mounted, setMounted] = useState(false)
+    const [filteredHexes, setFilteredHexes] = useState<HexagonData[]>([])
+    const [realHexData, setRealHexData] = useState<Array<any>>([])
+    const [parcels, setParcels] = useState<Array<any>>([])
+    const [isParcelsLoading, setIsParcelsLoading] = useState(false)
+    const [selectedHexResolution, setSelectedHexResolution] = useState<number | null>(null)
+
+    // Refs for optimization
+    const detailsCache = useRef<Map<string, DetailsResponse>>(new Map())
+    const selectedHexRef = useRef<string | null>(null)
+    const CACHE_VERSION = 2
+
+    // Derived values
+    const selectedHex = selectedHexes.length > 0 ? selectedHexes[selectedHexes.length - 1] : null
+    const effectiveMobileMode = onMobileSelectionModeChange ? mobileSelectionMode : internalMobileMode
+    const setEffectiveMobileMode = onMobileSelectionModeChange ? onMobileSelectionModeChange : setInternalMobileMode
+
+    useEffect(() => {
+        selectedHexRef.current = selectedHex
+    }, [selectedHex])
+
+    useEffect(() => setMounted(true), [])
+
+    // --- EFFECTS ---
+
     // Sync external mapState selection (mapState.selectedId) -> internal selection (selectedHexes)
-    // This allows parent Reset button to clear selection
     useEffect(() => {
         if (!mapState.selectedId) {
-            // Cleared externally
             if (selectedHexes.length > 0) {
                 setSelectedHexes([])
                 setFixedTooltipPos(null)
@@ -408,22 +436,20 @@ export function MapView({
                 setComparisonDetails(null)
             }
         } else {
-            // Selected externally (e.g. initial URL load or future functionality)
             if (!selectedHexes.includes(mapState.selectedId)) {
                 setSelectedHexes([mapState.selectedId])
-                // Trigger visual inspector
-                setIsMinimized(false)
-                setFixedTooltipPos(null) // Re-calculate from geo center
+                // Trigger visual inspector (isMinimized logic handled in Page or via ref?)
+                // Assuming isMinimized state exists somewhere or was intended
+                setFixedTooltipPos(null)
                 const [lat, lng] = cellToLatLng(mapState.selectedId)
                 setSelectedHexGeoCenter({ lat, lng })
             }
         }
     }, [mapState.selectedId])
 
-    // Sync highlightedIds (Multi-hex neighborhood selection)
+    // Sync highlightedIds
     useEffect(() => {
         if (mapState.highlightedIds && mapState.highlightedIds.length > 0) {
-            // Merge valid selectedId + highlightedIds
             const ids = new Set<string>()
             if (mapState.selectedId) ids.add(mapState.selectedId)
             mapState.highlightedIds.forEach(id => ids.add(id))
@@ -431,10 +457,6 @@ export function MapView({
             const newSelection = Array.from(ids)
             if (newSelection.length !== selectedHexes.length || !newSelection.every(id => selectedHexes.includes(id))) {
                 setSelectedHexes(newSelection)
-                // If we have a selection, ensure drawer is open
-                setIsMinimized(false)
-
-                // If no primary selected, use the first highlight as anchor for tooltip
                 if (!mapState.selectedId && newSelection.length > 0) {
                     const [lat, lng] = cellToLatLng(newSelection[0])
                     setSelectedHexGeoCenter({ lat, lng })
@@ -448,120 +470,26 @@ export function MapView({
         }
     }, [mapState.highlightedIds, mapState.selectedId])
 
-    // Sync transform when mapState changes (e.g. Search or URL change)
+    // AUTO-PROJECT SELECTION TO TOOLTIP POSITION
     useEffect(() => {
-        if (!mapState.center || !mapState.zoom) return
+        if (!selectedHexGeoCenter || fixedTooltipPos || !containerRef.current) return
 
-        const [lng, lat] = mapState.center
-        const targetZoom = mapState.zoom
+        const width = containerRef.current.clientWidth
+        const height = containerRef.current.clientHeight
 
-        // Calculate target scale
-        const targetScale = getScaleFromZoom(targetZoom)
+        const pos = geoToCanvas(
+            selectedHexGeoCenter.lng,
+            selectedHexGeoCenter.lat,
+            width,
+            height,
+            transform,
+            basemapCenter
+        )
 
-        // Calculate offsets to center the map on the target lat/lng
-        const zoom = getContinuousBasemapZoom(targetScale)
-        const z = Math.floor(zoom)
-        const scale = Math.pow(2, z)
-        const worldSize = 256 * scale
+        const clamped = getSmartTooltipPos(pos.x, pos.y, window.innerWidth, window.innerHeight)
+        setFixedTooltipPos({ globalX: clamped.x, globalY: clamped.y })
+    }, [selectedHexGeoCenter, fixedTooltipPos, transform, basemapCenter])
 
-        const centerMerc = latLngToMercator(basemapCenter.lng, basemapCenter.lat)
-        const targetMerc = latLngToMercator(lng, lat)
-
-        // transform.offsetX = (centerMerc.x - targetMerc.x) * worldSize
-        const newOffsetX = (centerMerc.x - targetMerc.x) * worldSize
-        const newOffsetY = (centerMerc.y - targetMerc.y) * worldSize
-
-        setTransform(prev => {
-            // Avoid infinite loops / jitter if close enough?
-            if (Math.abs(prev.offsetX - newOffsetX) < 1 &&
-                Math.abs(prev.offsetY - newOffsetY) < 1 &&
-                Math.abs(prev.scale - targetScale) < 1) {
-                return prev
-            }
-            return {
-                offsetX: newOffsetX,
-                offsetY: newOffsetY,
-                scale: targetScale
-            }
-        })
-    }, [mapState.center, mapState.zoom, basemapCenter])
-
-    // SYNC URL WITH MAP POSITION (Legacy Engine)
-    const router = useRouter()
-
-    // Sync map position to URL params.
-    // IMPORTANT: Read current params from window.location instead of searchParams
-    // to avoid a dependency loop (searchParams changes when ANY param changes,
-    // which would re-trigger this effect causing cascading navigations and NetworkErrors).
-    useEffect(() => {
-        const timer = setTimeout(() => {
-            const { zoom } = getZoomConstants(transform.scale)
-            if (!containerRef.current) return
-            const width = containerRef.current.clientWidth || 800
-            const height = containerRef.current.clientHeight || 600
-
-            const center = canvasToLatLng(width / 2, height / 2, width, height, transform, basemapCenter)
-
-            const params = new URLSearchParams(window.location.search)
-            params.set("lat", center.lat.toFixed(5))
-            params.set("lng", center.lng.toFixed(5))
-            params.set("zoom", zoom.toFixed(2))
-
-            router.replace(`?${params.toString()}`, { scroll: false })
-        }, 500) // Debounce URL updates
-        return () => clearTimeout(timer)
-    }, [transform, router, basemapCenter])
-
-
-    const [isDragging, setIsDragging] = useState(false)
-    const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
-
-    const [hoveredHex, setHoveredHex] = useState<string | null>(null)
-    const [selectedHexes, setSelectedHexes] = useState<string[]>([])
-    const [selectionDetails, setSelectionDetails] = useState<DetailsResponse | null>(null)
-    const [hoveredDetails, setHoveredDetails] = useState<DetailsResponse | null>(null)
-
-    // Derived State
-    const [tooltipData, setTooltipData] = useState<{ x: number; y: number; globalX: number; globalY: number; properties: FeatureProperties } | null>(null)
-    const [fixedTooltipPos, setFixedTooltipPos] = useState<{ globalX: number; globalY: number } | null>(null)
-    const [selectedHexGeoCenter, setSelectedHexGeoCenter] = useState<{ lat: number; lng: number } | null>(null)
-    const [comparisonHex, setComparisonHex] = useState<string | null>(null)
-    const [comparisonDetails, setComparisonDetails] = useState<DetailsResponse | null>(null)
-    const [primaryDetails, setPrimaryDetails] = useState<DetailsResponse | null>(null) // Line 1: Anchor
-    const [isTooltipDragging, setIsTooltipDragging] = useState(false)
-    const [showDragHint, setShowDragHint] = useState(false)
-
-    // Client-side cache for details to prevent lag
-    const detailsCache = useRef<Map<string, DetailsResponse>>(new Map())
-    // Shift preview state - show which hexes would be selected on Shift+click
-    const [isShiftHeld, setIsShiftHeld] = useState(false)
-    const [shiftPreviewHexes, setShiftPreviewHexes] = useState<string[]>([])
-    const [shiftPreviewDetails, setShiftPreviewDetails] = useState<DetailsResponse | null>(null)
-    // Mobile Selection Mode State (Controlled or Internal fallback not really needed if fully controlled, but keeping simple)
-    // Actually, if we want to move buttons to Page, we should rely on props.
-    // But to avoid breaking if props missing, we can use a local state initialized from props? 
-    // No, let's just use the prop. But we need to handle the case where it's not provided?
-    // For now, let's assume it's passed or default to 'replace'.
-    // We already defaulted it in destructuring.
-
-    const [internalMobileMode, setInternalMobileMode] = useState<'replace' | 'add' | 'range'>('replace')
-
-    // Use prop if handler provided, else local (backward compat)
-    const effectiveMobileMode = onMobileSelectionModeChange ? mobileSelectionMode : internalMobileMode
-    const setEffectiveMobileMode = onMobileSelectionModeChange ? onMobileSelectionModeChange : setInternalMobileMode
-
-    const handleCellClick = (cellId: string, e: any) => {
-        // ...
-        // We need to check where mobileSelectionMode is used.
-        // It's used in handleCanvasClick (lines ~1505)
-    }
-    const selectedHex = selectedHexes.length > 0 ? selectedHexes[selectedHexes.length - 1] : null
-    const selectedHexRef = useRef<string | null>(null)
-
-    // Sync ref
-    useEffect(() => {
-        selectedHexRef.current = selectedHex
-    }, [selectedHex])
 
     // Compute Display Properties (Aggregate)
     const displayProperties = useMemo(() => {
@@ -661,17 +589,7 @@ export function MapView({
 
 
 
-    const [mounted, setMounted] = useState(false)
 
-    useEffect(() => setMounted(true), [])
-
-    const [filteredHexes, setFilteredHexes] = useState<HexagonData[]>([])
-    const [realHexData, setRealHexData] = useState<Array<any>>([])
-    const [isLoadingData, setIsLoadingData] = useState(false)
-    const [parcels, setParcels] = useState<Array<any>>([])
-    const [isParcelsLoading, setIsParcelsLoading] = useState(false)
-    const [isLoadingDetails, setIsLoadingDetails] = useState(false)
-    const [selectedHexResolution, setSelectedHexResolution] = useState<number | null>(null)
 
     // Clear selection when H3 resolution changes (prevents stale highlight at wrong scale)
     useEffect(() => {
@@ -736,15 +654,13 @@ export function MapView({
     // So `hoveredDetails` is NOT updated when we have a selection.
     // We need a separate fetch for the ephemeral hover target during selection.
 
-    const [ephemeralHoverDetails, setEphemeralHoverDetails] = useState<DetailsResponse | null>(null)
-
+    // 3. Hover Details
     useEffect(() => {
         if (!hoveredHex || selectedHexes.length === 0) {
             setEphemeralHoverDetails(null)
             return
         }
 
-        // Optimize: If hoveredHex == comparisonHex, we already have it in comparisonDetails
         if (hoveredHex === comparisonHex && comparisonDetails) {
             setEphemeralHoverDetails(comparisonDetails)
             return

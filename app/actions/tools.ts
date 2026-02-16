@@ -219,7 +219,8 @@ export async function executeTopLevelTool(toolName: string, args: Record<string,
                         metrics = calculateMetrics(primary.forecast, primary.current, yearsOut)
                     } else {
                         // Neighborhood Context: If center point is non-residential (0 properties), search neighbors
-                        const neighbors = h3.gridDisk(hexId, 1)
+                        // Increase radius to 3 (~2km) to handle city centers
+                        const neighbors = h3.gridDisk(hexId, 3)
                         const { data: nearbyHexes } = await supabase
                             .from("h3_precomputed_hex_details")
                             .select("h3_id, property_count")
