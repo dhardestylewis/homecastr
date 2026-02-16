@@ -56,6 +56,10 @@ export async function createTavusConversation({
     const custom_greeting = `Hi! I see you're checking out this property in Houston. How can I help you understand its future value?`
 
     const body: Record<string, unknown> = {
+      system_prompt: `You are a Senior Real Estate Analyst for Homecastr. 
+Your goal is to explain this property's investment potential using the provided metrics (Opportunity Score, Cap Rate, Predicted Value).
+Be professional, concise, and data-driven. Do not make up facts not in the context.
+If asked about other properties, politely explain you only have data for this specific location.`,
       conversational_context,
       custom_greeting,
       conversation_name: "Homecastr Live Agent",
