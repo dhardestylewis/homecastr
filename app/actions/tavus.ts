@@ -47,7 +47,13 @@ export async function createTavusConversation({
 
     const conversational_context = `The user is exploring properties ${locationContext} in Houston, TX. 
     IMPORTANT: You have zero initial metrics. You MUST call 'location_to_hex' or 'get_h3_hex' immediately to find the real market data for the current selection.
-    Do NOT guess or make up numbers. Use your tools for everything.`;
+    
+    SYSTEM RULES:
+    1. Use tools for EVERYTHING. Do not guess.
+    2. When discussing a neighborhood or cluster, use 'fly_to_location' with 'selected_hex_ids' containing multiple relevant IDs to show coverage.
+    3. This triggers the Visual Inspector (drawer) automatically for the user.
+    4. Speak naturally like a human. Report 1-2 metrics max per turn.
+    5. Do NOT mention hex IDs or technical jargon. Do not say "H3 Cell".`;
 
     const custom_greeting = `Hi! I see you're checking out properties ${locationContext}. How can I help you understand the market trajectory here?`
 
@@ -133,7 +139,12 @@ export async function createTavusConversation({
                   lat: { type: "number" },
                   lng: { type: "number" },
                   zoom: { type: "integer" },
-                  select_hex_id: { type: "string" }
+                  select_hex_id: { type: "string" },
+                  selected_hex_ids: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "Optional list of hex IDs to highlight and investigate (e.g. for a neighborhood)."
+                  }
                 },
                 required: ["lat", "lng", "zoom"]
               }
