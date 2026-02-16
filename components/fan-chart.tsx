@@ -495,28 +495,28 @@ export function FanChart({
         />
 
         {/* Fan area (forecast uncertainty) */}
-        {fanPath && <path d={fanPath} fill="#14b8a6" fillOpacity={0.2} />}
-        {comparisonFanPath && <path d={comparisonFanPath} fill="#f97316" fillOpacity={0.15} />}
+        {fanPath && <path d={fanPath} fill="#4a5568" fillOpacity={0.2} />}
+        {comparisonFanPath && <path d={comparisonFanPath} fill="#ca8a04" fillOpacity={0.15} />}
 
         {/* Historical line (solid - actual values) */}
         {histPath && (
-          <path d={histPath} fill="none" stroke="#14b8a6" strokeWidth={2} />
+          <path d={histPath} fill="none" stroke="#4a5568" strokeWidth={2} />
         )}
         {comparisonHistPath && (
-          <path d={comparisonHistPath} fill="none" stroke="#f97316" strokeWidth={2} strokeDasharray="3 3" />
+          <path d={comparisonHistPath} fill="none" stroke="#ca8a04" strokeWidth={2} strokeDasharray="3 3" />
         )}
 
         {/* Connector from historical to forecast */}
         {connectorPath && (
-          <path d={connectorPath} fill="none" stroke="#14b8a6" strokeWidth={1} strokeDasharray="2 2" />
+          <path d={connectorPath} fill="none" stroke="#4a5568" strokeWidth={1} strokeDasharray="2 2" />
         )}
         {comparisonConnectorPath && (
-          <path d={comparisonConnectorPath} fill="none" stroke="#f97316" strokeWidth={1} strokeDasharray="2 2" />
+          <path d={comparisonConnectorPath} fill="none" stroke="#ca8a04" strokeWidth={1} strokeDasharray="2 2" />
         )}
 
         {/* P50 forecast line */}
-        {p50Line && <path d={p50Line} fill="none" stroke="#14b8a6" strokeWidth={2} />}
-        {comparisonP50Line && <path d={comparisonP50Line} fill="none" stroke="#f97316" strokeWidth={2} />}
+        {p50Line && <path d={p50Line} fill="none" stroke="#4a5568" strokeWidth={2} />}
+        {comparisonP50Line && <path d={comparisonP50Line} fill="none" stroke="#ca8a04" strokeWidth={2} />}
 
         {/* Preview Layer (Fuchsia for visibility) */}
         {previewFanPath && <path d={previewFanPath} fill="#d946ef" fillOpacity={0.15} />}
@@ -561,13 +561,13 @@ export function FanChart({
         <g transform={`translate(${padding.left}, ${height - 5})`} style={{ pointerEvents: 'none' }}>
           {/* Row 1: Lines */}
           {/* Col 1: Property */}
-          <line x1={0} y1={-18} x2={12} y2={-18} stroke="#14b8a6" strokeWidth={2} />
+          <line x1={0} y1={-18} x2={12} y2={-18} stroke="#4a5568" strokeWidth={2} />
           <text x={16} y={-15} className="text-[8px] fill-muted-foreground">Area</text>
 
           {/* Col 2: Comparison */}
           {comparisonData && (
             <g transform="translate(60, 0)">
-              <line x1={0} y1={-18} x2={12} y2={-18} stroke="#f97316" strokeWidth={2} strokeDasharray="3 3" />
+              <line x1={0} y1={-18} x2={12} y2={-18} stroke="#ca8a04" strokeWidth={2} strokeDasharray="3 3" />
               <text x={16} y={-15} className="text-[8px] fill-muted-foreground">Comparison</text>
             </g>
           )}

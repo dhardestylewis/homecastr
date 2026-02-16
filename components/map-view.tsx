@@ -1448,15 +1448,15 @@ export function MapView({
             }
 
             // Draw non-primary first (amber)
-            nonPrimaryHexes.forEach(h => drawHexById(h, '#f97316', 2.5))
+            nonPrimaryHexes.forEach(h => drawHexById(h, '#ca8a04', 2.5))
 
-            // Draw primary LAST (teal on top)
-            drawHexById(primaryHex, '#14b8a6', 3)
+            // Draw primary LAST (taupe on top)
+            drawHexById(primaryHex, '#4a5568', 3)
         }
 
         // Draw Shift Preview Hexes (Dashed Amber)
         if (shiftPreviewHexes.length > 0) {
-            ctx.strokeStyle = '#f97316' // Orange (matches fan chart comparison line)
+            ctx.strokeStyle = '#ca8a04' // Gold
             ctx.lineWidth = 2
             ctx.setLineDash([5, 5])
             shiftPreviewHexes.forEach(h => {
@@ -1994,7 +1994,7 @@ export function MapView({
     }, [selectedHex])
 
     return (
-        <div ref={containerRef} className={cn("relative w-full h-full overflow-hidden bg-[#0a0f14]", className)}>
+        <div ref={containerRef} className={cn("relative w-full h-full overflow-hidden bg-background", className)}>
             <canvas
                 ref={basemapCanvasRef}
                 style={{ width: canvasSize.width, height: canvasSize.height }}

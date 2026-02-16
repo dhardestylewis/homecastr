@@ -227,12 +227,12 @@ export function VectorMap({
                     paint: {
                         "fill-color": [
                             "interpolate", ["linear"], ["get", "val"],
-                            100000, "#3b0764",
-                            800000, "#f43f5e",
-                            1500000, "#fbbf24"
+                            100000, "#4a1d96", // Deep Purple
+                            800000, "#be123c", // Rose
+                            1500000, "#d97706" // Warm Amber
                         ],
-                        "fill-opacity": 0.5,
-                        "fill-outline-color": "rgba(255,255,255,0.2)"
+                        "fill-opacity": 0.4,
+                        "fill-outline-color": "rgba(0,0,0,0.05)"
                     }
                 })
 
@@ -246,8 +246,8 @@ export function VectorMap({
                     paint: {
                         "line-color": [
                             "case",
-                            ["boolean", ["feature-state", "candidate"], false], "#d946ef", // Fuchsia for Candidate
-                            "#f97316" // Orange for Comparison
+                            ["boolean", ["feature-state", "candidate"], false], "#d946ef",
+                            "#ca8a04" // Warm Gold for Comparison
                         ],
                         "line-width": 2.5,
                         "line-dasharray": [3, 2],
@@ -269,10 +269,10 @@ export function VectorMap({
                     paint: {
                         "line-color": [
                             "case",
-                            ["boolean", ["feature-state", "primary"], false], "#14b8a6",
-                            ["boolean", ["feature-state", "selected"], false], "#f97316",
-                            ["boolean", ["feature-state", "hover"], false], "#14b8a6", // Teal for Hover (Primary Candidate)
-                            "rgba(0,0,0,0)" // Transparent default
+                            ["boolean", ["feature-state", "primary"], false], "#4a5568", // Deep Taupe for Primary
+                            ["boolean", ["feature-state", "selected"], false], "#ca8a04",
+                            ["boolean", ["feature-state", "hover"], false], "#4a5568",
+                            "rgba(0,0,0,0)"
                         ],
                         "line-width": ["case", ["boolean", ["feature-state", "primary"], false], 4, 3],
                         "line-opacity": [
