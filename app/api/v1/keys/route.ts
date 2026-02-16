@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { randomUUID } from "crypto"
+import { getSupabaseAdmin } from "@/lib/supabase/admin"
 
 export async function POST(req: NextRequest) {
     try {
@@ -13,11 +14,18 @@ export async function POST(req: NextRequest) {
         // Generate a prefixed API key
         const key = `hc_${randomUUID().replace(/-/g, "")}`
 
-        // TODO: When ready to enforce auth, store this in Supabase:
-        // await supabase.from("api_keys").insert({ email, key, created_at: new Date().toISOString() })
+        // Persist to Supabase
+        const supabase = getSupabaseAdmin()
+        const { error } = await supabase.from("api_keys").insert({ email, key })
+
+        if (error) {
+            console.error("[API Keys] Insert error:", error)
+            return NextResponse.json({ error: "Failed to store API key." }, { status: 500 })
+        }
 
         return NextResponse.json({ key, email })
     } catch (error: any) {
+        console.error("[API Keys] Error:", error)
         return NextResponse.json({ error: "Failed to generate key." }, { status: 500 })
     }
 }

@@ -1,8 +1,12 @@
 
 import { NextRequest, NextResponse } from "next/server"
 import { getPropertyForecast } from "@/app/actions/property-forecast"
+import { requireApiKey } from "@/lib/api-auth"
 
 export async function GET(req: NextRequest) {
+    const authError = await requireApiKey(req)
+    if (authError) return authError
+
     const { searchParams } = new URL(req.url)
     const acct = searchParams.get("acct")
 
