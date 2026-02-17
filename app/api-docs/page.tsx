@@ -79,7 +79,7 @@ export default function ApiDocsPage() {
                     </h1>
                     <p className="text-lg text-muted-foreground max-w-2xl leading-relaxed">
                         Access our proprietary real estate forecasting engine via simple REST endpoints.
-                        From lot-level predictions to granular neighborhood H3 metrics, build the future of property analysis.
+                        From lot-level predictions to neighborhood-level metrics, build the future of property analysis.
                     </p>
                 </section>
 
@@ -98,9 +98,9 @@ export default function ApiDocsPage() {
                         <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
                             <Database className="w-5 h-5 text-primary" />
                         </div>
-                        <h3 className="text-lg font-bold mb-2">H3 Grid Metrics</h3>
+                        <h3 className="text-lg font-bold mb-2">Neighborhood Metrics</h3>
                         <p className="text-sm text-muted-foreground leading-relaxed">
-                            Granular hexagonal spatial data including Opportunity, Reliability, and localized growth metrics.
+                            Aggregated neighborhood data including opportunity scores, reliability metrics, and localized growth forecasts.
                         </p>
                     </div>
                     <div className="p-6 rounded-2xl glass-panel relative overflow-hidden group">
