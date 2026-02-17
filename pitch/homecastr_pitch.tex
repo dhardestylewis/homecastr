@@ -14,7 +14,14 @@
     \insertframenumber\kern1em\vskip2pt%
   \fi%
 }
-\setbeamertemplate{frametitle}[default][left]
+\setbeamertemplate{frametitle}{
+  \vspace{10pt}
+  \begin{beamercolorbox}[wd=\paperwidth,center]{frametitle}
+    \usebeamerfont{frametitle}\insertframetitle
+    \par\vspace{4pt}
+    {\color{hcGold}\hrule height 1.5pt width 4cm}
+  \end{beamercolorbox}
+}
 
 % Homecastr brand palette — matches website beige theme
 \definecolor{hcBg}{HTML}{F2EDE0}
@@ -80,9 +87,7 @@
 \vfill
 \begin{center}
 {\buildingicon}\quad{\fontsize{42}{48}\selectfont\bfseries\color{hcGold} Homecastr}\\[16pt]
-{\Large\color{hcText} The foundation model for residential real estate}\\[24pt]
-\mutedtext{Pre-Seed Deck \quad|\quad \the\year}\\[8pt]
-\mutedtext{\small Live Demo: \href{https://homecastr.com}{\textcolor{hcGold}{\textbf{homecastr.com}}}}
+{\Large\color{hcText} The foundation model for residential real estate}
 \end{center}
 \vfill
 \end{frame}
@@ -475,9 +480,17 @@ Free & \$0 & 50K+ users & Lead Gen & Basic \\
 \end{center}
 \vfill
 \begin{center}
-{\Large\bfseries\color{hcText} THANK YOU}\\[8pt]
-\mutedtext{\small \textbf{Try the Alpha: \href{https://homecastr.com}{homecastr.com}}}
+% ─── SLIDE 12: Contact / Title Repeat ────────────────────────
+\usebackgroundtemplate{\includegraphics[width=\paperwidth,height=\paperheight]{title_bg.png}}
+\begin{frame}[plain]
+\vfill
+\begin{center}
+{\buildingicon}\quad{\fontsize{42}{48}\selectfont\bfseries\color{hcGold} Homecastr}\\[16pt]
+{\Large\color{hcText} The foundation model for residential real estate}\\[24pt]
+\mutedtext{Pre-Seed Deck \quad|\quad 2026}\\[8pt]
+\mutedtext{\small Live Demo: \href{https://homecastr.com}{\textcolor{hcGold}{\textbf{homecastr.com}}}}
 \end{center}
+\vfill
 \end{frame}
 
 \end{document}
