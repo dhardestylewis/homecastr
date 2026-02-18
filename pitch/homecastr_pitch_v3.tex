@@ -257,9 +257,9 @@
 \begin{center}
 \begin{tikzpicture}
   \fill[hcCard, rounded corners=8pt] (0,0) rectangle (5.5,4.5);
-  \node[font=\fontsize{48}{54}\selectfont\bfseries, text=hcGold] at (2.75,3.0) {\$3.4T};
-  \node[font=\large\bfseries, text=hcText] at (2.75,1.8) {SFR Market};
-  \node[font=\small, text=hcMuted, align=center] at (2.75,0.8) {Institutional capital flooding in.\\Operators need forecasts to compete.};
+  \node[font=\fontsize{40}{46}\selectfont\bfseries, text=hcGold] at (2.75,3.2) {\$3.4T};
+  \node[font=\large\bfseries, text=hcText] at (2.75,2.2) {SFR Market};
+  \node[font=\small, text=hcMuted, align=center] at (2.75,1.0) {Institutional capital flooding in.\\Operators need forecasts to compete.};
 \end{tikzpicture}
 \end{center}
 \end{column}
@@ -267,9 +267,9 @@
 \begin{center}
 \begin{tikzpicture}
   \fill[hcCard, rounded corners=8pt] (0,0) rectangle (5.5,4.5);
-  \node[font=\fontsize{36}{42}\selectfont\bfseries, text=hcGold, align=center] at (2.75,3.2) {Diffusion\\Models};
-  \node[font=\large\bfseries, text=hcText] at (2.75,1.8) {AI Inflection};
-  \node[font=\small, text=hcMuted, align=center] at (2.75,0.8) {Foundation models now generate\\probabilistic futures, not point guesses.};
+  \node[font=\fontsize{30}{36}\selectfont\bfseries, text=hcGold, align=center] at (2.75,3.2) {Diffusion\\Models};
+  \node[font=\large\bfseries, text=hcText] at (2.75,2.2) {AI Inflection};
+  \node[font=\small, text=hcMuted, align=center] at (2.75,1.0) {Foundation models now generate\\probabilistic futures, not point guesses.};
 \end{tikzpicture}
 \end{center}
 \end{column}
@@ -356,8 +356,6 @@
   \fill[hcGold] (3.0,2.5) circle (8pt);
   \node[font=\large\bfseries, text=hcGold, anchor=south west] at (3.3,2.5) {Homecastr};
 
-  % Quadrant label
-  \node[font=\scriptsize, text=hcGold, anchor=north east] at (4.3,3.3) {\textit{white space}};
 \end{tikzpicture}
 \end{center}
 
@@ -371,43 +369,41 @@
 
 % ─── SLIDE 8: Business Model ────────────────────────────────
 \begin{frame}{Business Model}
-\vspace{8pt}
-
-\begin{center}
-{\fontsize{56}{64}\selectfont\bfseries\color{hcGold} 8×}\\[4pt]
-{\Large LTV : CAC}\\[4pt]
-\mutedtext{\small \$1,188 LTV · \$150 CAC · 1.5 month payback}
-\end{center}
-
-\vspace{14pt}
-\textcolor{hcGoldLight}{\rule{\textwidth}{0.5pt}}
-\vspace{10pt}
+\vspace{12pt}
 
 \begin{columns}[c]
 \begin{column}{0.48\textwidth}
 \begin{center}
 \begin{tikzpicture}
-  \fill[hcCard, rounded corners=6pt] (0,0) rectangle (5,2.2);
-  \node[font=\large\bfseries, text=hcText] at (2.5,1.7) {Free};
-  \node[font=\small, text=hcMuted, align=center] at (2.5,0.8) {Dashboard + basic forecasts\\50K+ users → lead gen funnel};
+  \fill[hcCard, rounded corners=6pt] (0,0) rectangle (5,2.6);
+  \node[font=\large\bfseries, text=hcText] at (2.5,2.1) {Free};
+  \node[font=\small, text=hcMuted, align=center] at (2.5,1.0) {Dashboard + basic forecasts\\Capture demand, build audience};
 \end{tikzpicture}
 \end{center}
 \end{column}
 \begin{column}{0.04\textwidth}
 \begin{center}
-{\color{hcGold}\textbf{→}}
+{\color{hcGold}\textbf{$\rightarrow$}}
 \end{center}
 \end{column}
 \begin{column}{0.48\textwidth}
 \begin{center}
 \begin{tikzpicture}
-  \fill[hcCard, rounded corners=6pt] (0,0) rectangle (5,2.2);
-  \node[font=\large\bfseries, text=hcGold] at (2.5,1.7) {\$99/mo Operator};
-  \node[font=\small, text=hcMuted, align=center] at (2.5,0.8) {Bulk forecasts + API access\\1,700 subs → \$2M ARR target};
+  \fill[hcCard, rounded corners=6pt] (0,0) rectangle (5,2.6);
+  \node[font=\large\bfseries, text=hcGold] at (2.5,2.1) {\$99/mo Operator};
+  \node[font=\small, text=hcMuted, align=center] at (2.5,1.0) {Bulk forecasts + API access\\Target: 1,700 subs at \$2M ARR};
 \end{tikzpicture}
 \end{center}
 \end{column}
 \end{columns}
+
+\vspace{14pt}
+\textcolor{hcGoldLight}{\rule{\textwidth}{0.5pt}}
+\vspace{8pt}
+
+\begin{center}
+\mutedtext{\small Target unit economics: ~\$150 CAC $\cdot$ 24-mo retention $\cdot$ <2 month payback}
+\end{center}
 \end{frame}
 
 
@@ -462,7 +458,7 @@
 
 \vspace{8pt}
 \begin{center}
-\mutedtext{\small Every query improves the model. Every improvement attracts more users.\\Intention data is the long-term asset.}
+\mutedtext{\small Every query improves the model.\\Every improvement attracts more users.\\Intention data is the long-term asset.}
 \end{center}
 \end{frame}
 
@@ -479,7 +475,9 @@
 ]
   \node[phase] (p1) at (0,0) {
     \goldtext{\textbf{Now}}\\[4pt]
-    Free dashboard\\RE investors (Houston)
+    Free dashboard\\[2pt]
+    RE investors\\[2pt]
+    Houston metro
   };
   \node[phase] (p2) at (5,0) {
     \goldtext{\textbf{Q2--Q3}}\\[4pt]
@@ -560,7 +558,7 @@
 \begin{column}{0.49\textwidth}
 \textbf{Every Dollar Mapped}\\[6pt]
 \begin{itemize}\setlength{\itemsep}{6pt}
-  \item \textbf{ML Engineer}\\\mutedtext{Transfer learning → 5 new metros}
+  \item \textbf{ML Engineer}\\\mutedtext{Transfer learning to 5 new metros}
   \item \textbf{GTM / Sales}\\\mutedtext{Scale to 1,700+ Operator subs}
   \item \textbf{Data \& Compute}\\\mutedtext{CoreLogic license + GPU training}
 \end{itemize}
@@ -573,7 +571,7 @@
   \item \goldtext{\textbf{1 institutional pilot}} or LOI
 \end{itemize}
 \vspace{8pt}
-\mutedtext{\scriptsize These milestones set up a strong Series~A.}
+\mutedtext{\scriptsize These milestones position us for Series~A.}
 \end{column}
 \end{columns}
 
