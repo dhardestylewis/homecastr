@@ -1,5 +1,5 @@
-% Homecastr Investor Pitch Deck - V3 Narrative Arc
-% Compile with: xelatex homecastr_pitch_v3.tex
+% Homecastr Investor Pitch Deck - V4 Honest Competitive Positioning
+% Compile with: xelatex homecastr_pitch_v4.tex
 
 \documentclass[aspectratio=169,12pt]{beamer}
 
@@ -163,7 +163,7 @@
 
 \vspace{8pt}
 \begin{center}
-\mutedtext{\small 150M+ residential properties. Zero affordable home-level forecasts. Until now.}
+\mutedtext{\small 150M+ residential properties. Forecasts exist --- but none built for consumers.}
 \end{center}
 \end{frame}
 
@@ -280,7 +280,7 @@
 
 \vspace{16pt}
 \begin{center}
-\mutedtext{\large No self-serve, home-level forecast product exists today.}
+\mutedtext{\large Property-level forecasts exist, but no one has built the consumer layer.}
 \end{center}
 \end{frame}
 
@@ -336,24 +336,27 @@
   % Axis labels
   \node[font=\footnotesize, text=hcMuted, anchor=north] at (-3.0,-0.15) {Backward-Looking};
   \node[font=\footnotesize, text=hcGold, anchor=north] at (3.0,-0.15) {Forward-Looking};
-  \node[font=\footnotesize, text=hcMuted, anchor=east, rotate=90] at (-0.2,-2.0) {Enterprise};
-  \node[font=\footnotesize, text=hcGold, anchor=east, rotate=90] at (-0.2,2.5) {Self-Serve};
+  \node[font=\footnotesize, text=hcMuted, anchor=east, rotate=90] at (-0.2,-2.0) {Institutional};
+  \node[font=\footnotesize, text=hcGold, anchor=east, rotate=90] at (-0.2,2.5) {Consumer};
 
   % Quadrant shading — golden quadrant (top-right)
   \fill[hcGoldLight, opacity=0.15] (0.1,0.1) rectangle (4.5,3.5);
 
-  % Competitors
-  \fill[hcRed!60] (-3.0,-2.0) circle (4pt);
-  \node[font=\footnotesize\bfseries, text=hcMuted, anchor=south west] at (-2.8,-1.9) {CoreLogic};
+  % Competitors — CoreLogic: forward-looking but institutional
+  \fill[hcRed!60] (1.5,-2.0) circle (4pt);
+  \node[font=\footnotesize\bfseries, text=hcMuted, anchor=south west] at (1.7,-1.9) {CoreLogic};
 
-  \fill[hcRed!60] (-1.5,-1.2) circle (4pt);
-  \node[font=\footnotesize\bfseries, text=hcMuted, anchor=south west] at (-1.3,-1.1) {HouseCanary};
+  % HouseCanary: forward-looking, self-serve, but institutional UX
+  \fill[hcRed!60] (2.5,-0.8) circle (4pt);
+  \node[font=\footnotesize\bfseries, text=hcMuted, anchor=south west] at (2.7,-0.7) {HouseCanary};
 
-  \fill[hcRed!60] (-2.5,1.8) circle (4pt);
-  \node[font=\footnotesize\bfseries, text=hcMuted, anchor=south west] at (-2.3,1.9) {PropStream};
+  % PropStream: backward-looking, consumer-ish
+  \fill[hcRed!60] (-2.5,1.0) circle (4pt);
+  \node[font=\footnotesize\bfseries, text=hcMuted, anchor=south west] at (-2.3,1.1) {PropStream};
 
-  \fill[hcRed!60] (-3.5,2.2) circle (4pt);
-  \node[font=\footnotesize\bfseries, text=hcMuted, anchor=south west] at (-3.3,2.3) {Zillow};
+  % Zillow: backward-looking, consumer
+  \fill[hcRed!60] (-3.5,2.5) circle (4pt);
+  \node[font=\footnotesize\bfseries, text=hcMuted, anchor=south west] at (-3.3,2.6) {Zillow};
 
   % Homecastr — golden quadrant, prominent
   \fill[hcGold] (3.0,2.5) circle (8pt);
@@ -364,8 +367,8 @@
 
 \vspace{4pt}
 \begin{center}
-\goldtext{\textbf{Only self-serve, forward-looking platform.}}\\
-\mutedtext{\small Everyone else looks backward, and every forward-looking play is enterprise-locked.}
+\goldtext{\textbf{Only consumer-facing, forward-looking platform.}}\\
+\mutedtext{\small HouseCanary and CoreLogic forecast forward --- but for analysts, not consumers.}
 \end{center}
 \end{frame}
 
