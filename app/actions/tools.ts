@@ -2,6 +2,14 @@
 
 import { getSupabaseServerClient } from "@/lib/supabase/server"
 import * as h3 from "h3-js"
+import { initLogger, traced, currentSpan, flush } from "braintrust"
+
+if (typeof process !== "undefined" && process.env.BRAINTRUST_API_KEY) {
+  initLogger({
+    projectName: "Homecastr",
+    apiKey: process.env.BRAINTRUST_API_KEY,
+  })
+}
 
 /**
  * Internal helper to calculate metrics consistently across all tools.
@@ -37,6 +45,21 @@ function calculateMetrics(data: any, currentValue: number | null, yearsOut: numb
 export async function executeTopLevelTool(toolName: string, args: Record<string, any>): Promise<string> {
     console.log(`[Server Tool] Executing ${toolName}`, args)
 
+    const result = await traced(async (span) => {
+      span.log({ input: { tool: toolName, args } })
+      const output = await _executeToolInner(toolName, args)
+      span.log({ output: JSON.parse(output) })
+      return output
+    }, { name: `Tool: ${toolName}` })
+
+    if (process.env.BRAINTRUST_API_KEY) {
+      await flush().catch(() => {})
+    }
+
+    return result
+}
+
+async function _executeToolInner(toolName: string, args: Record<string, any>): Promise<string> {
     switch (toolName) {
         case "resolve_place": {
             try {
@@ -386,8 +409,26 @@ export async function executeTopLevelTool(toolName: string, args: Record<string,
             })
         }
 
-        case "record_feedback":
-            return JSON.stringify({ recorded: true, id: "fb_" + Date.now() })
+        case "record_feedback": {
+            const feedbackId = "fb_" + Date.now()
+            try {
+              const score = typeof args.score === "number" ? args.score
+                : args.helpful === true ? 1
+                : args.helpful === false ? 0
+                : undefined
+              const span = currentSpan()
+              span.log({
+                input: { feedback_type: args.type || "general", comment: args.comment },
+                output: { recorded: true, id: feedbackId },
+                scores: {
+                  ...(score !== undefined ? { helpfulness: score } : {}),
+                  ...(args.relevance !== undefined ? { relevance: args.relevance } : {}),
+                },
+                metadata: { feedback_id: feedbackId },
+              })
+            } catch {}
+            return JSON.stringify({ recorded: true, id: feedbackId })
+        }
 
         default:
             return JSON.stringify({ error: "Tool not found" })

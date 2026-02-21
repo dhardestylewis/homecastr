@@ -2,6 +2,7 @@ import type React from "react"
 import type { Metadata, Viewport } from "next"
 import { Geist, Geist_Mono } from "next/font/google"
 import { Toaster } from "@/components/ui/toaster"
+import { DatadogRum } from "@/components/datadog-rum"
 import "./globals.css"
 
 const _geist = Geist({ subsets: ["latin"] })
@@ -35,6 +36,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={`font-sans antialiased overflow-hidden`} suppressHydrationWarning>
         {children}
+        <DatadogRum />
         <Toaster />
       </body>
     </html>
