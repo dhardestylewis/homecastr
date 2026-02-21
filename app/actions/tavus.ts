@@ -431,6 +431,10 @@ COMPARISON WORKFLOW (CRITICAL):
     }
 
     // 2. Create the conversation using that Persona
+    const appUrl =
+      process.env.NEXT_PUBLIC_APP_URL ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
+
     const body: Record<string, unknown> = {
       persona_id: activePersonaId,
       conversational_context,
@@ -444,6 +448,10 @@ COMPARISON WORKFLOW (CRITICAL):
         enable_recording: true,
         language: "english",
       },
+    }
+
+    if (appUrl) {
+      body.callback_url = `${appUrl}/api/webhooks/tavus`
     }
 
     if (replicaId) {
