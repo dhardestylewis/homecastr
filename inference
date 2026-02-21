@@ -87,13 +87,9 @@ RUN_FINAL_EXACT_AGG_REFRESH = True
 # The script will query Supabase for accounts already written under that run_id
 # and skip them.  Everything else (upserts, aggregates, final refresh) is
 # idempotent so this is safe.
-RESUME_MODE = False
-
-# Paste from the previous run's log output, e.g.:
-#   RESUME_PROD_RUN_ID = "forecast_2025_20260221T050431Z_8cdcf33c7b7d4ee6a948ecc6bccca160"
-#   RESUME_SUITE_ID    = "suite_20260221T050431Z_5b263b4bbbc344fa998999209fc58549"
-RESUME_PROD_RUN_ID = None   # production forecast run_id to resume
-RESUME_SUITE_ID    = None   # suite_id to resume (reuses the Google Drive output dir)
+RESUME_MODE = True
+RESUME_PROD_RUN_ID = "forecast_2025_20260221T050431Z_8cdcf33c7b7d4ee6a948ecc6bccca160"
+RESUME_SUITE_ID    = "suite_20260221T050431Z_5b263b4bbbc344fa998999209fc58549"
 
 # For backtest resume — dict of { origin_year: (run_id, variant_id, backtest_id) }
 # Leave as None to skip backtest resume.  Example:
@@ -1045,7 +1041,12 @@ def _run_one_origin(
         done_accts = _get_completed_accts_from_db(schema, run_id, "metrics_parcel_forecast")
         n_already = len(done_accts)
         all_accts_prod = [a for a in all_accts_prod if a not in done_accts]
-        print(f"[{_ts()}] RESUME: {n_already} accounts already done, {len(all_accts_prod)} remaining")
+        # Shuffle remaining accounts so chunks get a random mix of forecastable/non-forecastable
+        # (avoids runs of empty chunks when accounts are sorted by type)
+        import random as _rng
+        _rng.seed(42)  # fixed seed for reproducibility across restarts
+        _rng.shuffle(all_accts_prod)
+        print(f"[{_ts()}] RESUME: {n_already} accounts already done, {len(all_accts_prod)} remaining (shuffled)")
         if not all_accts_prod:
             print(f"[{_ts()}] RESUME: nothing left to do for this run, skipping.")
             return {
@@ -1134,7 +1135,102 @@ def _run_one_origin(
     progress_csv = os.path.join(run_root, "progress_log.csv")
     eval_csv = os.path.join(run_root, "backtest_eval_summary.csv")
 
-    for chunk_idx, acct_chunk in enumerate(_chunk_list(all_accts_prod, int(ACCT_BATCH_SIZE_OUTER)), start=1):
+    # Resume-safe chunk numbering: continue from where previous run left off
+    chunk_start = 1
+    if resume_run_id:
+        fc_dir = os.path.join(run_root, "forecast_chunks")
+        hist_dir = os.path.join(run_root, "history_chunks")
+        existing_fc = len([f for f in os.listdir(fc_dir) if f.endswith(('.parquet', '.csv.gz'))]) if os.path.isdir(fc_dir) else 0
+        existing_hist = len([f for f in os.listdir(hist_dir) if f.endswith(('.parquet', '.csv.gz'))]) if os.path.isdir(hist_dir) else 0
+        chunk_start = max(existing_fc, existing_hist) + 1
+        print(f"[{_ts()}] RESUME: continuing chunk numbering from {chunk_start} (found {existing_fc} fc, {existing_hist} hist chunks)")
+
+        # ── SPOT CHECK: test 5 random future chunks before committing ──
+        import random as _rng
+
+        all_chunks = list(_chunk_list(all_accts_prod, int(ACCT_BATCH_SIZE_OUTER)))
+        n_chunks = len(all_chunks)
+        n_spot = min(5, n_chunks)
+        spot_idxs = sorted(_rng.sample(range(n_chunks), n_spot))
+
+        # ── Diagnostic context ──
+        print(f"[{_ts()}] SPOT CHECK diag: origin_year={origin_year} (type={type(origin_year).__name__})")
+        print(f"[{_ts()}] SPOT CHECK diag: global_medians keys={len(global_medians)}, "
+              f"sample_keys={list(global_medians.keys())[:5]}")
+        print(f"[{_ts()}] SPOT CHECK diag: all_accts_prod len={len(all_accts_prod)}, "
+              f"type={type(all_accts_prod[0]).__name__} sample={all_accts_prod[:3]}")
+        print(f"[{_ts()}] SPOT CHECK diag: n_chunks={n_chunks}, "
+              f"ACCT_BATCH_SIZE_OUTER={ACCT_BATCH_SIZE_OUTER}")
+        print(f"[{_ts()}] SPOT CHECK: testing {n_spot} random chunks "
+              f"(chunk indices {spot_idxs}) ...")
+
+        def _test_chunk_diag(ci):
+            """Test a single chunk with full diagnostics."""
+            raw_chunk = all_chunks[ci]
+            chunk = [str(a) for a in raw_chunk]
+            n_chunk = len(chunk)
+            print(f"[{_ts()}] SPOT chunk {ci}: n_accts={n_chunk}, "
+                  f"acct_range=[{chunk[0]}..{chunk[-1]}], "
+                  f"sample_accts={chunk[:3]}, type={type(chunk[0]).__name__}")
+
+            t0 = time.time()
+            try:
+                ctx = _build_inference_for_accounts_at_origin(
+                    accts_batch=chunk,
+                    origin=int(origin_year),
+                    global_medians=global_medians,
+                )
+                dt = time.time() - t0
+
+                if ctx is None:
+                    print(f"[{_ts()}] SPOT chunk {ci}: returned None ({dt:.1f}s)")
+                    return ci, 0, n_chunk, dt
+                elif not isinstance(ctx, dict):
+                    print(f"[{_ts()}] SPOT chunk {ci}: unexpected type={type(ctx).__name__} ({dt:.1f}s)")
+                    return ci, 0, n_chunk, dt
+                elif "acct" not in ctx:
+                    print(f"[{_ts()}] SPOT chunk {ci}: dict has no 'acct' key, keys={list(ctx.keys())} ({dt:.1f}s)")
+                    return ci, 0, n_chunk, dt
+                else:
+                    n_valid = len(ctx["acct"])
+                    print(f"[{_ts()}] SPOT chunk {ci}: {n_valid}/{n_chunk} valid anchors "
+                          f"({100.0*n_valid/n_chunk:.0f}%) ({dt:.1f}s)")
+                    if n_valid > 0:
+                        print(f"[{_ts()}] SPOT chunk {ci}: valid acct_sample={ctx['acct'][:3]}")
+                    return ci, n_valid, n_chunk, dt
+            except Exception as e:
+                dt = time.time() - t0
+                import traceback
+                print(f"[{_ts()}] SPOT chunk {ci}: EXCEPTION ({dt:.1f}s): {e}")
+                traceback.print_exc()
+                return ci, 0, n_chunk, dt
+
+        spot_results = []
+        for ci in spot_idxs:
+            spot_results.append(_test_chunk_diag(ci))
+
+        n_chunks_with_data = 0
+        total_valid = 0
+        total_tested = 0
+        for ci, nv, nt, dt in spot_results:
+            total_valid += nv
+            total_tested += nt
+            if nv > 0:
+                n_chunks_with_data += 1
+
+        pct = 100.0 * total_valid / max(total_tested, 1)
+        print(f"[{_ts()}] SPOT CHECK summary: {n_chunks_with_data}/{n_spot} chunks have data, "
+              f"{total_valid}/{total_tested} accounts valid ({pct:.0f}%)")
+
+        if n_chunks_with_data == 0:
+            print(f"[{_ts()}] ⚠️  ALL {n_spot} spot-check chunks produced ZERO forecasts!")
+            print(f"[{_ts()}] ⚠️  Resume may not produce new forecasts. Continuing anyway...")
+        else:
+            est_new = int(pct / 100.0 * n_total)
+            print(f"[{_ts()}] ✅ Spot check passed: expect ~{est_new:,} new forecasts")
+        # ── end spot check ──
+
+    for chunk_idx, acct_chunk in enumerate(_chunk_list(all_accts_prod, int(ACCT_BATCH_SIZE_OUTER)), start=chunk_start):
         t0 = time.time()
         acct_chunk = [str(a) for a in acct_chunk]
         used_prop_batch_size = None
@@ -1195,13 +1291,28 @@ def _run_one_origin(
         # ---------------------------------------------------------------------
         # 2) Build inference context (no DB connection held)
         # ---------------------------------------------------------------------
+        print(f"[{_ts()}] Chunk {chunk_idx}: building inference context for {len(acct_chunk)} accts "
+              f"[{acct_chunk[0]}..{acct_chunk[-1]}] origin={origin_year}")
         ctx = _build_inference_for_accounts_at_origin(
             accts_batch=acct_chunk,
             origin=int(origin_year),
             global_medians=global_medians,
         )
 
-        if ctx is None or len(ctx["acct"]) == 0:
+        # Detailed diagnostic on the return value
+        if ctx is None:
+            _ctx_reason = "ctx=None"
+        elif not isinstance(ctx, dict):
+            _ctx_reason = f"ctx type={type(ctx).__name__} (expected dict)"
+        elif "acct" not in ctx:
+            _ctx_reason = f"ctx missing 'acct' key, keys={list(ctx.keys())}"
+        elif len(ctx["acct"]) == 0:
+            _ctx_reason = f"ctx['acct'] is empty (len=0), keys={list(ctx.keys())}"
+        else:
+            _ctx_reason = None
+
+        if _ctx_reason:
+            print(f"[{_ts()}] Chunk {chunk_idx}: ⚠️  no valid inference rows — {_ctx_reason}")
             n_done += len(acct_chunk)
 
             with _pg_tx() as conn:
@@ -1245,6 +1356,10 @@ def _run_one_origin(
             print(f"[{_ts()}] Chunk {chunk_idx}: no valid inference rows | elapsed={time.time()-t0:.1f}s")
             continue
 
+        # Inference context is valid — print diagnostic
+        n_ctx = len(ctx["acct"])
+        print(f"[{_ts()}] Chunk {chunk_idx}: ✅ {n_ctx}/{len(acct_chunk)} valid anchors, "
+              f"sample_valid={ctx['acct'][:3]}")
         # ---------------------------------------------------------------------
         # 3) Sample scenarios (adaptive backoff)
         # ---------------------------------------------------------------------

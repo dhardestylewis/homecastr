@@ -139,18 +139,18 @@ export function ExplainerPopup() {
                 </div>
             </div>
 
-            {/* Minimized Button */}
+            {/* Minimized Button — inline next to TimeControls */}
             <button
                 onClick={handleMaximize}
                 className={`
-                    fixed bottom-6 right-6 z-[10000] w-12 h-12 rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/25 
-                    flex items-center justify-center hover:scale-110 active:scale-95 transition-all duration-500 ease-out
-                    ${isMinimized ? "translate-y-0 opacity-100 rotate-0" : "translate-y-20 opacity-0 rotate-90 pointer-events-none"}
+                    w-10 h-10 rounded-lg shrink-0 shadow-sm
+                    flex items-center justify-center transition-all duration-300
+                    ${isMinimized ? "glass-panel text-foreground hover:bg-accent" : "opacity-0 w-0 overflow-hidden pointer-events-none"}
                 `}
                 aria-label="Open Help"
             >
                 <span className="sr-only">Help</span>
-                <span className="text-xl font-bold">?</span>
+                <span className="text-base font-bold">?</span>
             </button>
         </>
     )

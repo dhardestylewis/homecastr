@@ -20,6 +20,7 @@ interface CreateTavusConversationParams {
   opportunityScore: number | null
   capRate: number | null
   address?: string | null
+  forecastMode?: boolean
 }
 
 interface TavusConversationResponse {
@@ -33,6 +34,7 @@ export async function createTavusConversation({
   opportunityScore,
   capRate,
   address,
+  forecastMode = false,
 }: CreateTavusConversationParams): Promise<TavusConversationResponse> {
   try {
     const apiKey = process.env.TAVUS_API_KEY
@@ -52,7 +54,18 @@ export async function createTavusConversation({
     // 1. Context Sanitization: Use tools for real data, don't pass pre-computed numbers.
     const locationContext = address && !address.includes("neighborhood") ? `at ${address}` : "in Houston";
 
-    const conversational_context = `The user is exploring properties ${locationContext} in Houston, TX. 
+    const conversational_context = forecastMode
+      ? `The user is exploring properties ${locationContext} in Houston, TX using the Lot-Level Forecast Map.
+    IMPORTANT: You have zero initial metrics. You MUST call 'location_to_area' or 'get_forecast_area' immediately to find the real forecast data.
+    
+    SYSTEM RULES:
+    1. Use tools for EVERYTHING. Do not guess.
+    2. Data is organized at geography levels: zcta (zip codes), tract (census tracts), tabblock (census blocks), and parcel (individual lots).
+    3. NEVER mention technical IDs. Say "this neighborhood" or "this zip code" instead.
+    4. Speak naturally like a human. Report 1-2 metrics max per turn.
+    5. CONCISE: Report only predicted value (p50) and horizon. Wait for the user to ask for prediction intervals.
+    6. To compare locations, use 'add_location_to_selection'. To reset, use 'clear_selection'.`
+      : `The user is exploring properties ${locationContext} in Houston, TX. 
     IMPORTANT: You have zero initial metrics. You MUST call 'location_to_hex' or 'get_h3_hex' immediately to find the real market data for the current selection.
     
     SYSTEM RULES:
@@ -214,10 +227,146 @@ export async function createTavusConversation({
           }
         ];
 
+        // Forecast-mode tool definitions (geography-level)
+        const forecastToolDefinitions = [
+          {
+            type: "function",
+            function: {
+              name: "resolve_place",
+              description: "Resolve a free-text location into lat/lng results.",
+              parameters: {
+                type: "object",
+                properties: {
+                  query: { type: "string" },
+                  city_hint: { type: "string" },
+                  max_candidates: { type: "integer" }
+                },
+                required: ["query", "city_hint", "max_candidates"]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "location_to_area",
+              description: "Resolve text location -> determine geography -> return forecast metrics for that area.",
+              parameters: {
+                type: "object",
+                properties: {
+                  query: { type: "string", description: "Location name or address" },
+                  level: { type: "string", enum: ["zcta", "tract", "tabblock", "parcel"], description: "Geography level" },
+                  area_id: { type: "string", description: "Specific area ID if known" },
+                  forecast_year: { type: "integer" },
+                  include_metrics: { type: "boolean" }
+                },
+                required: ["query", "forecast_year"]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "get_forecast_area",
+              description: "Fetch forecast metrics for a specific geography unit (zip code, tract, block, or parcel).",
+              parameters: {
+                type: "object",
+                properties: {
+                  level: { type: "string", enum: ["zcta", "tract", "tabblock", "parcel"], description: "Geography level" },
+                  id: { type: "string", description: "Geography ID (e.g. 77079 for zcta, GEOID for tract)" },
+                  forecast_year: { type: "integer" },
+                  lat: { type: "number" },
+                  lng: { type: "number" }
+                },
+                required: ["level", "id", "forecast_year"]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "rank_forecast_areas",
+              description: "Rank geography units by forecasted value or growth.",
+              parameters: {
+                type: "object",
+                properties: {
+                  level: { type: "string", enum: ["zcta", "tract", "tabblock", "parcel"] },
+                  forecast_year: { type: "integer" },
+                  objective: { type: "string", enum: ["value", "growth"] },
+                  limit: { type: "integer" }
+                },
+                required: ["objective"]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "fly_to_location",
+              description: "Pan and zoom the map to a specific location.",
+              parameters: {
+                type: "object",
+                properties: {
+                  lat: { type: "number" },
+                  lng: { type: "number" },
+                  zoom: { type: "integer" },
+                  area_id: { type: "string" },
+                  level: { type: "string" }
+                },
+                required: ["lat", "lng", "zoom"]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "add_location_to_selection",
+              description: "Add a location to the current map selection for comparison. Use this after the initial search to compare with another area.",
+              parameters: {
+                type: "object",
+                properties: {
+                  query: { type: "string", description: "Location name or address" },
+                  area_id: { type: "string", description: "Specific area ID to add (from search results)" },
+                  level: { type: "string", enum: ["zcta", "tract", "tabblock", "parcel"], description: "Geography level" },
+                  forecast_year: { type: "integer" },
+                  include_metrics: { type: "boolean" }
+                },
+                required: ["query"]
+              }
+            }
+          },
+          {
+            type: "function",
+            function: {
+              name: "clear_selection",
+              description: "Clear all current map selections and reset the view.",
+              parameters: {
+                type: "object",
+                properties: {},
+                required: []
+              }
+            }
+          }
+        ];
+
         const personaBody = {
           persona_name: `Homecastr Voice ${Date.now()}`,
           pipeline_mode: "full",
-          system_prompt: `You are Homecastr, a real estate analyst. You are TALKING to a user.
+          system_prompt: forecastMode
+            ? `You are Homecastr, a real estate analyst specializing in property value forecasts. You are TALKING to a user.
+
+VOICE ETIQUETTE (CRITICAL):
+1. SPEAK LIKE A HUMAN: Do NOT read tool results verbatim. Do NOT read JSON blocks.
+2. NEVER mention IDs: Never say technical identifiers. Say "this zip code", "this neighborhood", or "this block" instead.
+3. CONCISE: Report only 1 or 2 metrics at a time (e.g., just the Predicted Value and Horizon). Wait for user to ask for more.
+4. PROACTIVITY: As soon as a tool returns metrics, translate them into a natural sentence. "This zip code is projected to have a median value of $370k by 2030."
+5. NO LOOPS: If you have data, share it. Do not tell the user you are waiting.
+
+RULES:
+- TREND ANALYSIS: Use 'forecast_year: 2030' by default for trends.
+- GEOGRAPHY: Data is available at zip code (zcta), census tract, block, and parcel levels. Ask for the appropriate level based on context.
+- DOLLARS: Mention specific dollar values clearly.
+- NO FILLER: No conversational filler. Just get the data.`
+            : `You are Homecastr, a real estate analyst. You are TALKING to a user.
 
 VOICE ETIQUETTE (CRITICAL):
 1. SPEAK LIKE A HUMAN: Do NOT read tool results verbatim. Do NOT read JSON blocks.
@@ -242,7 +391,7 @@ COMPARISON WORKFLOW (CRITICAL):
           layers: {
             llm: {
               model: "tavus-gpt-oss",
-              tools: toolDefinitions
+              tools: forecastMode ? forecastToolDefinitions : toolDefinitions
             }
           }
         };

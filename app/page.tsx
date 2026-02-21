@@ -15,7 +15,7 @@ import { useToast } from "@/hooks/use-toast"
 import type { PropertyForecast } from "@/app/actions/property-forecast"
 import { TimeControls } from "@/components/time-controls"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { AlertCircle, Plus, Minus, RotateCcw, ArrowLeftRight, Copy, Bot, Terminal, Activity } from "lucide-react"
+import { AlertCircle, Plus, Minus, RotateCcw, ArrowLeftRight, Copy, Terminal, Activity } from "lucide-react"
 import { geocodeAddress, reverseGeocode } from "@/app/actions/geocode"
 
 import { cellToLatLng, latLngToCell } from "h3-js"
@@ -30,7 +30,7 @@ import dynamic from "next/dynamic"
 const TavusMiniWindow = dynamic(
   () => import("@/components/tavus-mini-window").then((mod) => mod.TavusMiniWindow),
   { ssr: false }
-) as React.ComponentType<{ conversationUrl: string; onClose: () => void; chatOpen?: boolean }>
+) as React.ComponentType<{ conversationUrl: string; onClose: () => void; chatOpen?: boolean; forecastMode?: boolean }>
 
 
 
@@ -187,6 +187,24 @@ function DashboardContent() {
           toast({ title: "Homecastr Agent", description: "Ranking locations..." })
         }
       }
+      // ── Forecast-map geography-level actions ──
+      else if (action === "location_to_area" || action === "get_forecast_area") {
+        if (result?.chosen?.lat) {
+          setMapState(prev => ({
+            ...prev,
+            center: [result.chosen.lng, result.chosen.lat],
+            zoom: 13,
+            selectedId: result.area?.id || prev.selectedId,
+          }))
+          toast({ title: "Homecastr Agent", description: `Found ${result.chosen?.label || "area"}` })
+        } else if (result?.area) {
+          toast({ title: "Homecastr Agent", description: `Forecast data loaded for ${result.area.id}` })
+        }
+      } else if (action === "rank_forecast_areas") {
+        if (result?.areas?.length > 0) {
+          toast({ title: "Homecastr Agent", description: `Found top ${result.areas.length} areas` })
+        }
+      }
     }
     window.addEventListener("tavus-map-action", handleTavusAction)
     return () => window.removeEventListener("tavus-map-action", handleTavusAction)
@@ -204,12 +222,21 @@ function DashboardContent() {
 
     const fetchAddress = async () => {
       try {
-        const [lat, lng] = cellToLatLng(mapState.selectedId!)
+        let lat: number, lng: number
+        if (filters.useForecastMap) {
+          // Forecast mode: selectedId is a census ID, not H3 hex.
+          // Use the map center for reverse geocoding.
+          const center = mapState.center as [number, number]
+          lng = center[0]
+          lat = center[1]
+        } else {
+          ;[lat, lng] = cellToLatLng(mapState.selectedId!)
+        }
         const address = await reverseGeocode(lat, lng)
         if (address) {
           setSearchBarValue(address)
         } else {
-          setSearchBarValue("Unknown Location")
+          setSearchBarValue("")
         }
       } catch (e) {
         console.error("Reverse geocode failed", e)
@@ -217,6 +244,7 @@ function DashboardContent() {
       }
     }
     fetchAddress()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapState.selectedId])
 
   const handleSearchError = useCallback(
@@ -280,6 +308,7 @@ function DashboardContent() {
         opportunityScore: details.opportunityScore,
         capRate: details.capRate,
         address: searchBarValue && !searchBarValue.includes("Loading") ? searchBarValue : "this neighborhood",
+        forecastMode: filters.useForecastMap ?? false,
       })
 
       if (result.error || !result.conversation_url) {
@@ -288,19 +317,16 @@ function DashboardContent() {
 
       setTavusConversationUrl(result.conversation_url)
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Could not connect to Homecastr agent."
-      const isConfigError = message.includes("not set") || message.includes("not configured") || message.includes("Vercel")
       console.error("[TAVUS] Failed to create conversation:", err)
       toast({
-        title: isConfigError ? "Homecastr not configured" : "Homecastr Unavailable",
-        description: isConfigError ? message : "Could not connect to Homecastr agent. Please try again.",
+        title: "Homecastr Unavailable",
+        description: err instanceof Error ? err.message : "Could not connect to Homecastr agent.",
         variant: "destructive",
-        duration: isConfigError ? 12000 : 5000,
       })
     } finally {
       setIsTavusLoading(false)
     }
-  }, [isTavusLoading, toast])
+  }, [isTavusLoading, toast, filters.useForecastMap])
 
   /* Floating button handler */
   const handleFloatingConsultAI = useCallback(async () => {
@@ -308,21 +334,42 @@ function DashboardContent() {
 
     setIsTavusLoading(true)
     try {
-      // Try to use selected hex first, otherwise derive from map center
-      let h3Id = mapState.selectedId
-      if (!h3Id) {
-        const [lng, lat] = mapState.center
-        h3Id = latLngToCell(lat, lng, 8)
+      let predictedValue: number | null = null
+      let opportunityScore: number | null = null
+      let capRate: number | null = null
+
+      if (filters.useForecastMap) {
+        // Forecast map mode: query forecast-detail API if we have a selectedId
+        if (mapState.selectedId) {
+          try {
+            const res = await fetch(`/api/forecast-detail?level=zcta&id=${encodeURIComponent(mapState.selectedId)}&originYear=2025`)
+            if (res.ok) {
+              const json = await res.json()
+              if (json.p50 && json.p50.length > 0) {
+                predictedValue = json.p50[json.p50.length - 1] // Last horizon
+              }
+            }
+          } catch { }
+        }
+      } else {
+        // Classic H3 mode
+        let h3Id = mapState.selectedId
+        if (!h3Id) {
+          const [lng, lat] = mapState.center
+          h3Id = latLngToCell(lat, lng, 8)
+        }
+        const details = await getH3CellDetails(h3Id, currentYear)
+        predictedValue = details?.proforma?.predicted_value ?? null
+        opportunityScore = details?.opportunity?.value ?? null
+        capRate = details?.proforma?.cap_rate ?? null
       }
 
-      // Fetch details from Supabase
-      const details = await getH3CellDetails(h3Id, currentYear)
-
       const result = await createTavusConversation({
-        predictedValue: details?.proforma?.predicted_value ?? null,
-        opportunityScore: details?.opportunity?.value ?? null,
-        capRate: details?.proforma?.cap_rate ?? null,
+        predictedValue,
+        opportunityScore,
+        capRate,
         address: searchBarValue && !searchBarValue.includes("Loading") && !searchBarValue.startsWith("8") ? searchBarValue : "this neighborhood",
+        forecastMode: filters.useForecastMap ?? false,
       })
 
       if (result.error || !result.conversation_url) {
@@ -331,19 +378,16 @@ function DashboardContent() {
 
       setTavusConversationUrl(result.conversation_url)
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Could not connect to Homecastr agent."
-      const isConfigError = message.includes("not set") || message.includes("not configured") || message.includes("Vercel")
       console.error("[TAVUS] Failed to create conversation:", err)
       toast({
-        title: isConfigError ? "Homecastr not configured" : "Homecastr Unavailable",
-        description: isConfigError ? message : "Could not connect to Homecastr agent. Please try again.",
+        title: "Homecastr Unavailable",
+        description: err instanceof Error ? err.message : "Could not connect to Homecastr agent.",
         variant: "destructive",
-        duration: isConfigError ? 12000 : 5000,
       })
     } finally {
       setIsTavusLoading(false)
     }
-  }, [isTavusLoading, toast, mapState.selectedId, mapState.center, currentYear])
+  }, [isTavusLoading, toast, mapState.selectedId, mapState.center, currentYear, filters.useForecastMap])
 
   return (
     <div className="h-dvh flex flex-col">
@@ -435,17 +479,99 @@ function DashboardContent() {
             </button>
           </div>
 
-          <TimeControls
-            minYear={2019}
-            maxYear={2030}
-            currentYear={currentYear}
-            onChange={setCurrentYear}
-            onPlayStart={() => {
-              console.log("[PAGE] Play started - prefetch all years triggered")
-            }}
-            className="w-full"
-          />
+          {/* TimeControls + Help Button Row */}
+          <div className="flex items-center gap-2">
+            <TimeControls
+              minYear={2019}
+              maxYear={2030}
+              currentYear={currentYear}
+              onChange={setCurrentYear}
+              onPlayStart={() => {
+                console.log("[PAGE] Play started - prefetch all years triggered")
+              }}
+              className="flex-1"
+            />
+            <ExplainerPopup />
+          </div>
 
+
+          {/* 3. Legend & (Selection Buttons + Vertical Zoom Controls) Row */}
+          <div className="flex flex-row gap-1.5 items-start">
+            {/* Legend - Takes up available space */}
+            <Legend
+              className="flex-1"
+              colorMode={filters.colorMode}
+              onColorModeChange={handleColorModeChange}
+            />
+
+            {/* Controls Column: Grid on Mobile, Flex Col on Desktop */}
+            <div className="grid grid-cols-2 gap-1.5 md:flex md:flex-col md:w-8 shrink-0">
+
+              {/* Mobile Selection Buttons (Hidden on Desktop) */}
+              <div className="flex flex-col gap-1.5 md:hidden w-8">
+                <button
+                  onClick={() => setMobileSelectionMode('replace')}
+                  className={`w-8 h-8 rounded-md flex items-center justify-center transition-colors shadow-sm font-bold text-[10px] ${mobileSelectionMode === 'replace' ? "bg-primary text-primary-foreground" : "glass-panel text-foreground"}`}
+                  title="Single Select"
+                >
+                  1
+                </button>
+                <button
+                  onClick={() => setMobileSelectionMode('add')}
+                  className={`w-8 h-8 rounded-md flex items-center justify-center transition-colors shadow-sm font-bold text-[10px] ${mobileSelectionMode === 'add' ? "bg-primary text-primary-foreground" : "glass-panel text-foreground"}`}
+                  title="Multi Select (Add)"
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  onClick={() => setMobileSelectionMode('range')}
+                  className={`w-8 h-8 rounded-md flex items-center justify-center transition-colors shadow-sm font-bold text-[10px] ${mobileSelectionMode === 'range' ? "bg-primary text-primary-foreground" : "glass-panel text-foreground"}`}
+                  title="Range Select"
+                >
+                  <ArrowLeftRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
+
+              {/* Vertical Zoom Controls (Always Visible, Col 2 on Mobile) */}
+              <div className="flex flex-col gap-1.5 w-8">
+                <button
+                  onClick={() => {
+                    setMapState({ zoom: Math.min(18, mapState.zoom + 1) })
+                  }}
+                  className="w-8 h-8 glass-panel rounded-md flex items-center justify-center text-foreground hover:bg-accent transition-colors shadow-sm active:scale-95"
+                  aria-label="Zoom In"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  onClick={() => {
+                    setMapState({ zoom: Math.max(9, mapState.zoom - 1) })
+                  }}
+                  className="w-8 h-8 glass-panel rounded-md flex items-center justify-center text-foreground hover:bg-accent transition-colors shadow-sm active:scale-95"
+                  aria-label="Zoom Out"
+                >
+                  <Minus className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  onClick={() => {
+                    setMapState({
+                      center: [-95.3698, 29.7604],
+                      zoom: 11,
+                      selectedId: null
+                    })
+                    resetFilters()
+                  }}
+                  className="w-8 h-8 glass-panel rounded-md flex items-center justify-center text-foreground hover:bg-accent transition-colors shadow-sm active:scale-95"
+                  aria-label="Reset Map"
+                  title="Reset Map"
+                >
+                  <RotateCcw className="h-3 w-3" />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* API Documentation + Version - below legend */}
           <div className="flex justify-between items-center px-1">
             <a
               href="/api-docs"
@@ -457,125 +583,7 @@ function DashboardContent() {
             </a>
             <div className="text-[10px] text-muted-foreground/50 font-mono">v1.4.0-beige</div>
           </div>
-
-          {/* Migration Toggle */}
-          <button
-            onClick={() => setFilters({ useVectorMap: !filters.useVectorMap })}
-            className={cn(
-              "w-full py-1.5 px-3 rounded-lg border text-[10px] font-bold uppercase tracking-wider transition-all shadow-sm flex items-center justify-between",
-              filters.useVectorMap
-                ? "bg-primary/20 border-primary/50 text-primary"
-                : "bg-muted/30 border-border/50 text-muted-foreground hover:bg-muted/50"
-            )}
-          >
-            <span>Tile Engine: {filters.useVectorMap ? "New (Vector)" : "Classic (H3)"}</span>
-            <div className={cn(
-              "w-2 h-2 rounded-full",
-              filters.useVectorMap ? "bg-primary animate-pulse" : "bg-muted-foreground/30"
-            )} />
-          </button>
-
-          {/* Forecast Map Toggle */}
-          <button
-            onClick={() => setFilters({ useForecastMap: !filters.useForecastMap, useVectorMap: false })}
-            className={cn(
-              "w-full py-1.5 px-3 rounded-lg border text-[10px] font-bold uppercase tracking-wider transition-all shadow-sm flex items-center justify-between",
-              filters.useForecastMap
-                ? "bg-violet-500/20 border-violet-500/50 text-violet-300"
-                : "bg-muted/30 border-border/50 text-muted-foreground hover:bg-muted/50"
-            )}
-          >
-            <span className="flex items-center gap-1.5">
-              <Activity className="w-3 h-3" />
-              Forecast Choropleth
-            </span>
-            <div className={cn(
-              "w-2 h-2 rounded-full",
-              filters.useForecastMap ? "bg-violet-500 animate-pulse" : "bg-muted-foreground/30"
-            )} />
-          </button>
-
-          {/* 3. Legend & (Selection Buttons + Vertical Zoom Controls) Row */}
-          <div className="flex flex-row gap-2 items-stretch h-full">
-            {/* Legend - Takes up available space */}
-            <Legend
-              className="flex-1"
-              colorMode={filters.colorMode}
-              onColorModeChange={handleColorModeChange}
-            />
-
-            {/* Controls Column: Grid on Mobile, Flex Col on Desktop */}
-            <div className="grid grid-cols-2 gap-2 md:flex md:flex-col md:w-10 shrink-0">
-
-              {/* Mobile Selection Buttons (Hidden on Desktop) */}
-              <div className="flex flex-col gap-2 md:hidden w-10">
-                <button
-                  onClick={() => setMobileSelectionMode('replace')}
-                  className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors shadow-sm font-bold text-xs ${mobileSelectionMode === 'replace' ? "bg-primary text-primary-foreground" : "glass-panel text-foreground"}`}
-                  title="Single Select"
-                >
-                  1
-                </button>
-                <button
-                  onClick={() => setMobileSelectionMode('add')}
-                  className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors shadow-sm font-bold text-xs ${mobileSelectionMode === 'add' ? "bg-primary text-primary-foreground" : "glass-panel text-foreground"}`}
-                  title="Multi Select (Add)"
-                >
-                  <Copy className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={() => setMobileSelectionMode('range')}
-                  className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors shadow-sm font-bold text-xs ${mobileSelectionMode === 'range' ? "bg-primary text-primary-foreground" : "glass-panel text-foreground"}`}
-                  title="Range Select"
-                >
-                  <ArrowLeftRight className="h-4 w-4" />
-                </button>
-              </div>
-
-              {/* Vertical Zoom Controls (Always Visible, Col 2 on Mobile) */}
-              <div className="flex flex-col gap-2 w-10">
-                <button
-                  onClick={() => {
-                    setMapState({ zoom: Math.min(18, mapState.zoom + 1) })
-                  }}
-                  className="w-10 h-10 glass-panel rounded-lg flex items-center justify-center text-foreground hover:bg-accent transition-colors shadow-sm active:scale-95"
-                  aria-label="Zoom In"
-                >
-                  <Plus className="h-5 w-5" />
-                </button>
-                <button
-                  onClick={() => {
-                    setMapState({ zoom: Math.max(9, mapState.zoom - 1) })
-                  }}
-                  className="w-10 h-10 glass-panel rounded-lg flex items-center justify-center text-foreground hover:bg-accent transition-colors shadow-sm active:scale-95"
-                  aria-label="Zoom Out"
-                >
-                  <Minus className="h-5 w-5" />
-                </button>
-                <button
-                  onClick={() => {
-                    setMapState({
-                      center: [-95.3698, 29.7604],
-                      zoom: 11,
-                      selectedId: null
-                    })
-                    resetFilters()
-                  }}
-                  className="w-10 h-10 glass-panel rounded-lg flex items-center justify-center text-foreground hover:bg-accent transition-colors shadow-sm active:scale-95"
-                  aria-label="Reset Map"
-                  title="Reset Map"
-                >
-                  <RotateCcw className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-          </div>
         </div>
-
-
-
-
-        <ExplainerPopup />
 
         {/* Floating Homecastr Live Agent Button — always visible, bottom-left, shifts when chat open */}
         {!tavusConversationUrl && !isTavusLoading && (
@@ -586,8 +594,8 @@ function DashboardContent() {
               isChatOpen ? "left-[420px]" : "left-5"
             )}
           >
-            <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center group-hover:bg-primary/30 transition-colors">
-              <Bot className="w-4 h-4 text-primary" />
+            <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center group-hover:bg-primary/30 transition-colors overflow-hidden">
+              <img src="/homecastr-logo-cropped.png" alt="Homecastr" className="w-6 h-6 object-contain" />
             </div>
             <div className="flex flex-col items-start">
               <span className="text-xs font-semibold">Talk to Homecastr Live Agent</span>
@@ -613,6 +621,7 @@ function DashboardContent() {
             conversationUrl={tavusConversationUrl}
             onClose={() => setTavusConversationUrl(null)}
             chatOpen={isChatOpen}
+            forecastMode={filters.useForecastMap ?? false}
           />
         )}
       </main>

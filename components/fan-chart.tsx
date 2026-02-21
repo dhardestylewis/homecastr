@@ -21,7 +21,7 @@ interface FanChartProps {
 // Fixed timeline: 2019-2032 (14 years)
 const TIMELINE_START = 2019
 const TIMELINE_END = 2030
-const BASELINE_YEAR = 2025 // Dividing line between history and forecast
+const BASELINE_YEAR = 2026 // Dividing line between history and forecast ("Now")
 const YEARS = Array.from({ length: TIMELINE_END - TIMELINE_START + 1 }, (_, i) => TIMELINE_START + i)
 
 /**
@@ -84,6 +84,7 @@ export function FanChart({
   comparisonHistoricalValues,
   previewData,
   previewHistoricalValues,
+  yDomain,
   onYearChange
 }: FanChartProps & { onYearChange?: (year: number) => void }) {
   const { p10, p50, p90, y_med } = data
@@ -133,7 +134,11 @@ export function FanChart({
     const dataMinY = Math.min(...allValues)
     const dataMaxY = Math.max(...allValues)
 
-    const yTicks = getNiceYTicks(dataMinY, dataMaxY, 4)
+    // Use fixed yDomain if provided, otherwise auto-compute
+    const effectiveMinY = yDomain ? yDomain[0] : dataMinY
+    const effectiveMaxY = yDomain ? yDomain[1] : dataMaxY
+
+    const yTicks = getNiceYTicks(effectiveMinY, effectiveMaxY, 4)
     const minY = yTicks[0]
     const maxY = yTicks[yTicks.length - 1]
     const yRange = maxY - minY || 1
@@ -333,7 +338,7 @@ export function FanChart({
 
 
     // X-axis labels - show every 2 years for clarity
-    const labelYears = [2019, 2021, 2023, 2025, 2027, 2029]
+    const labelYears = [2020, 2022, 2024, 2026, 2028, 2030]
 
     const handleMouseMove = (e: React.MouseEvent<SVGSVGElement, MouseEvent>) => {
       const rect = e.currentTarget.getBoundingClientRect()
@@ -506,12 +511,11 @@ export function FanChart({
           <path d={comparisonHistPath} fill="none" stroke="#ca8a04" strokeWidth={2} strokeDasharray="3 3" />
         )}
 
-        {/* Connector from historical to forecast */}
         {connectorPath && (
-          <path d={connectorPath} fill="none" stroke="#4a5568" strokeWidth={1} strokeDasharray="2 2" />
+          <path d={connectorPath} fill="none" stroke="#4a5568" strokeWidth={2} />
         )}
         {comparisonConnectorPath && (
-          <path d={comparisonConnectorPath} fill="none" stroke="#ca8a04" strokeWidth={1} strokeDasharray="2 2" />
+          <path d={comparisonConnectorPath} fill="none" stroke="#ca8a04" strokeWidth={2} />
         )}
 
         {/* P50 forecast line */}
@@ -524,21 +528,21 @@ export function FanChart({
           <path d={previewHistPath} fill="none" stroke="#d946ef" strokeWidth={2} strokeDasharray="3 3" />
         )}
         {previewConnectorPath && (
-          <path d={previewConnectorPath} fill="none" stroke="#d946ef" strokeWidth={1} strokeDasharray="2 2" />
+          <path d={previewConnectorPath} fill="none" stroke="#d946ef" strokeWidth={2} />
         )}
         {previewP50Line && <path d={previewP50Line} fill="none" stroke="#d946ef" strokeWidth={2} />}
 
         {/* X-axis labels */}
-        {labelYears.map((year) => (
+        {labelYears.map((yr) => (
           <text
-            key={year}
-            x={xScale(year)}
+            key={yr}
+            x={xScale(yr)}
             y={height - padding.bottom + 15}
             textAnchor="middle"
             className="text-[9px] fill-muted-foreground font-mono"
             style={{ pointerEvents: 'none' }}
           >
-            {'\'' + year.toString().slice(2)}
+            {'\'' + yr.toString().slice(2)}
           </text>
         ))}
 
@@ -556,37 +560,10 @@ export function FanChart({
           </text>
         ))}
 
-        {/* Legend - Consolidated & Fixed Clipping */}
-        {/* Raised y-position to -35 (from height+5) to fit inside viewbox and avoid clipping */}
-        <g transform={`translate(${padding.left}, ${height - 5})`} style={{ pointerEvents: 'none' }}>
-          {/* Row 1: Lines */}
-          {/* Col 1: Property */}
-          <line x1={0} y1={-18} x2={12} y2={-18} stroke="#4a5568" strokeWidth={2} />
-          <text x={16} y={-15} className="text-[8px] fill-muted-foreground">Area</text>
 
-          {/* Col 2: Comparison */}
-          {comparisonData && (
-            <g transform="translate(60, 0)">
-              <line x1={0} y1={-18} x2={12} y2={-18} stroke="#ca8a04" strokeWidth={2} strokeDasharray="3 3" />
-              <text x={16} y={-15} className="text-[8px] fill-muted-foreground">Comparison</text>
-            </g>
-          )}
-
-          {/* Col 3: Candidate */}
-          {previewData && (
-            <g transform="translate(125, 0)">
-              <line x1={0} y1={-18} x2={12} y2={-18} stroke="#d946ef" strokeWidth={2} strokeDasharray="3 3" />
-              <text x={16} y={-15} className="text-[8px] fill-muted-foreground">Candidate Comparison</text>
-            </g>
-          )}
-
-          {/* Row 2: Range (Applies to all) */}
-          <rect x={0} y={-8} width={10} height={6} fill="#888888" fillOpacity={0.3} />
-          <text x={14} y={-2} className="text-[8px] fill-muted-foreground">Forecast Range</text>
-        </g>
       </svg>
     )
-  }, [data, height, currentYear, historicalValues, p10, p50, p90, y_med, childLines, comparisonData, comparisonHistoricalValues, previewData, previewHistoricalValues, hoveredYear, onYearChange])
+  }, [data, height, currentYear, historicalValues, p10, p50, p90, y_med, childLines, comparisonData, comparisonHistoricalValues, previewData, previewHistoricalValues, hoveredYear, onYearChange, yDomain])
 
   return <div className="bg-secondary/30 rounded-lg p-2">{svgContent}</div>
 }
