@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { X, Minimize2, Maximize2, Mic, MicOff, Video, VideoOff } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { executeTopLevelTool } from "@/app/actions/tools";
 
 interface TavusMiniWindowProps {
   conversationUrl: string
@@ -67,6 +68,98 @@ export function TavusMiniWindow({ conversationUrl, onClose, chatOpen = false }: 
           setHasError("Connection failed. Please try again.")
         })
 
+        // Listen for Tavus tool calls via Daily's "app-message"
+        call.on("app-message", async (e: any) => {
+          const raw = e.data || e;
+          if (raw.event_type === "conversation.tool_call") {
+            const props = raw.properties || {}
+            const conversationId = raw.conversation_id
+
+            console.log("[TAVUS] Raw Tool Call Event:", JSON.stringify(raw))
+
+            const toolName = raw.tool_name || raw.name || props.name || props.tool_name
+            const activeToolCallId = raw.tool_call_id || raw.call_id || raw.inference_id || props.tool_call_id || props.inference_id
+            let params = raw.parameters || raw.arguments || props.arguments || props.parameters
+
+            console.log("[TAVUS] Extracted:", { toolName, activeToolCallId, params })
+
+            let parsedParams = params;
+            if (typeof params === "string") {
+              try { parsedParams = JSON.parse(params); } catch (err) { console.error("[TAVUS] Param parse error:", err); }
+            }
+
+            // 0. Immediate Echo (Progress Line)
+            if (parsedParams.response_to_user && conversationId) {
+              call.sendAppMessage({
+                message_type: "conversation",
+                event_type: "conversation.echo",
+                conversation_id: conversationId,
+                properties: { text: parsedParams.response_to_user }
+              }, "*")
+            }
+
+            // 1. Execute the tool
+            try {
+              let resultJson: string;
+
+              if (toolName === "fly_to_location") {
+                // UI Tool: Handle client-side immediately
+                console.log("[TAVUS] Handling fly_to_location in client", parsedParams)
+                window.dispatchEvent(new CustomEvent("tavus-map-action", {
+                  detail: { action: "fly_to_location", params: parsedParams }
+                }))
+                resultJson = JSON.stringify({ success: true, action: "panning and zooming map" })
+              } else {
+                // Server Tool: Proxy via Server Action
+                console.log(`[TAVUS] Proxying server tool: ${toolName}`)
+                resultJson = await executeTopLevelTool(toolName, parsedParams)
+              }
+
+              console.log(`[TAVUS] Tool ${toolName} result:`, resultJson)
+
+              // 2. Dispatch data result to map for secondary visualization (if not fly_to)
+              if (toolName !== "fly_to_location") {
+                const result = JSON.parse(resultJson)
+                window.dispatchEvent(new CustomEvent("tavus-map-action", {
+                  detail: { action: toolName, params: parsedParams, result: result }
+                }))
+              }
+
+              // 3. Append to LLM context (Bounded Contract)
+              if (conversationId) {
+                call.sendAppMessage({
+                  message_type: "conversation",
+                  event_type: "conversation.append_llm_context",
+                  conversation_id: conversationId,
+                  properties: {
+                    context: `Result for ${toolName}: ${resultJson}. INSTRUCTION: Report the key takeaway in 1 sentence. Never read JSON. Never say H3 IDs.`
+                  }
+                }, "*")
+
+                // 4. Trigger Response (Force natural speech)
+                call.sendAppMessage({
+                  message_type: "conversation",
+                  event_type: "conversation.respond",
+                  conversation_id: conversationId,
+                  properties: {
+                    text: `Summarize the result for ${toolName} like a human. Avoid all technical IDs.`
+                  }
+                }, "*")
+              }
+            } catch (err) {
+              console.error(`[TAVUS] Tool ${toolName} failed:`, err)
+              if (conversationId) {
+                call.sendAppMessage({
+                  message_type: "conversation",
+                  event_type: "conversation.respond",
+                  conversation_id: conversationId,
+                  properties: { text: `The tool ${toolName} failed. Let the user know simply.` }
+                }, "*")
+              }
+            }
+          }
+        })
+
         // Auto-join immediately — no lobby, no pre-join screen
         await call.join({ url: conversationUrl })
       } catch (err) {
@@ -82,7 +175,7 @@ export function TavusMiniWindow({ conversationUrl, onClose, chatOpen = false }: 
     return () => {
       cancelled = true
       if (callRef.current) {
-        callRef.current.leave().catch(() => {})
+        callRef.current.leave().catch(() => { })
         callRef.current.destroy()
         callRef.current = null
       }
@@ -138,7 +231,7 @@ export function TavusMiniWindow({ conversationUrl, onClose, chatOpen = false }: 
 
   const handleLeave = useCallback(() => {
     if (callRef.current) {
-      callRef.current.leave().catch(() => {})
+      callRef.current.leave().catch(() => { })
     }
     onClose()
   }, [onClose])

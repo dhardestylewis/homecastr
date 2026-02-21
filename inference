@@ -1,0 +1,1601 @@
+# =============================================================================
+# PRODUCTION + FULL BACKTEST STREAMING PIPELINE (COLAB -> SUPABASE POSTGRES)
+# -----------------------------------------------------------------------------
+# Target schema: forecast_YYYYMMDD_<uid> (or any schema created by your DDL)
+#
+# What this writes:
+#   1) Parcel history      -> <schema>.metrics_parcel_history
+#   2) Parcel forecast fan -> <schema>.metrics_parcel_forecast
+#   3) Higher-level aggs   -> <schema>.metrics_{tabblock,tract,zcta,unsd,neighborhood}_{history,forecast}
+#   4) Run progress        -> <schema>.inference_runs, <schema>.inference_run_progress
+#
+# Notes:
+# - Uses direct Postgres (psycopg2) for fast bulk upserts.
+# - Uses short-lived DB transactions to avoid Supabase pooler idle timeout failures.
+# - Uses weighted ON CONFLICT merges for chunked geo aggregations (correct across chunks).
+# - Optionally runs a final exact aggregate refresh at the end of each run for bulletproof consistency.
+# =============================================================================
+
+# If needed in Colab, run once:
+# !pip -q install psycopg2-binary pyarrow
+
+import os
+import re
+import time
+import json
+import uuid
+import math
+from contextlib import contextmanager
+from datetime import datetime, date
+
+import numpy as np
+import pandas as pd
+
+try:
+    import pyarrow  # noqa
+    _HAS_PARQUET = True
+except Exception:
+    _HAS_PARQUET = False
+
+import psycopg2
+from psycopg2.extras import execute_values
+
+
+# -----------------------------------------------------------------------------
+# CONFIG
+# -----------------------------------------------------------------------------
+# >>>> REQUIRED <<<<
+TARGET_SCHEMA = "forecast_20260220_7f31c6e4"   # set this to your created schema
+SUPABASE_DB_URL = os.environ.get("SUPABASE_DB_URL", "")  # transaction pooler URL is fine
+
+# Production forecast anchor
+FORECAST_ORIGIN_YEAR = 2025
+
+# Backtests
+RUN_FULL_BACKTEST = True
+BACKTEST_ORIGINS = None
+WRITE_BACKTEST_HISTORY_VARIANTS = False
+
+# Model sampling
+H = int(globals().get("H", 5))                 # annual horizons (1..H years ahead)
+S = int(globals().get("S_SCENARIOS", 256))     # scenarios
+MODEL_VERSION = "world_model_v10_2_fullpanel"
+
+# A100 / sampler tuning (adaptive backoff wrapper will use these)
+PROP_BATCH_SIZE_SAMPLER = int(globals().get("PROP_BATCH_SIZE_SAMPLER", 512))
+PROP_BATCH_SIZE_MIN = int(globals().get("PROP_BATCH_SIZE_MIN", 64))
+
+# Chunking
+ACCT_BATCH_SIZE_OUTER = 5000
+PG_BATCH_ROWS = 5000
+
+# Schema compatibility:
+# Set this True only if <schema>.metrics_parcel_forecast has a column named "n".
+# Many DDLs keep only "n_scenarios" on parcel forecast rows.
+PARCEL_FORECAST_HAS_N_COL = bool(globals().get("PARCEL_FORECAST_HAS_N_COL", False))
+
+# Aggregate tables are assumed to have "n" (parcel count per geography). Required for weighted chunk merge.
+AGG_FORECAST_HAS_N_COL = True
+
+# Final exact refresh (recommended): delete+recompute aggregate rows from parcel rows for this run slice
+RUN_FINAL_EXACT_AGG_REFRESH = True
+
+# =============================================================================
+# RESUME CONFIG  —  fill these in to restart from where you left off
+# =============================================================================
+# Set RESUME_MODE = True and paste the run_id / suite_id from the previous run.
+# The script will query Supabase for accounts already written under that run_id
+# and skip them.  Everything else (upserts, aggregates, final refresh) is
+# idempotent so this is safe.
+RESUME_MODE = False
+
+# Paste from the previous run's log output, e.g.:
+#   RESUME_PROD_RUN_ID = "forecast_2025_20260221T050431Z_8cdcf33c7b7d4ee6a948ecc6bccca160"
+#   RESUME_SUITE_ID    = "suite_20260221T050431Z_5b263b4bbbc344fa998999209fc58549"
+RESUME_PROD_RUN_ID = None   # production forecast run_id to resume
+RESUME_SUITE_ID    = None   # suite_id to resume (reuses the Google Drive output dir)
+
+# For backtest resume — dict of { origin_year: (run_id, variant_id, backtest_id) }
+# Leave as None to skip backtest resume.  Example:
+#   RESUME_BACKTEST_RUNS = {
+#       2021: ("backtest_2021_20260221T..._abc", "bt_2021_xyz", "bt_2021_xyz"),
+#       2022: ("backtest_2022_20260221T..._def", "bt_2022_xyz", "bt_2022_xyz"),
+#   }
+RESUME_BACKTEST_RUNS = None
+# =============================================================================
+
+# Output root (Colab-mounted Google Drive)
+if RESUME_MODE and RESUME_SUITE_ID:
+    SUITE_ID = RESUME_SUITE_ID
+else:
+    RUN_STAMP = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    SUITE_UID = uuid.uuid4().hex
+    SUITE_ID = f"suite_{RUN_STAMP}_{SUITE_UID}"
+
+OUT_ROOT = f"/content/drive/MyDrive/data_backups/world_model_v10_2_fullpanel/live_inference_runs/{SUITE_ID}"
+OUT_PROD_DIR = os.path.join(OUT_ROOT, "production")
+OUT_BT_DIR = os.path.join(OUT_ROOT, "backtests")
+os.makedirs(OUT_PROD_DIR, exist_ok=True)
+os.makedirs(OUT_BT_DIR, exist_ok=True)
+
+# SQL safety
+_IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+# -----------------------------------------------------------------------------
+# BASIC HELPERS
+# -----------------------------------------------------------------------------
+def _ts():
+    return time.strftime("%Y-%m-%d %H:%M:%S")
+
+def _assert_ident(x: str, label: str = "identifier"):
+    if not isinstance(x, str) or _IDENT_RE.match(x) is None:
+        raise ValueError(f"Unsafe {label}: {x!r}")
+    return x
+
+def _q_ident(x: str) -> str:
+    _assert_ident(x)
+    return f'"{x}"'
+
+def _q_table(schema: str, table: str) -> str:
+    return f'{_q_ident(schema)}.{_q_ident(table)}'
+
+def _chunk_list(xs, n):
+    for i in range(0, len(xs), n):
+        yield xs[i:i+n]
+
+def _write_df_chunk(df, out_dir, prefix, chunk_idx):
+    os.makedirs(out_dir, exist_ok=True)
+    if _HAS_PARQUET:
+        fp = os.path.join(out_dir, f"{prefix}_chunk_{chunk_idx:05d}.parquet")
+        df.to_parquet(fp, index=False)
+    else:
+        fp = os.path.join(out_dir, f"{prefix}_chunk_{chunk_idx:05d}.csv.gz")
+        df.to_csv(fp, index=False, compression="gzip")
+    return fp
+
+def _py_scalar(v):
+    if pd.isna(v):
+        return None
+    if isinstance(v, (np.integer,)):
+        return int(v)
+    if isinstance(v, (np.floating,)):
+        return float(v)
+    if isinstance(v, (np.bool_,)):
+        return bool(v)
+    return v
+
+def _df_records(df: pd.DataFrame):
+    if df is None or df.empty:
+        return [], []
+    cols = list(df.columns)
+    out = []
+    for row in df.itertuples(index=False, name=None):
+        out.append(tuple(_py_scalar(v) for v in row))
+    return cols, out
+
+def _make_run_id(kind: str, origin_year: int):
+    return f"{kind}_{origin_year}_{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}_{uuid.uuid4().hex}"
+
+def _append_csv_row(csv_fp: str, row_dict: dict):
+    df = pd.DataFrame([row_dict])
+    if os.path.exists(csv_fp):
+        df.to_csv(csv_fp, mode="a", header=False, index=False)
+    else:
+        df.to_csv(csv_fp, index=False)
+
+
+def _get_completed_accts_from_db(schema: str, run_id: str, table: str = "metrics_parcel_forecast"):
+    """
+    Query the DB to find which accts already have rows for this run_id.
+    Returns a Python set of acct strings.
+    """
+    q_table = _q_table(schema, table)
+    sql = f"SELECT DISTINCT acct FROM {q_table} WHERE run_id = %s"
+    with _pg_tx() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (run_id,))
+            return {row[0] for row in cur.fetchall()}
+
+
+# -----------------------------------------------------------------------------
+# POSTGRES HELPERS
+# -----------------------------------------------------------------------------
+def _pg_connect():
+    if not SUPABASE_DB_URL:
+        raise RuntimeError("SUPABASE_DB_URL is required for this pipeline.")
+    conn = psycopg2.connect(SUPABASE_DB_URL)
+    conn.autocommit = False
+    return conn
+
+@contextmanager
+def _pg_tx():
+    """
+    Open a short-lived connection only for DB writes, then close immediately.
+    Prevents Supabase pooler idle disconnects during long GPU sampling.
+    """
+    conn = None
+    try:
+        conn = _pg_connect()
+        yield conn
+        conn.commit()
+    except Exception:
+        if conn is not None:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        raise
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+def _upsert_df_pg(conn, schema: str, table: str, df: pd.DataFrame, conflict_cols, update_cols):
+    """
+    Generic bulk upsert using execute_values.
+    Returns attempted row count (deterministic; cur.rowcount is unreliable across pages).
+    """
+    if df is None or df.empty:
+        return 0
+
+    q_table = _q_table(schema, table)
+    cols, rows = _df_records(df)
+    if not rows:
+        return 0
+
+    col_sql = ", ".join(_q_ident(c) for c in cols)
+    conflict_sql = ", ".join(_q_ident(c) for c in conflict_cols)
+    update_sql = ", ".join([f"{_q_ident(c)} = EXCLUDED.{_q_ident(c)}" for c in update_cols])
+
+    sql = f"""
+        INSERT INTO {q_table} ({col_sql})
+        VALUES %s
+        ON CONFLICT ({conflict_sql})
+        DO UPDATE SET {update_sql}
+    """
+    with conn.cursor() as cur:
+        execute_values(cur, sql, rows, page_size=int(PG_BATCH_ROWS))
+        return len(rows)
+
+def _run_insert_start(conn, schema: str, run_id: str, level_name: str, mode: str, origin_year: int, as_of_date: date, notes: str):
+    q_table = _q_table(schema, "inference_runs")
+    sql = f"""
+        INSERT INTO {q_table}
+            (run_id, level_name, mode, origin_year, as_of_date, model_version, n_scenarios, status, started_at, notes)
+        VALUES
+            (%s, %s, %s, %s, %s, %s, %s, 'running', now(), %s)
+        ON CONFLICT (run_id)
+        DO UPDATE SET
+            level_name = EXCLUDED.level_name,
+            mode = EXCLUDED.mode,
+            origin_year = EXCLUDED.origin_year,
+            as_of_date = EXCLUDED.as_of_date,
+            model_version = EXCLUDED.model_version,
+            n_scenarios = EXCLUDED.n_scenarios,
+            status = 'running',
+            notes = EXCLUDED.notes,
+            updated_at = now()
+    """
+    with conn.cursor() as cur:
+        cur.execute(sql, (run_id, level_name, mode, int(origin_year), as_of_date, MODEL_VERSION, int(S), notes))
+
+def _run_update_status(conn, schema: str, run_id: str, status: str):
+    q_table = _q_table(schema, "inference_runs")
+    if status == "completed":
+        sql = f"""
+            UPDATE {q_table}
+            SET status = %s, completed_at = now(), updated_at = now()
+            WHERE run_id = %s
+        """
+    else:
+        sql = f"""
+            UPDATE {q_table}
+            SET status = %s, updated_at = now()
+            WHERE run_id = %s
+        """
+    with conn.cursor() as cur:
+        cur.execute(sql, (status, run_id))
+
+def _run_progress_upsert(
+    conn,
+    schema: str,
+    run_id: str,
+    chunk_seq: int,
+    level_name: str,
+    status: str,
+    series_kind: str,
+    variant_id: str,
+    origin_year: int,
+    chunk_rows: int,
+    chunk_keys: int,
+    rows_upserted_total: int,
+    keys_upserted_total: int,
+    min_key: str,
+    max_key: str,
+    horizon_m: int = None,
+    year: int = None,
+):
+    q_table = _q_table(schema, "inference_run_progress")
+    sql = f"""
+        INSERT INTO {q_table}
+        (
+            run_id, chunk_seq, level_name, status, series_kind, variant_id, origin_year, horizon_m, year,
+            rows_upserted_total, keys_upserted_total, chunk_rows, chunk_keys, min_key, max_key,
+            heartbeat_at, inserted_at, updated_at
+        )
+        VALUES
+        (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s, now(), now(), now())
+        ON CONFLICT (run_id, chunk_seq)
+        DO UPDATE SET
+            level_name = EXCLUDED.level_name,
+            status = EXCLUDED.status,
+            series_kind = EXCLUDED.series_kind,
+            variant_id = EXCLUDED.variant_id,
+            origin_year = EXCLUDED.origin_year,
+            horizon_m = EXCLUDED.horizon_m,
+            year = EXCLUDED.year,
+            rows_upserted_total = EXCLUDED.rows_upserted_total,
+            keys_upserted_total = EXCLUDED.keys_upserted_total,
+            chunk_rows = EXCLUDED.chunk_rows,
+            chunk_keys = EXCLUDED.chunk_keys,
+            min_key = EXCLUDED.min_key,
+            max_key = EXCLUDED.max_key,
+            heartbeat_at = now(),
+            updated_at = now()
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            sql,
+            (
+                run_id, int(chunk_seq), level_name, status, series_kind, variant_id, int(origin_year),
+                horizon_m, year,
+                int(rows_upserted_total), int(keys_upserted_total),
+                int(chunk_rows), int(chunk_keys),
+                min_key, max_key
+            ),
+        )
+
+
+# -----------------------------------------------------------------------------
+# FORECAST/HISTORY ROW BUILDERS (PARCEL LEVEL)
+# -----------------------------------------------------------------------------
+def _build_forecast_rows_from_inf_out(
+    inf_out,
+    origin_year: int,
+    run_id: str,
+    series_kind: str,
+    variant_id: str,
+    backtest_id: str = None,
+    as_of_date: date = None,
+):
+    """
+    inf_out must contain:
+      - acct
+      - y_levels (N,S,H)
+      - price_levels (N,S,H)
+
+    Writes schema-compatible parcel forecast rows:
+      PK = (acct, origin_year, horizon_m, series_kind, variant_id)
+    """
+    as_of_date = as_of_date or datetime.utcnow().date()
+
+    acct_arr = np.asarray(inf_out["acct"]).astype(str)
+    _ = np.asarray(inf_out["y_levels"], dtype=np.float32)                 # kept for interface validation
+    price_levels = np.asarray(inf_out["price_levels"], dtype=np.float64)   # (N,S,H)
+
+    N, S_local, H_local = price_levels.shape
+
+    q10 = np.percentile(price_levels, 10, axis=1)
+    q25 = np.percentile(price_levels, 25, axis=1)
+    q50 = np.percentile(price_levels, 50, axis=1)
+    q75 = np.percentile(price_levels, 75, axis=1)
+    q90 = np.percentile(price_levels, 90, axis=1)
+
+    rows = []
+    is_backtest = (series_kind == "backtest")
+    now_iso = datetime.utcnow().isoformat()
+
+    for i in range(N):
+        acct = str(acct_arr[i])
+        for h_idx in range(H_local):
+            horizon_k = int(h_idx + 1)
+            horizon_m = int(12 * horizon_k)
+            forecast_year = int(origin_year + horizon_k)
+
+            row = {
+                "acct": acct,
+                "origin_year": int(origin_year),
+                "horizon_m": horizon_m,
+                "forecast_year": forecast_year,
+                "value": float(q50[i, h_idx]),
+                "p10": float(q10[i, h_idx]),
+                "p25": float(q25[i, h_idx]),
+                "p50": float(q50[i, h_idx]),
+                "p75": float(q75[i, h_idx]),
+                "p90": float(q90[i, h_idx]),
+
+                "run_id": run_id,
+                "backtest_id": backtest_id,
+                "variant_id": variant_id,
+                "model_version": MODEL_VERSION,
+                "as_of_date": as_of_date.isoformat(),
+                "n_scenarios": int(S_local),
+
+                "is_backtest": bool(is_backtest),
+                "series_kind": series_kind,
+
+                "inserted_at": now_iso,
+                "updated_at": now_iso,
+            }
+
+            if PARCEL_FORECAST_HAS_N_COL:
+                row["n"] = int(S_local)
+
+            rows.append(row)
+
+    return pd.DataFrame(rows)
+
+def _build_history_rows_for_chunk(
+    acct_chunk,
+    run_id: str,
+    max_year: int,
+    series_kind: str,
+    variant_id: str,
+    backtest_id: str = None,
+    min_year: int = 1900,
+    as_of_date: date = None,
+):
+    as_of_date = as_of_date or datetime.utcnow().date()
+
+    hist_df = _materialize_actual_prices_for_accounts(
+        lf_obj=lf,
+        accts=[str(a) for a in acct_chunk],
+        year_min=int(min_year),
+        year_max=int(max_year),
+    )
+
+    if hist_df is None or hist_df.empty:
+        return pd.DataFrame(columns=[
+            "acct", "year", "value", "p50", "n",
+            "run_id", "backtest_id", "variant_id", "model_version", "as_of_date", "series_kind",
+            "inserted_at", "updated_at"
+        ])
+
+    hist_df = hist_df.rename(columns={"actual_price": "value"}).copy()
+    hist_df["acct"] = hist_df["acct"].astype(str)
+    hist_df["year"] = pd.to_numeric(hist_df["year"], errors="coerce").astype("Int64")
+    hist_df["value"] = pd.to_numeric(hist_df["value"], errors="coerce")
+
+    hist_df = hist_df[hist_df["year"].notna() & np.isfinite(hist_df["value"])].copy()
+    hist_df["year"] = hist_df["year"].astype(int)
+    hist_df = hist_df[(hist_df["year"] >= int(min_year)) & (hist_df["year"] <= int(max_year))].copy()
+
+    now_iso = datetime.utcnow().isoformat()
+    hist_df["p50"] = hist_df["value"].astype(float)
+    hist_df["n"] = 1
+    hist_df["run_id"] = run_id
+    hist_df["backtest_id"] = backtest_id
+    hist_df["variant_id"] = variant_id
+    hist_df["model_version"] = MODEL_VERSION
+    hist_df["as_of_date"] = as_of_date.isoformat()
+    hist_df["series_kind"] = series_kind
+    hist_df["inserted_at"] = now_iso
+    hist_df["updated_at"] = now_iso
+
+    keep_cols = [
+        "acct", "year", "value", "p50", "n",
+        "run_id", "backtest_id", "variant_id", "model_version", "as_of_date", "series_kind",
+        "inserted_at", "updated_at"
+    ]
+    out = hist_df[keep_cols].drop_duplicates(subset=["acct", "year", "series_kind", "variant_id"], keep="last").reset_index(drop=True)
+    return out
+
+
+# -----------------------------------------------------------------------------
+# SERVER-SIDE AGGREGATION (PARCEL -> TABBLOCK / TRACT / ZCTA / UNSD / NEIGHBORHOOD)
+# -----------------------------------------------------------------------------
+AGG_LEVELS = [
+    ("tabblock",    "tabblock_geoid20", "metrics_tabblock_forecast",    "metrics_tabblock_history"),
+    ("tract",       "tract_geoid20",    "metrics_tract_forecast",       "metrics_tract_history"),
+    ("zcta",        "zcta5",            "metrics_zcta_forecast",        "metrics_zcta_history"),
+    ("unsd",        "unsd_geoid",       "metrics_unsd_forecast",        "metrics_unsd_history"),
+    ("neighborhood","neighborhood_id",  "metrics_neighborhood_forecast","metrics_neighborhood_history"),
+]
+
+def _aggregate_forecast_levels_for_chunk(
+    conn,
+    schema: str,
+    acct_chunk,
+    run_id: str,
+    origin_year: int,
+    series_kind: str,
+    variant_id: str,
+    backtest_id: str,
+    as_of_date: date,
+):
+    """
+    Chunk-local aggregate rows are merged into aggregate tables using weighted ON CONFLICT logic.
+    This preserves correctness across chunk boundaries.
+    """
+    if not AGG_FORECAST_HAS_N_COL:
+        raise RuntimeError("AGG_FORECAST_HAS_N_COL must be True for weighted chunk aggregation.")
+
+    total_rows = 0
+    q_parcel = _q_table(schema, "metrics_parcel_forecast")
+
+    for _, ladder_col, tbl_forecast, _ in AGG_LEVELS:
+        q_target = _q_table(schema, tbl_forecast)
+
+        sql = f"""
+            INSERT INTO {q_target}
+            (
+                {_q_ident(ladder_col)},
+                origin_year, horizon_m, forecast_year,
+                value, p10, p25, p50, p75, p90, n,
+                run_id, backtest_id, variant_id, model_version, as_of_date, n_scenarios,
+                is_backtest, series_kind,
+                inserted_at, updated_at
+            )
+            SELECT
+                pl.{_q_ident(ladder_col)} AS {_q_ident(ladder_col)},
+                mp.origin_year,
+                mp.horizon_m,
+                mp.forecast_year,
+
+                AVG(mp.value)::float8 AS value,
+                AVG(mp.p10)::float8   AS p10,
+                AVG(mp.p25)::float8   AS p25,
+                AVG(mp.p50)::float8   AS p50,
+                AVG(mp.p75)::float8   AS p75,
+                AVG(mp.p90)::float8   AS p90,
+                COUNT(*)::int         AS n,
+
+                %s::text     AS run_id,
+                %s::text     AS backtest_id,
+                %s::text     AS variant_id,
+                %s::text     AS model_version,
+                %s::date     AS as_of_date,
+                MAX(mp.n_scenarios)::int AS n_scenarios,
+
+                %s::boolean  AS is_backtest,
+                %s::text     AS series_kind,
+
+                now() AS inserted_at,
+                now() AS updated_at
+            FROM {q_parcel} mp
+            JOIN public.parcel_ladder_v1 pl
+              ON pl.acct = mp.acct
+            WHERE mp.run_id = %s
+              AND mp.origin_year = %s
+              AND mp.series_kind = %s
+              AND mp.variant_id = %s
+              AND mp.acct = ANY(%s)
+              AND pl.{_q_ident(ladder_col)} IS NOT NULL
+            GROUP BY pl.{_q_ident(ladder_col)}, mp.origin_year, mp.horizon_m, mp.forecast_year
+            ON CONFLICT ({_q_ident(ladder_col)}, origin_year, horizon_m, series_kind, variant_id)
+            DO UPDATE SET
+                forecast_year = EXCLUDED.forecast_year,
+
+                value = (
+                    (COALESCE({q_target}.value, 0.0) * COALESCE({q_target}.n, 0)) +
+                    (EXCLUDED.value * EXCLUDED.n)
+                ) / NULLIF(COALESCE({q_target}.n, 0) + EXCLUDED.n, 0),
+
+                p10 = (
+                    (COALESCE({q_target}.p10, 0.0) * COALESCE({q_target}.n, 0)) +
+                    (EXCLUDED.p10 * EXCLUDED.n)
+                ) / NULLIF(COALESCE({q_target}.n, 0) + EXCLUDED.n, 0),
+
+                p25 = (
+                    (COALESCE({q_target}.p25, 0.0) * COALESCE({q_target}.n, 0)) +
+                    (EXCLUDED.p25 * EXCLUDED.n)
+                ) / NULLIF(COALESCE({q_target}.n, 0) + EXCLUDED.n, 0),
+
+                p50 = (
+                    (COALESCE({q_target}.p50, 0.0) * COALESCE({q_target}.n, 0)) +
+                    (EXCLUDED.p50 * EXCLUDED.n)
+                ) / NULLIF(COALESCE({q_target}.n, 0) + EXCLUDED.n, 0),
+
+                p75 = (
+                    (COALESCE({q_target}.p75, 0.0) * COALESCE({q_target}.n, 0)) +
+                    (EXCLUDED.p75 * EXCLUDED.n)
+                ) / NULLIF(COALESCE({q_target}.n, 0) + EXCLUDED.n, 0),
+
+                p90 = (
+                    (COALESCE({q_target}.p90, 0.0) * COALESCE({q_target}.n, 0)) +
+                    (EXCLUDED.p90 * EXCLUDED.n)
+                ) / NULLIF(COALESCE({q_target}.n, 0) + EXCLUDED.n, 0),
+
+                n = COALESCE({q_target}.n, 0) + EXCLUDED.n,
+
+                run_id = EXCLUDED.run_id,
+                backtest_id = EXCLUDED.backtest_id,
+                model_version = EXCLUDED.model_version,
+                as_of_date = EXCLUDED.as_of_date,
+                n_scenarios = EXCLUDED.n_scenarios,
+                is_backtest = EXCLUDED.is_backtest,
+                updated_at = now()
+        """
+        with conn.cursor() as cur:
+            cur.execute(
+                sql,
+                (
+                    run_id,
+                    backtest_id,
+                    variant_id,
+                    MODEL_VERSION,
+                    as_of_date,
+                    (series_kind == "backtest"),
+                    series_kind,
+                    run_id,
+                    int(origin_year),
+                    series_kind,
+                    variant_id,
+                    list(map(str, acct_chunk)),
+                ),
+            )
+            total_rows += int(cur.rowcount or 0)
+
+    return total_rows
+
+def _aggregate_history_levels_for_chunk(
+    conn,
+    schema: str,
+    acct_chunk,
+    run_id: str,
+    series_kind: str,
+    variant_id: str,
+    backtest_id: str,
+    as_of_date: date,
+):
+    """
+    Chunk-local history aggregates are merged using weighted ON CONFLICT logic.
+    """
+    total_rows = 0
+    q_parcel = _q_table(schema, "metrics_parcel_history")
+
+    for _, ladder_col, _, tbl_history in AGG_LEVELS:
+        q_target = _q_table(schema, tbl_history)
+
+        sql = f"""
+            INSERT INTO {q_target}
+            (
+                {_q_ident(ladder_col)},
+                year,
+                value, p50, n,
+                run_id, backtest_id, variant_id, model_version, as_of_date,
+                series_kind,
+                inserted_at, updated_at
+            )
+            SELECT
+                pl.{_q_ident(ladder_col)} AS {_q_ident(ladder_col)},
+                mh.year,
+
+                AVG(mh.value)::float8 AS value,
+                AVG(mh.p50)::float8   AS p50,
+                COUNT(*)::int         AS n,
+
+                %s::text AS run_id,
+                %s::text AS backtest_id,
+                %s::text AS variant_id,
+                %s::text AS model_version,
+                %s::date AS as_of_date,
+
+                %s::text AS series_kind,
+
+                now() AS inserted_at,
+                now() AS updated_at
+            FROM {q_parcel} mh
+            JOIN public.parcel_ladder_v1 pl
+              ON pl.acct = mh.acct
+            WHERE mh.run_id = %s
+              AND mh.series_kind = %s
+              AND mh.variant_id = %s
+              AND mh.acct = ANY(%s)
+              AND pl.{_q_ident(ladder_col)} IS NOT NULL
+            GROUP BY pl.{_q_ident(ladder_col)}, mh.year
+            ON CONFLICT ({_q_ident(ladder_col)}, year, series_kind, variant_id)
+            DO UPDATE SET
+                value = (
+                    (COALESCE({q_target}.value, 0.0) * COALESCE({q_target}.n, 0)) +
+                    (EXCLUDED.value * EXCLUDED.n)
+                ) / NULLIF(COALESCE({q_target}.n, 0) + EXCLUDED.n, 0),
+
+                p50 = (
+                    (COALESCE({q_target}.p50, 0.0) * COALESCE({q_target}.n, 0)) +
+                    (EXCLUDED.p50 * EXCLUDED.n)
+                ) / NULLIF(COALESCE({q_target}.n, 0) + EXCLUDED.n, 0),
+
+                n = COALESCE({q_target}.n, 0) + EXCLUDED.n,
+
+                run_id = EXCLUDED.run_id,
+                backtest_id = EXCLUDED.backtest_id,
+                model_version = EXCLUDED.model_version,
+                as_of_date = EXCLUDED.as_of_date,
+                updated_at = now()
+        """
+        with conn.cursor() as cur:
+            cur.execute(
+                sql,
+                (
+                    run_id,
+                    backtest_id,
+                    variant_id,
+                    MODEL_VERSION,
+                    as_of_date,
+                    series_kind,
+                    run_id,
+                    series_kind,
+                    variant_id,
+                    list(map(str, acct_chunk)),
+                ),
+            )
+            total_rows += int(cur.rowcount or 0)
+
+    return total_rows
+
+
+# -----------------------------------------------------------------------------
+# FINAL EXACT AGGREGATE REFRESH (OPTIONAL, RECOMMENDED)
+# -----------------------------------------------------------------------------
+def _recompute_forecast_aggregates_exact_for_run(
+    conn,
+    schema: str,
+    run_id: str,
+    origin_year: int,
+    series_kind: str,
+    variant_id: str,
+    backtest_id: str,
+    as_of_date: date,
+):
+    """
+    Deletes and rebuilds all aggregate forecast rows for this (origin_year, series_kind, variant_id)
+    from parcel forecast rows for this run_id. This guarantees exact final aggregates.
+    """
+    q_parcel = _q_table(schema, "metrics_parcel_forecast")
+
+    for _, ladder_col, tbl_forecast, _ in AGG_LEVELS:
+        q_target = _q_table(schema, tbl_forecast)
+
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                DELETE FROM {q_target}
+                WHERE origin_year = %s
+                  AND series_kind = %s
+                  AND variant_id = %s
+                """,
+                (int(origin_year), series_kind, variant_id),
+            )
+
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                INSERT INTO {q_target}
+                (
+                    {_q_ident(ladder_col)},
+                    origin_year, horizon_m, forecast_year,
+                    value, p10, p25, p50, p75, p90, n,
+                    run_id, backtest_id, variant_id, model_version, as_of_date, n_scenarios,
+                    is_backtest, series_kind,
+                    inserted_at, updated_at
+                )
+                SELECT
+                    pl.{_q_ident(ladder_col)} AS {_q_ident(ladder_col)},
+                    mp.origin_year,
+                    mp.horizon_m,
+                    mp.forecast_year,
+
+                    AVG(mp.value)::float8 AS value,
+                    AVG(mp.p10)::float8   AS p10,
+                    AVG(mp.p25)::float8   AS p25,
+                    AVG(mp.p50)::float8   AS p50,
+                    AVG(mp.p75)::float8   AS p75,
+                    AVG(mp.p90)::float8   AS p90,
+                    COUNT(*)::int         AS n,
+
+                    %s::text     AS run_id,
+                    %s::text     AS backtest_id,
+                    %s::text     AS variant_id,
+                    %s::text     AS model_version,
+                    %s::date     AS as_of_date,
+                    MAX(mp.n_scenarios)::int AS n_scenarios,
+
+                    %s::boolean  AS is_backtest,
+                    %s::text     AS series_kind,
+
+                    now() AS inserted_at,
+                    now() AS updated_at
+                FROM {q_parcel} mp
+                JOIN public.parcel_ladder_v1 pl
+                  ON pl.acct = mp.acct
+                WHERE mp.run_id = %s
+                  AND mp.origin_year = %s
+                  AND mp.series_kind = %s
+                  AND mp.variant_id = %s
+                  AND pl.{_q_ident(ladder_col)} IS NOT NULL
+                GROUP BY pl.{_q_ident(ladder_col)}, mp.origin_year, mp.horizon_m, mp.forecast_year
+                """,
+                (
+                    run_id,
+                    backtest_id,
+                    variant_id,
+                    MODEL_VERSION,
+                    as_of_date,
+                    (series_kind == "backtest"),
+                    series_kind,
+                    run_id,
+                    int(origin_year),
+                    series_kind,
+                    variant_id,
+                ),
+            )
+
+def _recompute_history_aggregates_exact_for_run(
+    conn,
+    schema: str,
+    run_id: str,
+    series_kind: str,
+    variant_id: str,
+    backtest_id: str,
+    as_of_date: date,
+):
+    """
+    Deletes and rebuilds all aggregate history rows for this (series_kind, variant_id) from parcel history rows for this run_id.
+    """
+    q_parcel = _q_table(schema, "metrics_parcel_history")
+
+    for _, ladder_col, _, tbl_history in AGG_LEVELS:
+        q_target = _q_table(schema, tbl_history)
+
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                DELETE FROM {q_target}
+                WHERE series_kind = %s
+                  AND variant_id = %s
+                """,
+                (series_kind, variant_id),
+            )
+
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                INSERT INTO {q_target}
+                (
+                    {_q_ident(ladder_col)},
+                    year,
+                    value, p50, n,
+                    run_id, backtest_id, variant_id, model_version, as_of_date,
+                    series_kind,
+                    inserted_at, updated_at
+                )
+                SELECT
+                    pl.{_q_ident(ladder_col)} AS {_q_ident(ladder_col)},
+                    mh.year,
+
+                    AVG(mh.value)::float8 AS value,
+                    AVG(mh.p50)::float8   AS p50,
+                    COUNT(*)::int         AS n,
+
+                    %s::text AS run_id,
+                    %s::text AS backtest_id,
+                    %s::text AS variant_id,
+                    %s::text AS model_version,
+                    %s::date AS as_of_date,
+
+                    %s::text AS series_kind,
+
+                    now() AS inserted_at,
+                    now() AS updated_at
+                FROM {q_parcel} mh
+                JOIN public.parcel_ladder_v1 pl
+                  ON pl.acct = mh.acct
+                WHERE mh.run_id = %s
+                  AND mh.series_kind = %s
+                  AND mh.variant_id = %s
+                  AND pl.{_q_ident(ladder_col)} IS NOT NULL
+                GROUP BY pl.{_q_ident(ladder_col)}, mh.year
+                """,
+                (
+                    run_id,
+                    backtest_id,
+                    variant_id,
+                    MODEL_VERSION,
+                    as_of_date,
+                    series_kind,
+                    run_id,
+                    series_kind,
+                    variant_id,
+                ),
+            )
+
+
+# -----------------------------------------------------------------------------
+# OPTIONAL BACKTEST EVALUATION (LOCAL CSV SUMMARY)
+# -----------------------------------------------------------------------------
+def _backtest_eval_summary_for_chunk(forecast_chunk_df: pd.DataFrame, acct_chunk, origin_year: int):
+    if forecast_chunk_df is None or forecast_chunk_df.empty:
+        return pd.DataFrame()
+
+    actuals = _materialize_actual_prices_for_accounts(
+        lf_obj=lf,
+        accts=[str(a) for a in acct_chunk],
+        year_min=int(origin_year + 1),
+        year_max=int(origin_year + H),
+    )
+    if actuals is None or actuals.empty:
+        return pd.DataFrame()
+
+    actuals = actuals.rename(columns={"actual_price": "actual_value"}).copy()
+    actuals["acct"] = actuals["acct"].astype(str)
+    actuals["year"] = pd.to_numeric(actuals["year"], errors="coerce").astype("Int64")
+    actuals["actual_value"] = pd.to_numeric(actuals["actual_value"], errors="coerce")
+    actuals = actuals[actuals["year"].notna() & np.isfinite(actuals["actual_value"])].copy()
+    actuals["year"] = actuals["year"].astype(int)
+
+    fx = forecast_chunk_df[["acct", "origin_year", "horizon_m", "forecast_year", "value", "p10", "p50", "p90"]].copy()
+    fx["acct"] = fx["acct"].astype(str)
+
+    m = fx.merge(actuals[["acct", "year", "actual_value"]], left_on=["acct", "forecast_year"], right_on=["acct", "year"], how="inner")
+    if m.empty:
+        return pd.DataFrame()
+
+    m["horizon_k"] = (m["horizon_m"] // 12).astype(int)
+    m["ae"] = (m["p50"] - m["actual_value"]).abs()
+    m["ape"] = m["ae"] / m["actual_value"].replace(0, np.nan)
+    m["covered_80"] = ((m["actual_value"] >= m["p10"]) & (m["actual_value"] <= m["p90"])).astype(int)
+
+    g = (
+        m.groupby("horizon_k", dropna=False)
+         .agg(
+             n=("acct", "count"),
+             mae=("ae", "mean"),
+             mape=("ape", "mean"),
+             coverage_p10_p90=("covered_80", "mean"),
+         )
+         .reset_index()
+    )
+    g["origin_year"] = int(origin_year)
+    g["timestamp_utc"] = datetime.utcnow().isoformat()
+    return g[["timestamp_utc", "origin_year", "horizon_k", "n", "mae", "mape", "coverage_p10_p90"]]
+
+
+# -----------------------------------------------------------------------------
+# CHECKPOINT SELECTION + SAMPLER BACKOFF
+# -----------------------------------------------------------------------------
+def _pick_ckpt_for_origin(ckpt_pairs, origin_year: int):
+    """
+    Prefer exact origin checkpoint; else latest checkpoint with origin <= target; else newest checkpoint.
+    """
+    ckpt_pairs_sorted = sorted([(int(o), p) for o, p in ckpt_pairs], key=lambda x: x[0])
+
+    for o, p in ckpt_pairs_sorted:
+        if o == int(origin_year):
+            return o, p
+
+    eligible = [(o, p) for o, p in ckpt_pairs_sorted if o <= int(origin_year)]
+    if eligible:
+        return eligible[-1]
+
+    return ckpt_pairs_sorted[-1]
+
+def _sample_scenarios_with_backoff(ctx, H, S, origin):
+    """
+    Try large prop_batch_size first; back off on CUDA OOM.
+    Returns (inf_out, used_batch_size).
+    """
+    bs = int(PROP_BATCH_SIZE_SAMPLER)
+
+    while True:
+        try:
+            inf_out = _sample_scenarios_for_inference_context(
+                ctx=ctx,
+                H=int(H),
+                S=int(S),
+                origin=int(origin),
+                prop_batch_size=int(bs),
+            )
+            return inf_out, int(bs)
+
+        except RuntimeError as e:
+            msg = str(e).lower()
+            oom = ("out of memory" in msg) or ("cuda" in msg and "memory" in msg)
+            if (not oom) or (bs <= int(PROP_BATCH_SIZE_MIN)):
+                raise
+
+            bs = max(int(PROP_BATCH_SIZE_MIN), bs // 2)
+
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            except Exception:
+                pass
+
+            print(f"[{_ts()}] OOM during sampling. Retrying with prop_batch_size={bs}")
+
+
+# -----------------------------------------------------------------------------
+# CORE RUNNER (ONE ORIGIN, ONE MODE)
+# -----------------------------------------------------------------------------
+def _run_one_origin(
+    schema: str,
+    all_accts_prod,
+    origin_year: int,
+    mode: str,                 # 'forecast' or 'backtest'
+    ckpt_origin: int,
+    ckpt_path: str,
+    out_dir: str,
+    variant_id: str,
+    backtest_id: str = None,
+    write_history_series: bool = True,
+    resume_run_id: str = None,
+):
+    assert mode in ("forecast", "backtest")
+    _assert_ident(schema, "schema")
+
+    # ---- RESUME: reuse previous run_id and skip already-done accounts ----
+    if resume_run_id:
+        run_id = resume_run_id
+        print(f"[{_ts()}] RESUME MODE: reusing run_id={run_id}")
+        done_accts = _get_completed_accts_from_db(schema, run_id, "metrics_parcel_forecast")
+        n_already = len(done_accts)
+        all_accts_prod = [a for a in all_accts_prod if a not in done_accts]
+        print(f"[{_ts()}] RESUME: {n_already} accounts already done, {len(all_accts_prod)} remaining")
+        if not all_accts_prod:
+            print(f"[{_ts()}] RESUME: nothing left to do for this run, skipping.")
+            return {
+                "run_id": run_id, "origin_year": int(origin_year), "mode": mode,
+                "variant_id": variant_id, "backtest_id": backtest_id,
+                "run_root": os.path.join(out_dir, f"{mode}_origin_{origin_year}_{run_id}"),
+                "parcel_forecast_rows_total": 0, "agg_forecast_rows_total": 0,
+                "parcel_history_rows_total": 0, "agg_history_rows_total": 0,
+                "resumed": True, "skipped_already_done": n_already,
+            }
+    else:
+        run_id = _make_run_id(mode, int(origin_year))
+
+    as_of_date = datetime.utcnow().date()
+
+    series_kind_forecast = "forecast" if mode == "forecast" else "backtest"
+    series_kind_history = "history" if mode == "forecast" else "backtest"
+
+    if mode == "forecast":
+        assert variant_id == "__forecast__"
+        hist_variant_id = "__history__"
+        hist_backtest_id = None
+    else:
+        assert variant_id not in ("__forecast__", "__history__")
+        hist_variant_id = variant_id if WRITE_BACKTEST_HISTORY_VARIANTS else None
+        hist_backtest_id = backtest_id if WRITE_BACKTEST_HISTORY_VARIANTS else None
+
+    run_root = os.path.join(out_dir, f"{mode}_origin_{origin_year}_{run_id}")
+    os.makedirs(run_root, exist_ok=True)
+    os.makedirs(os.path.join(run_root, "forecast_chunks"), exist_ok=True)
+    os.makedirs(os.path.join(run_root, "history_chunks"), exist_ok=True)
+    os.makedirs(os.path.join(run_root, "eval_chunks"), exist_ok=True)
+
+    manifest = {
+        "run_id": run_id,
+        "mode": mode,
+        "schema": schema,
+        "origin_year": int(origin_year),
+        "series_kind_forecast": series_kind_forecast,
+        "variant_id": variant_id,
+        "backtest_id": backtest_id,
+        "write_history_series": bool(write_history_series),
+        "write_backtest_history_variants": bool(WRITE_BACKTEST_HISTORY_VARIANTS),
+        "checkpoint_origin": int(ckpt_origin),
+        "checkpoint_path": ckpt_path,
+        "model_version": MODEL_VERSION,
+        "H": int(H),
+        "S": int(S),
+        "prop_batch_size_sampler_initial": int(PROP_BATCH_SIZE_SAMPLER),
+        "prop_batch_size_min": int(PROP_BATCH_SIZE_MIN),
+        "acct_batch_size_outer": int(ACCT_BATCH_SIZE_OUTER),
+        "parcel_forecast_has_n_col": bool(PARCEL_FORECAST_HAS_N_COL),
+        "final_exact_agg_refresh": bool(RUN_FINAL_EXACT_AGG_REFRESH),
+        "started_at_utc": datetime.utcnow().isoformat(),
+    }
+    with open(os.path.join(run_root, "run_manifest.json"), "w") as f:
+        json.dump(manifest, f, indent=2)
+
+    print(f"[{_ts()}] START {mode.upper()} origin={origin_year} run_id={run_id}")
+    print(f"[{_ts()}] CKPT origin={ckpt_origin} path={ckpt_path}")
+
+    # Load checkpoint and model state for this run
+    ckpt = _load_ckpt_into_live_objects(ckpt_path)
+    global_medians = ckpt.get("global_medians", {})
+
+    with _pg_tx() as conn:
+        _run_insert_start(
+            conn=conn,
+            schema=schema,
+            run_id=run_id,
+            level_name="parcel",
+            mode=mode,
+            origin_year=int(origin_year),
+            as_of_date=as_of_date,
+            notes=f"H={H}, S={S}, ckpt_origin={ckpt_origin}, variant_id={variant_id}",
+        )
+
+    n_total = len(all_accts_prod)
+    n_done = 0
+    parcel_rows_total = 0
+    agg_rows_total = 0
+    history_rows_total = 0
+    history_agg_rows_total = 0
+    t_run0 = time.time()
+
+    progress_csv = os.path.join(run_root, "progress_log.csv")
+    eval_csv = os.path.join(run_root, "backtest_eval_summary.csv")
+
+    for chunk_idx, acct_chunk in enumerate(_chunk_list(all_accts_prod, int(ACCT_BATCH_SIZE_OUTER)), start=1):
+        t0 = time.time()
+        acct_chunk = [str(a) for a in acct_chunk]
+        used_prop_batch_size = None
+
+        # ---------------------------------------------------------------------
+        # 1) History (build locally)
+        # ---------------------------------------------------------------------
+        hist_chunk_df = pd.DataFrame()
+        hist_rows_upserted = 0
+        hist_agg_rows_upserted = 0
+
+        do_hist_this_run = (mode == "forecast" and write_history_series) or (mode == "backtest" and WRITE_BACKTEST_HISTORY_VARIANTS)
+
+        if do_hist_this_run:
+            hist_chunk_df = _build_history_rows_for_chunk(
+                acct_chunk=acct_chunk,
+                run_id=run_id,
+                max_year=int(origin_year),
+                series_kind=series_kind_history,
+                variant_id=(hist_variant_id if hist_variant_id is not None else "__history__"),
+                backtest_id=hist_backtest_id,
+                min_year=1900,
+                as_of_date=as_of_date,
+            )
+
+            hist_fp = _write_df_chunk(hist_chunk_df, os.path.join(run_root, "history_chunks"), "metrics_parcel_history", chunk_idx)
+            print(f"[{_ts()}] Chunk {chunk_idx}: wrote history chunk rows={len(hist_chunk_df)} -> {hist_fp}")
+
+            if not hist_chunk_df.empty:
+                with _pg_tx() as conn:
+                    hist_rows_upserted = _upsert_df_pg(
+                        conn=conn,
+                        schema=schema,
+                        table="metrics_parcel_history",
+                        df=hist_chunk_df,
+                        conflict_cols=["acct", "year", "series_kind", "variant_id"],
+                        update_cols=[
+                            "value", "p50", "n",
+                            "run_id", "backtest_id", "model_version", "as_of_date",
+                            "updated_at"
+                        ],
+                    )
+
+                    hist_agg_rows_upserted = _aggregate_history_levels_for_chunk(
+                        conn=conn,
+                        schema=schema,
+                        acct_chunk=acct_chunk,
+                        run_id=run_id,
+                        series_kind=series_kind_history,
+                        variant_id=(hist_variant_id if hist_variant_id is not None else "__history__"),
+                        backtest_id=hist_backtest_id,
+                        as_of_date=as_of_date,
+                    )
+
+                history_rows_total += int(hist_rows_upserted)
+                history_agg_rows_total += int(hist_agg_rows_upserted)
+
+        # ---------------------------------------------------------------------
+        # 2) Build inference context (no DB connection held)
+        # ---------------------------------------------------------------------
+        ctx = _build_inference_for_accounts_at_origin(
+            accts_batch=acct_chunk,
+            origin=int(origin_year),
+            global_medians=global_medians,
+        )
+
+        if ctx is None or len(ctx["acct"]) == 0:
+            n_done += len(acct_chunk)
+
+            with _pg_tx() as conn:
+                _run_progress_upsert(
+                    conn=conn,
+                    schema=schema,
+                    run_id=run_id,
+                    chunk_seq=chunk_idx,
+                    level_name="parcel",
+                    status="running",
+                    series_kind=series_kind_forecast,
+                    variant_id=variant_id,
+                    origin_year=int(origin_year),
+                    chunk_rows=int(len(hist_chunk_df)) if do_hist_this_run else 0,
+                    chunk_keys=int(len(acct_chunk)),
+                    rows_upserted_total=int(parcel_rows_total + agg_rows_total + history_rows_total + history_agg_rows_total),
+                    keys_upserted_total=int(n_done),
+                    min_key=min(acct_chunk) if acct_chunk else None,
+                    max_key=max(acct_chunk) if acct_chunk else None,
+                )
+
+            _append_csv_row(progress_csv, {
+                "timestamp": _ts(),
+                "chunk_idx": int(chunk_idx),
+                "mode": mode,
+                "origin_year": int(origin_year),
+                "accts_in_chunk": int(len(acct_chunk)),
+                "accts_valid_ctx": 0,
+                "prop_batch_size_used": None,
+                "parcel_history_rows": int(hist_rows_upserted),
+                "parcel_forecast_rows": 0,
+                "agg_history_rows": int(hist_agg_rows_upserted),
+                "agg_forecast_rows": 0,
+                "n_done": int(n_done),
+                "n_total": int(n_total),
+                "pct_done": float(100.0 * n_done / max(n_total, 1)),
+                "elapsed_chunk_sec": float(time.time() - t0),
+                "elapsed_run_sec": float(time.time() - t_run0),
+            })
+
+            print(f"[{_ts()}] Chunk {chunk_idx}: no valid inference rows | elapsed={time.time()-t0:.1f}s")
+            continue
+
+        # ---------------------------------------------------------------------
+        # 3) Sample scenarios (adaptive backoff)
+        # ---------------------------------------------------------------------
+        inf_out, used_prop_batch_size = _sample_scenarios_with_backoff(
+            ctx=ctx,
+            H=int(H),
+            S=int(S),
+            origin=int(origin_year),
+        )
+
+        if inf_out is None:
+            n_done += len(acct_chunk)
+
+            with _pg_tx() as conn:
+                _run_progress_upsert(
+                    conn=conn,
+                    schema=schema,
+                    run_id=run_id,
+                    chunk_seq=chunk_idx,
+                    level_name="parcel",
+                    status="running",
+                    series_kind=series_kind_forecast,
+                    variant_id=variant_id,
+                    origin_year=int(origin_year),
+                    chunk_rows=int(len(hist_chunk_df)) if do_hist_this_run else 0,
+                    chunk_keys=int(len(acct_chunk)),
+                    rows_upserted_total=int(parcel_rows_total + agg_rows_total + history_rows_total + history_agg_rows_total),
+                    keys_upserted_total=int(n_done),
+                    min_key=min(acct_chunk) if acct_chunk else None,
+                    max_key=max(acct_chunk) if acct_chunk else None,
+                )
+
+            _append_csv_row(progress_csv, {
+                "timestamp": _ts(),
+                "chunk_idx": int(chunk_idx),
+                "mode": mode,
+                "origin_year": int(origin_year),
+                "accts_in_chunk": int(len(acct_chunk)),
+                "accts_valid_ctx": int(len(ctx["acct"])) if ctx is not None else 0,
+                "prop_batch_size_used": int(used_prop_batch_size) if used_prop_batch_size is not None else None,
+                "parcel_history_rows": int(hist_rows_upserted),
+                "parcel_forecast_rows": 0,
+                "agg_history_rows": int(hist_agg_rows_upserted),
+                "agg_forecast_rows": 0,
+                "n_done": int(n_done),
+                "n_total": int(n_total),
+                "pct_done": float(100.0 * n_done / max(n_total, 1)),
+                "elapsed_chunk_sec": float(time.time() - t0),
+                "elapsed_run_sec": float(time.time() - t_run0),
+            })
+
+            print(f"[{_ts()}] Chunk {chunk_idx}: sampler returned no output | elapsed={time.time()-t0:.1f}s")
+            continue
+
+        # ---------------------------------------------------------------------
+        # 4) Build parcel forecast rows (local)
+        # ---------------------------------------------------------------------
+        forecast_chunk_df = _build_forecast_rows_from_inf_out(
+            inf_out=inf_out,
+            origin_year=int(origin_year),
+            run_id=run_id,
+            series_kind=series_kind_forecast,
+            variant_id=variant_id,
+            backtest_id=backtest_id,
+            as_of_date=as_of_date,
+        )
+
+        fc_fp = _write_df_chunk(forecast_chunk_df, os.path.join(run_root, "forecast_chunks"), "metrics_parcel_forecast", chunk_idx)
+        print(f"[{_ts()}] Chunk {chunk_idx}: wrote forecast chunk rows={len(forecast_chunk_df)} -> {fc_fp}")
+
+        # ---------------------------------------------------------------------
+        # 5) Upsert parcel forecast + aggregate higher zooms + progress (single short DB tx)
+        # ---------------------------------------------------------------------
+        parcel_rows_upserted = 0
+        agg_rows_upserted = 0
+
+        with _pg_tx() as conn:
+            if not forecast_chunk_df.empty:
+                parcel_forecast_update_cols = [
+                    "forecast_year", "value", "p10", "p25", "p50", "p75", "p90",
+                    "run_id", "backtest_id", "model_version", "as_of_date", "n_scenarios",
+                    "is_backtest", "updated_at"
+                ]
+                if PARCEL_FORECAST_HAS_N_COL:
+                    parcel_forecast_update_cols.insert(7, "n")
+
+                parcel_rows_upserted = _upsert_df_pg(
+                    conn=conn,
+                    schema=schema,
+                    table="metrics_parcel_forecast",
+                    df=forecast_chunk_df,
+                    conflict_cols=["acct", "origin_year", "horizon_m", "series_kind", "variant_id"],
+                    update_cols=parcel_forecast_update_cols,
+                )
+
+                agg_rows_upserted = _aggregate_forecast_levels_for_chunk(
+                    conn=conn,
+                    schema=schema,
+                    acct_chunk=acct_chunk,
+                    run_id=run_id,
+                    origin_year=int(origin_year),
+                    series_kind=series_kind_forecast,
+                    variant_id=variant_id,
+                    backtest_id=backtest_id,
+                    as_of_date=as_of_date,
+                )
+
+            parcel_rows_total += int(parcel_rows_upserted)
+            agg_rows_total += int(agg_rows_upserted)
+
+            n_done += len(acct_chunk)
+
+            _run_progress_upsert(
+                conn=conn,
+                schema=schema,
+                run_id=run_id,
+                chunk_seq=chunk_idx,
+                level_name="parcel",
+                status="running",
+                series_kind=series_kind_forecast,
+                variant_id=variant_id,
+                origin_year=int(origin_year),
+                chunk_rows=int((len(hist_chunk_df) if do_hist_this_run else 0) + len(forecast_chunk_df)),
+                chunk_keys=int(len(acct_chunk)),
+                rows_upserted_total=int(parcel_rows_total + agg_rows_total + history_rows_total + history_agg_rows_total),
+                keys_upserted_total=int(n_done),
+                min_key=min(acct_chunk) if acct_chunk else None,
+                max_key=max(acct_chunk) if acct_chunk else None,
+            )
+
+        # ---------------------------------------------------------------------
+        # 6) Optional local backtest scoring summary (no DB)
+        # ---------------------------------------------------------------------
+        if mode == "backtest":
+            eval_df = _backtest_eval_summary_for_chunk(
+                forecast_chunk_df=forecast_chunk_df,
+                acct_chunk=acct_chunk,
+                origin_year=int(origin_year),
+            )
+            if eval_df is not None and not eval_df.empty:
+                eval_fp = _write_df_chunk(eval_df, os.path.join(run_root, "eval_chunks"), "backtest_eval_summary", chunk_idx)
+                print(f"[{_ts()}] Chunk {chunk_idx}: wrote backtest eval summary rows={len(eval_df)} -> {eval_fp}")
+                for _, r in eval_df.iterrows():
+                    _append_csv_row(eval_csv, {k: _py_scalar(v) for k, v in r.to_dict().items()})
+
+        _append_csv_row(progress_csv, {
+            "timestamp": _ts(),
+            "chunk_idx": int(chunk_idx),
+            "mode": mode,
+            "origin_year": int(origin_year),
+            "accts_in_chunk": int(len(acct_chunk)),
+            "accts_valid_ctx": int(len(ctx["acct"])) if ctx is not None else 0,
+            "prop_batch_size_used": int(used_prop_batch_size) if used_prop_batch_size is not None else None,
+            "parcel_history_rows": int(hist_rows_upserted),
+            "parcel_forecast_rows": int(parcel_rows_upserted),
+            "agg_history_rows": int(hist_agg_rows_upserted),
+            "agg_forecast_rows": int(agg_rows_upserted),
+            "n_done": int(n_done),
+            "n_total": int(n_total),
+            "pct_done": float(100.0 * n_done / max(n_total, 1)),
+            "elapsed_chunk_sec": float(time.time() - t0),
+            "elapsed_run_sec": float(time.time() - t_run0),
+        })
+
+        print(
+            f"[{_ts()}] Chunk {chunk_idx} complete | mode={mode} origin={origin_year} "
+            f"| done={n_done}/{n_total} ({100.0*n_done/max(n_total,1):.2f}%) "
+            f"| prop_bs={used_prop_batch_size} "
+            f"| parcel_fc={parcel_rows_upserted} agg_fc={agg_rows_upserted} "
+            f"| parcel_hist={hist_rows_upserted} agg_hist={hist_agg_rows_upserted} "
+            f"| elapsed={time.time()-t0:.1f}s"
+        )
+
+    # -------------------------------------------------------------------------
+    # 7) Final exact aggregate refresh + finalize run status
+    # -------------------------------------------------------------------------
+    with _pg_tx() as conn:
+        if RUN_FINAL_EXACT_AGG_REFRESH:
+            _recompute_forecast_aggregates_exact_for_run(
+                conn=conn,
+                schema=schema,
+                run_id=run_id,
+                origin_year=int(origin_year),
+                series_kind=series_kind_forecast,
+                variant_id=variant_id,
+                backtest_id=backtest_id,
+                as_of_date=as_of_date,
+            )
+
+            if (mode == "forecast" and write_history_series) or (mode == "backtest" and WRITE_BACKTEST_HISTORY_VARIANTS):
+                _recompute_history_aggregates_exact_for_run(
+                    conn=conn,
+                    schema=schema,
+                    run_id=run_id,
+                    series_kind=series_kind_history,
+                    variant_id=(hist_variant_id if hist_variant_id is not None else "__history__"),
+                    backtest_id=hist_backtest_id,
+                    as_of_date=as_of_date,
+                )
+
+        _run_update_status(conn, schema, run_id, "completed")
+
+    manifest["finished_at_utc"] = datetime.utcnow().isoformat()
+    manifest["elapsed_run_sec"] = float(time.time() - t_run0)
+    manifest["parcel_forecast_rows_total"] = int(parcel_rows_total)
+    manifest["agg_forecast_rows_total"] = int(agg_rows_total)
+    manifest["parcel_history_rows_total"] = int(history_rows_total)
+    manifest["agg_history_rows_total"] = int(history_agg_rows_total)
+
+    with open(os.path.join(run_root, "run_manifest.json"), "w") as f:
+        json.dump(manifest, f, indent=2)
+
+    print(f"[{_ts()}] DONE {mode.upper()} origin={origin_year} run_id={run_id}")
+    return {
+        "run_id": run_id,
+        "origin_year": int(origin_year),
+        "mode": mode,
+        "variant_id": variant_id,
+        "backtest_id": backtest_id,
+        "run_root": run_root,
+        "parcel_forecast_rows_total": int(parcel_rows_total),
+        "agg_forecast_rows_total": int(agg_rows_total),
+        "parcel_history_rows_total": int(history_rows_total),
+        "agg_history_rows_total": int(history_agg_rows_total),
+    }
+
+
+# -----------------------------------------------------------------------------
+# MAIN ORCHESTRATION
+# -----------------------------------------------------------------------------
+# Preconditions expected from your notebook:
+#   - CKPT_DIR exists
+#   - all_accts exists
+#   - lf exists
+#   - helpers exist:
+#       _get_checkpoint_paths
+#       _load_ckpt_into_live_objects
+#       _build_inference_for_accounts_at_origin
+#       _sample_scenarios_for_inference_context
+#       _materialize_actual_prices_for_accounts
+
+_assert_ident(TARGET_SCHEMA, "TARGET_SCHEMA")
+
+ckpt_pairs = _get_checkpoint_paths(CKPT_DIR)
+if not ckpt_pairs:
+    raise RuntimeError("No checkpoints found in CKPT_DIR")
+
+ckpt_pairs = sorted([(int(o), p) for o, p in ckpt_pairs], key=lambda x: x[0])
+
+# Account order (replace with geography-sorted order if you want more contiguous live map fill)
+all_accts_prod = [str(a) for a in all_accts]
+n_total = len(all_accts_prod)
+
+suite_manifest = {
+    "suite_id": SUITE_ID,
+    "schema": TARGET_SCHEMA,
+    "model_version": MODEL_VERSION,
+    "forecast_origin_year": int(FORECAST_ORIGIN_YEAR),
+    "run_full_backtest": bool(RUN_FULL_BACKTEST),
+    "H": int(H),
+    "S": int(S),
+    "prop_batch_size_sampler_initial": int(PROP_BATCH_SIZE_SAMPLER),
+    "prop_batch_size_min": int(PROP_BATCH_SIZE_MIN),
+    "acct_batch_size_outer": int(ACCT_BATCH_SIZE_OUTER),
+    "n_accounts_total": int(n_total),
+    "parcel_forecast_has_n_col": bool(PARCEL_FORECAST_HAS_N_COL),
+    "final_exact_agg_refresh": bool(RUN_FINAL_EXACT_AGG_REFRESH),
+    "started_at_utc": datetime.utcnow().isoformat(),
+    "checkpoint_origins_available": [int(o) for o, _ in ckpt_pairs],
+}
+with open(os.path.join(OUT_ROOT, "suite_manifest.json"), "w") as f:
+    json.dump(suite_manifest, f, indent=2)
+
+print(f"[{_ts()}] SUITE_ID={SUITE_ID}")
+print(f"[{_ts()}] TARGET_SCHEMA={TARGET_SCHEMA}")
+print(f"[{_ts()}] Accounts={n_total}")
+print(f"[{_ts()}] Checkpoint origins={suite_manifest['checkpoint_origins_available']}")
+
+results = []
+
+try:
+    # -------------------------------------------------------------------------
+    # A) PRODUCTION RUN
+    # -------------------------------------------------------------------------
+    prod_ckpt_origin, prod_ckpt_path = _pick_ckpt_for_origin(ckpt_pairs, FORECAST_ORIGIN_YEAR)
+
+    res_prod = _run_one_origin(
+        schema=TARGET_SCHEMA,
+        all_accts_prod=all_accts_prod,
+        origin_year=int(FORECAST_ORIGIN_YEAR),
+        mode="forecast",
+        ckpt_origin=int(prod_ckpt_origin),
+        ckpt_path=prod_ckpt_path,
+        out_dir=OUT_PROD_DIR,
+        variant_id="__forecast__",
+        backtest_id=None,
+        write_history_series=True,
+        resume_run_id=RESUME_PROD_RUN_ID if RESUME_MODE else None,
+    )
+    results.append(res_prod)
+
+    # -------------------------------------------------------------------------
+    # B) FULL BACKTEST SUITE
+    # -------------------------------------------------------------------------
+    if RUN_FULL_BACKTEST:
+        if BACKTEST_ORIGINS is None:
+            backtest_origins = [int(o) for o, _ in ckpt_pairs if int(o) < int(FORECAST_ORIGIN_YEAR)]
+        else:
+            backtest_origins = sorted(set(int(x) for x in BACKTEST_ORIGINS))
+
+        bt_suite_short = uuid.uuid4().hex
+        print(f"[{_ts()}] Backtest origins -> {backtest_origins}")
+
+        for bt_origin in backtest_origins:
+            bt_ckpt_origin, bt_ckpt_path = _pick_ckpt_for_origin(ckpt_pairs, bt_origin)
+
+            # Check if we are resuming a specific backtest origin
+            bt_resume_run_id = None
+            if RESUME_MODE and RESUME_BACKTEST_RUNS and bt_origin in RESUME_BACKTEST_RUNS:
+                bt_resume_run_id, bt_variant_id, bt_backtest_id = RESUME_BACKTEST_RUNS[bt_origin]
+            else:
+                bt_variant_id = f"bt_{bt_origin}_{bt_suite_short}"
+                bt_backtest_id = bt_variant_id
+
+            res_bt = _run_one_origin(
+                schema=TARGET_SCHEMA,
+                all_accts_prod=all_accts_prod,
+                origin_year=int(bt_origin),
+                mode="backtest",
+                ckpt_origin=int(bt_ckpt_origin),
+                ckpt_path=bt_ckpt_path,
+                out_dir=OUT_BT_DIR,
+                variant_id=bt_variant_id,
+                backtest_id=bt_backtest_id,
+                write_history_series=False,
+                resume_run_id=bt_resume_run_id,
+            )
+            results.append(res_bt)
+
+    suite_manifest["finished_at_utc"] = datetime.utcnow().isoformat()
+    suite_manifest["results"] = results
+    with open(os.path.join(OUT_ROOT, "suite_manifest.json"), "w") as f:
+        json.dump(suite_manifest, f, indent=2)
+
+    print("")
+    print(f"[{_ts()}] ALL RUNS COMPLETE")
+    print(f"  Suite root: {OUT_ROOT}")
+    print(f"  Results count: {len(results)}")
+    for r in results:
+        print(f"   - {r['mode']} origin={r['origin_year']} run_id={r['run_id']}")
+
+except Exception as e:
+    print(f"[{_ts()}] ERROR: {e}")
+    raise

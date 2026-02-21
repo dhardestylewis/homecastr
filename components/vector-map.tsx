@@ -95,9 +95,24 @@ export function VectorMap({
         handleHexClick, handleHexHover, aggregateDetails
     } = useMapInteraction({
         year,
+        mapState, // Pass mapState for internal sync
         onFeatureSelect,
         onFeatureHover
     })
+
+    // SYNC TOOLTIP POSITION WHEN SELECTED EXTERNALLY
+    // Unlike MapView which builds its own state, VectorMap uses the hook.
+    // However, projection (getCenter/unproject) needs the map instance.
+    useEffect(() => {
+        if (!mapRef.current || !isLoaded || !mapState.selectedId) return
+
+        if (!fixedTooltipPos) {
+            const [lat, lng] = cellToLatLng(mapState.selectedId)
+            const point = mapRef.current.project([lng, lat])
+            const clamped = getSmartTooltipPos(point.x, point.y, window.innerWidth, window.innerHeight)
+            setFixedTooltipPos({ globalX: clamped.x, globalY: clamped.y })
+        }
+    }, [mapState.selectedId, isLoaded])
 
 
     const router = useRouter()
@@ -212,12 +227,12 @@ export function VectorMap({
                     paint: {
                         "fill-color": [
                             "interpolate", ["linear"], ["get", "val"],
-                            100000, "#3b0764",
-                            800000, "#f43f5e",
-                            1500000, "#fbbf24"
+                            100000, "#4a1d96", // Deep Purple
+                            800000, "#be123c", // Rose
+                            1500000, "#d97706" // Warm Amber
                         ],
-                        "fill-opacity": 0.5,
-                        "fill-outline-color": "rgba(255,255,255,0.2)"
+                        "fill-opacity": 0.4,
+                        "fill-outline-color": "rgba(0,0,0,0.05)"
                     }
                 })
 
@@ -231,8 +246,8 @@ export function VectorMap({
                     paint: {
                         "line-color": [
                             "case",
-                            ["boolean", ["feature-state", "candidate"], false], "#d946ef", // Fuchsia for Candidate
-                            "#f97316" // Orange for Comparison
+                            ["boolean", ["feature-state", "candidate"], false], "#d946ef",
+                            "#ca8a04" // Warm Gold for Comparison
                         ],
                         "line-width": 2.5,
                         "line-dasharray": [3, 2],
@@ -254,10 +269,10 @@ export function VectorMap({
                     paint: {
                         "line-color": [
                             "case",
-                            ["boolean", ["feature-state", "primary"], false], "#14b8a6",
-                            ["boolean", ["feature-state", "selected"], false], "#f97316",
-                            ["boolean", ["feature-state", "hover"], false], "#14b8a6", // Teal for Hover (Primary Candidate)
-                            "rgba(0,0,0,0)" // Transparent default
+                            ["boolean", ["feature-state", "primary"], false], "#4a5568", // Deep Taupe for Primary
+                            ["boolean", ["feature-state", "selected"], false], "#ca8a04",
+                            ["boolean", ["feature-state", "hover"], false], "#4a5568",
+                            "rgba(0,0,0,0)"
                         ],
                         "line-width": ["case", ["boolean", ["feature-state", "primary"], false], 4, 3],
                         "line-opacity": [
@@ -966,8 +981,11 @@ export function VectorMap({
     }, [mapState.center, mapState.zoom, isLoaded])
 
     // TOOLTIP POSITIONING & RENDER PARITY
-    const displayId = hoveredHex || selectedHexes[0] || null
-    const displayDetails = hoveredDetails || selectionDetails
+    // If locked (selection active), we prioritize the selection for content AND position (via fixedTooltipPos)
+    // to prevents "flickering" or showing hover data while pinned to selection.
+    const lockedModeActive = selectedHexes.length > 0
+    const displayId = lockedModeActive ? selectedHexes[0] : (hoveredHex || null)
+    const displayDetails = lockedModeActive ? selectionDetails : (hoveredDetails || null)
     const h3Resolution = mapRef.current ? Math.floor(mapRef.current.getZoom()) : 0
 
     return (
@@ -985,8 +1003,17 @@ export function VectorMap({
 
             {/* SHARED TOOLTIP UI - Match MapView pattern */}
             {(() => {
-                const lockedModeActive = selectedHexes.length > 0
-                const displayProps = lockedModeActive ? tooltipData?.properties : tooltipData?.properties
+                const displayProps = lockedModeActive ? (tooltipData?.properties?.id === selectedHexes[0] ? tooltipData.properties : null) : tooltipData?.properties
+                // Note: displayProps might be stale if we hover away. 
+                // Ideally we should look up props for the selected ID if we have them. 
+                // But VectorMap relies on 'tooltipData' from hover event.
+                // If we are locked, we might not have 'tooltipData' for the selected hex if we moved mouse.
+                // However, 'selectionDetails' (passed from parent) should has the data we need for the CHART.
+                // For the HEADER (value/growth), we used 'displayProps' from the vector tile features.
+                // If we don't hover it, we don't have it? 
+                // MapView solves this by fetching data. VectorMap relies on vector tile properties for instant display.
+                // If we are locked, we should probably stick to what we have.
+
                 const displayPos = lockedModeActive && fixedTooltipPos ? fixedTooltipPos : tooltipData
 
                 if (!isLoaded || !displayPos || !displayId) return null
@@ -1044,6 +1071,7 @@ export function VectorMap({
                                 capRate: details?.proforma?.cap_rate ?? null,
                             })
                         } : undefined}
+                        googleMapsApiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY}
                     />
                 )
             })()}
