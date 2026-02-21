@@ -1,4 +1,4 @@
-This is XeTeX, Version 3.141592653-2.6-0.999997 (MiKTeX 25.12) (preloaded format=xelatex 2026.2.16)  20 FEB 2026 19:07
+This is XeTeX, Version 3.141592653-2.6-0.999997 (MiKTeX 25.12) (preloaded format=xelatex 2026.2.16)  20 FEB 2026 19:23
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -936,26 +936,26 @@ Package: booktabs 2020/01/12 v1.61803398 Publication quality tables
 (homecastr_pitch_v4.aux)
 \openout1 = `homecastr_pitch_v4.aux'.
 
-LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 87.
-LaTeX Font Info:    ... okay on input line 87.
-LaTeX Font Info:    Checking defaults for OMS/cmsy/m/n on input line 87.
-LaTeX Font Info:    ... okay on input line 87.
-LaTeX Font Info:    Checking defaults for OT1/cmr/m/n on input line 87.
-LaTeX Font Info:    ... okay on input line 87.
-LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 87.
-LaTeX Font Info:    ... okay on input line 87.
-LaTeX Font Info:    Checking defaults for TS1/cmr/m/n on input line 87.
-LaTeX Font Info:    ... okay on input line 87.
-LaTeX Font Info:    Checking defaults for TU/lmr/m/n on input line 87.
-LaTeX Font Info:    ... okay on input line 87.
-LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 87.
-LaTeX Font Info:    ... okay on input line 87.
-LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 87.
-LaTeX Font Info:    ... okay on input line 87.
-LaTeX Font Info:    Checking defaults for PD1/pdf/m/n on input line 87.
-LaTeX Font Info:    ... okay on input line 87.
-LaTeX Font Info:    Checking defaults for PU/pdf/m/n on input line 87.
-LaTeX Font Info:    ... okay on input line 87.
+LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 88.
+LaTeX Font Info:    ... okay on input line 88.
+LaTeX Font Info:    Checking defaults for OMS/cmsy/m/n on input line 88.
+LaTeX Font Info:    ... okay on input line 88.
+LaTeX Font Info:    Checking defaults for OT1/cmr/m/n on input line 88.
+LaTeX Font Info:    ... okay on input line 88.
+LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 88.
+LaTeX Font Info:    ... okay on input line 88.
+LaTeX Font Info:    Checking defaults for TS1/cmr/m/n on input line 88.
+LaTeX Font Info:    ... okay on input line 88.
+LaTeX Font Info:    Checking defaults for TU/lmr/m/n on input line 88.
+LaTeX Font Info:    ... okay on input line 88.
+LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 88.
+LaTeX Font Info:    ... okay on input line 88.
+LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 88.
+LaTeX Font Info:    ... okay on input line 88.
+LaTeX Font Info:    Checking defaults for PD1/pdf/m/n on input line 88.
+LaTeX Font Info:    ... okay on input line 88.
+LaTeX Font Info:    Checking defaults for PU/pdf/m/n on input line 88.
+LaTeX Font Info:    ... okay on input line 88.
 
 *geometry* driver: auto-detecting
 *geometry* detected driver: xetex
@@ -991,58 +991,58 @@ LaTeX Font Info:    ... okay on input line 87.
 * \@reversemarginfalse
 * (1in=72.27pt=25.4mm, 1cm=28.453pt)
 
-Package hyperref Info: Link coloring OFF on input line 87.
+Package hyperref Info: Link coloring OFF on input line 88.
 (homecastr_pitch_v4.out) (homecastr_pitch_v4.out)
 \@outlinefile=\write5
 \openout5 = `homecastr_pitch_v4.out'.
 
 LaTeX Font Info:    Overwriting symbol font `operators' in version `normal'
-(Font)                  OT1/cmr/m/n --> OT1/cmss/m/n on input line 87.
+(Font)                  OT1/cmr/m/n --> OT1/cmss/m/n on input line 88.
 LaTeX Font Info:    Overwriting symbol font `operators' in version `bold'
-(Font)                  OT1/cmr/bx/n --> OT1/cmss/b/n on input line 87.
+(Font)                  OT1/cmr/bx/n --> OT1/cmss/b/n on input line 88.
 \symnumbers=\mathgroup6
 \sympureletters=\mathgroup7
 LaTeX Font Info:    Overwriting math alphabet `\mathrm' in version `normal'
-(Font)                  OT1/cmss/m/n --> TU/SegoeUI(0)/m/n on input line 87.
-LaTeX Font Info:    Redeclaring math alphabet \mathbf on input line 87.
+(Font)                  OT1/cmss/m/n --> TU/SegoeUI(0)/m/n on input line 88.
+LaTeX Font Info:    Redeclaring math alphabet \mathbf on input line 88.
 LaTeX Font Info:    Overwriting math alphabet `\mathbf' in version `normal'
-(Font)                  OT1/cmr/bx/n --> TU/SegoeUI(0)/b/n on input line 87.
+(Font)                  OT1/cmr/bx/n --> TU/SegoeUI(0)/b/n on input line 88.
 LaTeX Font Info:    Overwriting math alphabet `\mathbf' in version `bold'
-(Font)                  OT1/cmr/bx/n --> TU/SegoeUI(0)/b/n on input line 87.
-LaTeX Font Info:    Redeclaring math alphabet \mathsf on input line 87.
+(Font)                  OT1/cmr/bx/n --> TU/SegoeUI(0)/b/n on input line 88.
+LaTeX Font Info:    Redeclaring math alphabet \mathsf on input line 88.
 LaTeX Font Info:    Overwriting math alphabet `\mathsf' in version `normal'
-(Font)                  OT1/cmss/m/n --> TU/SegoeUI(0)/m/n on input line 87.
+(Font)                  OT1/cmss/m/n --> TU/SegoeUI(0)/m/n on input line 88.
 LaTeX Font Info:    Overwriting math alphabet `\mathsf' in version `bold'
-(Font)                  OT1/cmss/bx/n --> TU/SegoeUI(0)/m/n on input line 87.
-LaTeX Font Info:    Redeclaring math alphabet \mathit on input line 87.
+(Font)                  OT1/cmss/bx/n --> TU/SegoeUI(0)/m/n on input line 88.
+LaTeX Font Info:    Redeclaring math alphabet \mathit on input line 88.
 LaTeX Font Info:    Overwriting math alphabet `\mathit' in version `normal'
-(Font)                  OT1/cmr/m/it --> TU/SegoeUI(0)/m/it on input line 87.
+(Font)                  OT1/cmr/m/it --> TU/SegoeUI(0)/m/it on input line 88.
 LaTeX Font Info:    Overwriting math alphabet `\mathit' in version `bold'
-(Font)                  OT1/cmr/bx/it --> TU/SegoeUI(0)/m/it on input line 87.
-LaTeX Font Info:    Redeclaring math alphabet \mathtt on input line 87.
+(Font)                  OT1/cmr/bx/it --> TU/SegoeUI(0)/m/it on input line 88.
+LaTeX Font Info:    Redeclaring math alphabet \mathtt on input line 88.
 LaTeX Font Info:    Overwriting math alphabet `\mathtt' in version `normal'
-(Font)                  OT1/cmtt/m/n --> TU/lmtt/m/n on input line 87.
+(Font)                  OT1/cmtt/m/n --> TU/lmtt/m/n on input line 88.
 LaTeX Font Info:    Overwriting math alphabet `\mathtt' in version `bold'
-(Font)                  OT1/cmtt/m/n --> TU/lmtt/m/n on input line 87.
+(Font)                  OT1/cmtt/m/n --> TU/lmtt/m/n on input line 88.
 LaTeX Font Info:    Overwriting symbol font `numbers' in version `bold'
 (Font)                  TU/SegoeUI(0)/m/n --> TU/SegoeUI(0)/b/n on input line 8
-7.
+8.
 LaTeX Font Info:    Overwriting symbol font `pureletters' in version `bold'
 (Font)                  TU/SegoeUI(0)/m/it --> TU/SegoeUI(0)/b/it on input line
- 87.
+ 88.
 LaTeX Font Info:    Overwriting math alphabet `\mathrm' in version `bold'
-(Font)                  OT1/cmss/b/n --> TU/SegoeUI(0)/b/n on input line 87.
+(Font)                  OT1/cmss/b/n --> TU/SegoeUI(0)/b/n on input line 88.
 LaTeX Font Info:    Overwriting math alphabet `\mathbf' in version `bold'
 (Font)                  TU/SegoeUI(0)/b/n --> TU/SegoeUI(0)/b/n on input line 8
-7.
+8.
 LaTeX Font Info:    Overwriting math alphabet `\mathsf' in version `bold'
 (Font)                  TU/SegoeUI(0)/m/n --> TU/SegoeUI(0)/b/n on input line 8
-7.
+8.
 LaTeX Font Info:    Overwriting math alphabet `\mathit' in version `bold'
 (Font)                  TU/SegoeUI(0)/m/it --> TU/SegoeUI(0)/b/it on input line
- 87.
+ 88.
 LaTeX Font Info:    Overwriting math alphabet `\mathtt' in version `bold'
-(Font)                  TU/lmtt/m/n --> TU/lmtt/b/n on input line 87.
+(Font)                  TU/lmtt/m/n --> TU/lmtt/b/n on input line 88.
 
 (C:\Users\dhl\AppData\Local\Programs\MiKTeX\tex/latex/translator\translator-bas
 ic-dictionary-English.dict
@@ -1075,79 +1075,79 @@ Package fontspec Info:
 
 \symlegacymaths=\mathgroup8
 LaTeX Font Info:    Overwriting symbol font `legacymaths' in version `bold'
-(Font)                  OT1/cmr/m/n --> OT1/cmr/bx/n on input line 87.
-LaTeX Font Info:    Redeclaring math accent \acute on input line 87.
-LaTeX Font Info:    Redeclaring math accent \grave on input line 87.
-LaTeX Font Info:    Redeclaring math accent \ddot on input line 87.
-LaTeX Font Info:    Redeclaring math accent \tilde on input line 87.
-LaTeX Font Info:    Redeclaring math accent \bar on input line 87.
-LaTeX Font Info:    Redeclaring math accent \breve on input line 87.
-LaTeX Font Info:    Redeclaring math accent \check on input line 87.
-LaTeX Font Info:    Redeclaring math accent \hat on input line 87.
-LaTeX Font Info:    Redeclaring math accent \dot on input line 87.
-LaTeX Font Info:    Redeclaring math accent \mathring on input line 87.
-LaTeX Font Info:    Redeclaring math symbol \Gamma on input line 87.
-LaTeX Font Info:    Redeclaring math symbol \Delta on input line 87.
-LaTeX Font Info:    Redeclaring math symbol \Theta on input line 87.
-LaTeX Font Info:    Redeclaring math symbol \Lambda on input line 87.
-LaTeX Font Info:    Redeclaring math symbol \Xi on input line 87.
-LaTeX Font Info:    Redeclaring math symbol \Pi on input line 87.
-LaTeX Font Info:    Redeclaring math symbol \Sigma on input line 87.
-LaTeX Font Info:    Redeclaring math symbol \Upsilon on input line 87.
-LaTeX Font Info:    Redeclaring math symbol \Phi on input line 87.
-LaTeX Font Info:    Redeclaring math symbol \Psi on input line 87.
-LaTeX Font Info:    Redeclaring math symbol \Omega on input line 87.
-LaTeX Font Info:    Redeclaring math symbol \mathdollar on input line 87.
-LaTeX Font Info:    Redeclaring symbol font `operators' on input line 87.
+(Font)                  OT1/cmr/m/n --> OT1/cmr/bx/n on input line 88.
+LaTeX Font Info:    Redeclaring math accent \acute on input line 88.
+LaTeX Font Info:    Redeclaring math accent \grave on input line 88.
+LaTeX Font Info:    Redeclaring math accent \ddot on input line 88.
+LaTeX Font Info:    Redeclaring math accent \tilde on input line 88.
+LaTeX Font Info:    Redeclaring math accent \bar on input line 88.
+LaTeX Font Info:    Redeclaring math accent \breve on input line 88.
+LaTeX Font Info:    Redeclaring math accent \check on input line 88.
+LaTeX Font Info:    Redeclaring math accent \hat on input line 88.
+LaTeX Font Info:    Redeclaring math accent \dot on input line 88.
+LaTeX Font Info:    Redeclaring math accent \mathring on input line 88.
+LaTeX Font Info:    Redeclaring math symbol \Gamma on input line 88.
+LaTeX Font Info:    Redeclaring math symbol \Delta on input line 88.
+LaTeX Font Info:    Redeclaring math symbol \Theta on input line 88.
+LaTeX Font Info:    Redeclaring math symbol \Lambda on input line 88.
+LaTeX Font Info:    Redeclaring math symbol \Xi on input line 88.
+LaTeX Font Info:    Redeclaring math symbol \Pi on input line 88.
+LaTeX Font Info:    Redeclaring math symbol \Sigma on input line 88.
+LaTeX Font Info:    Redeclaring math symbol \Upsilon on input line 88.
+LaTeX Font Info:    Redeclaring math symbol \Phi on input line 88.
+LaTeX Font Info:    Redeclaring math symbol \Psi on input line 88.
+LaTeX Font Info:    Redeclaring math symbol \Omega on input line 88.
+LaTeX Font Info:    Redeclaring math symbol \mathdollar on input line 88.
+LaTeX Font Info:    Redeclaring symbol font `operators' on input line 88.
 LaTeX Font Info:    Encoding `OT1' has changed to `TU' for symbol font
-(Font)              `operators' in the math version `normal' on input line 87.
+(Font)              `operators' in the math version `normal' on input line 88.
 LaTeX Font Info:    Overwriting symbol font `operators' in version `normal'
-(Font)                  OT1/cmss/m/n --> TU/SegoeUI(0)/m/n on input line 87.
+(Font)                  OT1/cmss/m/n --> TU/SegoeUI(0)/m/n on input line 88.
 LaTeX Font Info:    Encoding `OT1' has changed to `TU' for symbol font
-(Font)              `operators' in the math version `bold' on input line 87.
+(Font)              `operators' in the math version `bold' on input line 88.
 LaTeX Font Info:    Overwriting symbol font `operators' in version `bold'
-(Font)                  OT1/cmss/b/n --> TU/SegoeUI(0)/m/n on input line 87.
+(Font)                  OT1/cmss/b/n --> TU/SegoeUI(0)/m/n on input line 88.
 LaTeX Font Info:    Overwriting symbol font `operators' in version `normal'
 (Font)                  TU/SegoeUI(0)/m/n --> TU/SegoeUI(0)/m/n on input line 8
-7.
-LaTeX Font Info:    Redeclaring math alphabet \mathrm on input line 87.
+8.
+LaTeX Font Info:    Redeclaring math alphabet \mathrm on input line 88.
 LaTeX Font Info:    Overwriting math alphabet `\mathit' in version `normal'
 (Font)                  TU/SegoeUI(0)/m/it --> TU/SegoeUI(0)/m/it on input line
- 87.
+ 88.
 LaTeX Font Info:    Overwriting math alphabet `\mathbf' in version `normal'
 (Font)                  TU/SegoeUI(0)/b/n --> TU/SegoeUI(0)/b/n on input line 8
-7.
+8.
 LaTeX Font Info:    Overwriting math alphabet `\mathsf' in version `normal'
 (Font)                  TU/SegoeUI(0)/m/n --> TU/SegoeUI(0)/m/n on input line 8
-7.
+8.
 LaTeX Font Info:    Overwriting math alphabet `\mathtt' in version `normal'
-(Font)                  TU/lmtt/m/n --> TU/lmtt/m/n on input line 87.
+(Font)                  TU/lmtt/m/n --> TU/lmtt/m/n on input line 88.
 LaTeX Font Info:    Overwriting symbol font `operators' in version `bold'
 (Font)                  TU/SegoeUI(0)/m/n --> TU/SegoeUI(0)/b/n on input line 8
-7.
+8.
 LaTeX Font Info:    Overwriting math alphabet `\mathit' in version `bold'
 (Font)                  TU/SegoeUI(0)/b/it --> TU/SegoeUI(0)/b/it on input line
- 87.
+ 88.
 LaTeX Font Info:    Overwriting math alphabet `\mathsf' in version `bold'
 (Font)                  TU/SegoeUI(0)/b/n --> TU/SegoeUI(0)/b/n on input line 8
-7.
+8.
 LaTeX Font Info:    Overwriting math alphabet `\mathtt' in version `bold'
-(Font)                  TU/lmtt/b/n --> TU/lmtt/b/n on input line 87.
+(Font)                  TU/lmtt/b/n --> TU/lmtt/b/n on input line 88.
  (homecastr_pitch_v4.nav)
-File: homecastr-logo.png Graphic file (type bmp)
-<homecastr-logo.png>
+File: homecastr-logo-cropped.png Graphic file (type bmp)
+<homecastr-logo-cropped.png>
 File: title_bg.png Graphic file (type bmp)
 <title_bg.png>
  [1
 
 ]
-LaTeX Font Info:    Trying to load font information for U+msa on input line 161
+LaTeX Font Info:    Trying to load font information for U+msa on input line 162
 .
 
 (C:\Users\dhl\AppData\Local\Programs\MiKTeX\tex/latex/amsfonts\umsa.fd
 File: umsa.fd 2013/01/14 v3.01 AMS symbols A
 )
-LaTeX Font Info:    Trying to load font information for U+msb on input line 161
+LaTeX Font Info:    Trying to load font information for U+msb on input line 162
 .
 
 (C:\Users\dhl\AppData\Local\Programs\MiKTeX\tex/latex/amsfonts\umsb.fd
@@ -1167,19 +1167,19 @@ File: explainable.png Graphic file (type bmp)
 ] [4
 
 ]
-Overfull \vbox (23.79166pt too high) detected at line 278
+Overfull \vbox (23.79166pt too high) detected at line 279
  []
 
 [5
 
 ]
-Overfull \vbox (1.56607pt too high) detected at line 316
+Overfull \vbox (1.56607pt too high) detected at line 317
  []
 
 [6
 
 ]
-Overfull \vbox (61.88733pt too high) detected at line 366
+Overfull \vbox (61.88733pt too high) detected at line 367
  []
 
 [7
@@ -1189,13 +1189,13 @@ Overfull \vbox (61.88733pt too high) detected at line 366
 ] [9
 
 ]
-Overfull \vbox (11.51097pt too high) detected at line 462
+Overfull \vbox (11.51097pt too high) detected at line 463
  []
 
 [10
 
 ]
-Overfull \vbox (0.6282pt too high) detected at line 507
+Overfull \vbox (0.6282pt too high) detected at line 508
  []
 
 [11
@@ -1206,14 +1206,14 @@ File: dhl.jpg Graphic file (type bmp)
  [12
 
 ]
-Overfull \vbox (17.4185pt too high) detected at line 581
+Overfull \vbox (17.4185pt too high) detected at line 582
  []
 
 [13
 
 ]
-File: homecastr-logo.png Graphic file (type bmp)
-<homecastr-logo.png>
+File: homecastr-logo-cropped.png Graphic file (type bmp)
+<homecastr-logo-cropped.png>
 File: title_bg.png Graphic file (type bmp)
 <title_bg.png>
  [14
@@ -1233,18 +1233,14 @@ File: title_bg.png Graphic file (type bmp)
 LaTeX2e <2025-11-01>
 L3 programming layer <2025-12-24>
  ***********
-
-
-LaTeX Warning: Label(s) may have changed. Rerun to get cross-references right.
-
 Package rerunfilecheck Info: File `homecastr_pitch_v4.out' has not changed.
 (rerunfilecheck)             Checksum: D41D8CD98F00B204E9800998ECF8427E;0.
  ) 
 Here is how much of TeX's memory you used:
- 27789 strings out of 402987
- 588040 string characters out of 5448938
- 1020456 words of memory out of 5000000
- 55979 multiletter control sequences out of 15000+600000
+ 27769 strings out of 402987
+ 587687 string characters out of 5448938
+ 1020508 words of memory out of 5000000
+ 55959 multiletter control sequences out of 15000+600000
  634626 words of font info for 109 fonts, out of 8000000 for 9000
  1348 hyphenation exceptions out of 8191
  128i,11n,123p,433b,1193s stack positions out of 10000i,1000n,20000p,200000b,200000s

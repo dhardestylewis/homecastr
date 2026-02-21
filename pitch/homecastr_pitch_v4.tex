@@ -26,13 +26,14 @@
   \end{beamercolorbox}
 }
 
-% Homecastr brand palette
-\definecolor{hcBg}{HTML}{F2EDE0}
-\definecolor{hcText}{HTML}{3D3830}
-\definecolor{hcGold}{HTML}{CA8A04}
+% Homecastr brand palette — matched to website CSS
+\definecolor{hcBg}{HTML}{F2EDE4}        % --background
+\definecolor{hcText}{HTML}{3D3830}       % --foreground
+\definecolor{hcGold}{HTML}{CA8A04}       % accent gold (CTAs, stats)
 \definecolor{hcGoldLight}{HTML}{E8D5A0}
-\definecolor{hcMuted}{HTML}{7E7B74}
-\definecolor{hcCard}{HTML}{EBE4D6}
+\definecolor{hcMuted}{HTML}{7E7B74}      % --muted-foreground
+\definecolor{hcCard}{HTML}{E8E2D8}       % --muted / card bg
+\definecolor{hcPrimary}{HTML}{6B6356}    % --primary (taupe)
 \definecolor{hcRed}{HTML}{B91C1C}
 \definecolor{hcGreen}{HTML}{15803D}
 
@@ -72,9 +73,9 @@
   \end{minipage}%
 }
 
-% Logo image macro
+% Logo image macro (cropped to content)
 \newcommand{\buildingicon}{%
-\includegraphics[height=1.2cm]{homecastr-logo.png}%
+\includegraphics[height=1.4cm]{homecastr-logo-cropped.png}%
 }
 
 % Big stat macro for single-stat visual slides
@@ -91,7 +92,7 @@
 \begin{frame}[plain]
 \vfill
 \begin{center}
-{\buildingicon}\quad{\fontsize{42}{48}\selectfont\bfseries\color{hcGold} Homecastr}\\[16pt]
+{\buildingicon}\quad{\fontsize{42}{48}\selectfont\bfseries\color{hcText} Homecastr}\\[16pt]
 {\Large\color{hcText} The foundation model for residential real estate}\\[24pt]
 \mutedtext{\small \href{https://homecastr.com}{\textcolor{hcGold}{\textbf{homecastr.com}}}}
 \end{center}
