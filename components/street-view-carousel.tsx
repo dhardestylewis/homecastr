@@ -10,9 +10,11 @@ interface StreetViewCarouselProps {
     h3Ids: string[]
     apiKey: string
     className?: string
+    /** Optional direct coordinates — bypasses H3 geocoding (for non-H3 geographies like census tracts) */
+    coordinates?: [number, number]
 }
 
-export function StreetViewCarousel({ h3Ids, apiKey, className }: StreetViewCarouselProps) {
+export function StreetViewCarousel({ h3Ids, apiKey, className, coordinates }: StreetViewCarouselProps) {
     const [emblaRef, emblaApi] = useEmblaCarousel({ loop: true, align: "start" })
     const [locations, setLocations] = useState<PropertyLocation[]>([])
     const [canScrollPrev, setCanScrollPrev] = useState(false)
@@ -20,10 +22,20 @@ export function StreetViewCarousel({ h3Ids, apiKey, className }: StreetViewCarou
     const [selectedIndex, setSelectedIndex] = useState(0)
 
     useEffect(() => {
-        if (h3Ids.length > 0) {
+        if (coordinates) {
+            // Direct lat/lng — generate offsets around the coordinate (non-H3 mode)
+            const [lat, lng] = coordinates
+            setLocations([
+                { lat, lng, label: "Center" },
+                { lat: lat + 0.0004, lng: lng + 0.0004, label: "North East" },
+                { lat: lat - 0.0004, lng: lng - 0.0004, label: "South West" },
+                { lat: lat + 0.0004, lng: lng - 0.0004, label: "North West" },
+                { lat: lat - 0.0004, lng: lng + 0.0004, label: "South East" },
+            ])
+        } else if (h3Ids.length > 0) {
             setLocations(getRepresentativeProperties(h3Ids))
         }
-    }, [h3Ids])
+    }, [h3Ids, coordinates])
 
     const onSelect = React.useCallback(() => {
         if (!emblaApi) return

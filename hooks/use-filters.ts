@@ -14,7 +14,7 @@ const DEFAULT_FILTERS: FilterState = {
   layerOverride: undefined,
   usePMTiles: false,
   useVectorMap: false,
-  useForecastMap: false,
+  useForecastMap: true,
 }
 
 export function useFilters() {
@@ -35,7 +35,7 @@ export function useFilters() {
       layerOverride: searchParams.get("layer") ? Number.parseInt(searchParams.get("layer")!, 10) : undefined,
       usePMTiles: false, // PMTiles disabled — local tile file not available
       useVectorMap: searchParams.get("vector") === "true",
-      useForecastMap: searchParams.get("forecast") === "true",
+      useForecastMap: searchParams.get("forecast") !== "false",
     }
   })
 

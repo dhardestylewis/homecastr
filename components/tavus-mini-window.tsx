@@ -4,14 +4,16 @@ import { useState, useEffect, useRef, useCallback } from "react"
 import { X, Minimize2, Maximize2, Mic, MicOff, Video, VideoOff } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { executeTopLevelTool } from "@/app/actions/tools";
+import { executeTopLevelForecastTool } from "@/app/actions/tools-forecast";
 
 interface TavusMiniWindowProps {
   conversationUrl: string
   onClose: () => void
   chatOpen?: boolean
+  forecastMode?: boolean
 }
 
-export function TavusMiniWindow({ conversationUrl, onClose, chatOpen = false }: TavusMiniWindowProps) {
+export function TavusMiniWindow({ conversationUrl, onClose, chatOpen = false, forecastMode = false }: TavusMiniWindowProps) {
   const [isMinimized, setIsMinimized] = useState(false)
   const [isMicOn, setIsMicOn] = useState(true)
   const [isCamOn, setIsCamOn] = useState(true)
@@ -111,8 +113,10 @@ export function TavusMiniWindow({ conversationUrl, onClose, chatOpen = false }: 
                 resultJson = JSON.stringify({ success: true, action: "panning and zooming map" })
               } else {
                 // Server Tool: Proxy via Server Action
-                console.log(`[TAVUS] Proxying server tool: ${toolName}`)
-                resultJson = await executeTopLevelTool(toolName, parsedParams)
+                console.log(`[TAVUS] Proxying server tool: ${toolName} (forecastMode=${forecastMode})`)
+                resultJson = forecastMode
+                  ? await executeTopLevelForecastTool(toolName, parsedParams)
+                  : await executeTopLevelTool(toolName, parsedParams)
               }
 
               console.log(`[TAVUS] Tool ${toolName} result:`, resultJson)

@@ -4,7 +4,6 @@ import { initLogger, wrapOpenAI, flush } from "braintrust"
 import * as h3 from "h3-js"
 import { executeTopLevelTool } from "@/app/actions/tools"
 
-// Braintrust: init once at module load so wrapOpenAI has a current logger when tracing
 if (typeof process !== "undefined" && process.env.BRAINTRUST_API_KEY) {
   initLogger({
     projectName: "Homecastr",
@@ -243,7 +242,6 @@ export async function POST(req: NextRequest) {
             )
         }
 
-        // Use Braintrust-wrapped client if key is set (logger already inited at module load)
         const baseClient = new OpenAI({ apiKey })
         const openai = process.env.BRAINTRUST_API_KEY ? wrapOpenAI(baseClient) : baseClient
         const { messages } = await req.json()

@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useEffect, useRef, useState, useCallback } from "react"
+import { createPortal } from "react-dom"
 import maplibregl from "maplibre-gl"
 import "maplibre-gl/dist/maplibre-gl.css"
 import type { FilterState, MapState, FanChartData } from "@/lib/types"
@@ -9,11 +10,12 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { HomecastrLogo } from "@/components/homecastr-logo"
 import { Bot } from "lucide-react"
 import { FanChart } from "@/components/fan-chart"
+import { StreetViewCarousel } from "@/components/street-view-carousel"
 
 // Tooltip positioning constants
 const SIDEBAR_WIDTH = 340
 const TOOLTIP_WIDTH = 320
-const TOOLTIP_HEIGHT = 200
+const TOOLTIP_HEIGHT = 620
 
 // Geography level definitions — zoom breakpoints must match the SQL router
 const GEO_LEVELS = [
@@ -91,6 +93,9 @@ interface ForecastMapProps {
         opportunityScore: number | null
         capRate: number | null
     }) => void
+    predictedValue?: number | null
+    opportunityScore?: number | null
+    capRate?: number | null
 }
 
 export function ForecastMap({
@@ -123,11 +128,55 @@ export function ForecastMap({
     const selectedIdRef = useRef<string | null>(null)
     const hoveredIdRef = useRef<string | null>(null)
 
+    // Geographic coordinates for StreetView (from MapLibre events)
+    const [tooltipCoords, setTooltipCoords] = useState<[number, number] | null>(null)
+
+    // Mobile detection
+    const [isMobile, setIsMobile] = useState(false)
+    useEffect(() => {
+        const check = () => setIsMobile(window.innerWidth < 768)
+        check()
+        window.addEventListener('resize', check)
+        return () => window.removeEventListener('resize', check)
+    }, [])
+
+    // Mobile swipe-to-minimize state
+    const [mobileMinimized, setMobileMinimized] = useState(false)
+    const [swipeTouchStart, setSwipeTouchStart] = useState<number | null>(null)
+    const [swipeDragOffset, setSwipeDragOffset] = useState(0)
+
+    // Reset minimize when selection changes
+    useEffect(() => {
+        if (selectedId) setMobileMinimized(false)
+    }, [selectedId])
+
     // Fan chart detail state
     const [fanChartData, setFanChartData] = useState<FanChartData | null>(null)
     const [historicalValues, setHistoricalValues] = useState<number[] | undefined>(undefined)
     const [isLoadingDetail, setIsLoadingDetail] = useState(false)
     const detailFetchRef = useRef<string | null>(null)
+
+    // Selected feature's properties (locked when clicked)
+    const [selectedProps, setSelectedProps] = useState<any>(null)
+
+    // Comparison state: hover overlay when a feature is selected
+    const [comparisonData, setComparisonData] = useState<FanChartData | null>(null)
+    const [comparisonHistoricalValues, setComparisonHistoricalValues] = useState<number[] | undefined>(undefined)
+    const comparisonFetchRef = useRef<string | null>(null)
+    const comparisonTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+    // Viewport y-axis domain: fixed range from visible features
+    const [viewportYDomain, setViewportYDomain] = useState<[number, number] | null>(null)
+
+    // Shift-to-freeze comparison
+    const [isShiftHeld, setIsShiftHeld] = useState(false)
+    useEffect(() => {
+        const down = (e: KeyboardEvent) => { if (e.key === 'Shift') setIsShiftHeld(true) }
+        const up = (e: KeyboardEvent) => { if (e.key === 'Shift') setIsShiftHeld(false) }
+        window.addEventListener('keydown', down)
+        window.addEventListener('keyup', up)
+        return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up) }
+    }, [])
 
     // Compute origin year and horizon from the "year" slider
     // origin_year is always 2025, horizon_m is (year - 2025) * 12
@@ -193,9 +242,11 @@ export function ForecastMap({
                 "interpolate",
                 ["linear"],
                 ["coalesce", ["get", "p50"], ["get", "value"], 0],
-                -100000, "#ef4444",
-                0, "#f8f8f8",
-                100000, "#3b82f6",
+                100000, "#ef4444",   // Low-value areas → red
+                200000, "#f59e0b",   // Below median → amber
+                300000, "#f8f8f8",   // Median (~$300k) → neutral white
+                450000, "#60a5fa",   // Above median → light blue
+                700000, "#3b82f6",   // High-value areas → blue
             ]
             : [
                 "interpolate",
@@ -258,6 +309,7 @@ export function ForecastMap({
                     ],
                     minzoom: 0,
                     maxzoom: 18,
+                    promoteId: "id",
                 })
             }
 
@@ -396,24 +448,27 @@ export function ForecastMap({
                     }
                 })
 
-            // Fetch fan chart detail for this feature
-            const hoverLevel = getSourceLayer(zoom)
-            fetchForecastDetail(id, hoverLevel)
-
-            // Update tooltip (only if no selection is fixed)
+            // Fetch fan chart detail for this feature (only if NOT locked to a selection)
             if (!selectedIdRef.current) {
-                const smartPos = getSmartTooltipPos(
-                    e.originalEvent.clientX,
-                    e.originalEvent.clientY,
-                    window.innerWidth,
-                    window.innerHeight
-                )
-                setTooltipData({
-                    globalX: smartPos.x,
-                    globalY: smartPos.y,
-                    properties: feature.properties,
-                })
+                const hoverLevel = getSourceLayer(zoom)
+                fetchForecastDetail(id, hoverLevel)
             }
+
+            // Always update tooltipData with hovered feature's properties.
+            // When locked, displayProps will use selectedProps instead,
+            // but tooltipData.properties.id is needed for comparison tracking.
+            const smartPos = getSmartTooltipPos(
+                e.originalEvent.clientX,
+                e.originalEvent.clientY,
+                window.innerWidth,
+                window.innerHeight
+            )
+            setTooltipData({
+                globalX: smartPos.x,
+                globalY: smartPos.y,
+                properties: feature.properties,
+            })
+            setTooltipCoords([e.lngLat.lat, e.lngLat.lng])
         })
 
         // CLICK handling
@@ -439,7 +494,11 @@ export function ForecastMap({
                     })
                     selectedIdRef.current = null
                     setSelectedId(null)
+                    setSelectedProps(null)
                     setFixedTooltipPos(null)
+                    setComparisonData(null)
+                    setComparisonHistoricalValues(undefined)
+                    comparisonFetchRef.current = null
                     onFeatureSelect(null)
                 }
                 return
@@ -467,13 +526,21 @@ export function ForecastMap({
             if (selectedIdRef.current === id) {
                 selectedIdRef.current = null
                 setSelectedId(null)
+                setSelectedProps(null)
                 setFixedTooltipPos(null)
+                setComparisonData(null)
+                setComparisonHistoricalValues(undefined)
+                comparisonFetchRef.current = null
                 onFeatureSelect(null)
                 return
             }
 
             selectedIdRef.current = id
             setSelectedId(id)
+            setSelectedProps(feature.properties)
+            setComparisonData(null)
+            setComparisonHistoricalValues(undefined)
+            comparisonFetchRef.current = null
             onFeatureSelect(id)
 
                 // Set selected state
@@ -501,6 +568,7 @@ export function ForecastMap({
                 globalY: smartPos.y,
                 properties: feature.properties,
             })
+            setTooltipCoords([e.lngLat.lat, e.lngLat.lng])
         })
 
             // Store refs
@@ -512,6 +580,55 @@ export function ForecastMap({
             map.remove()
         }
     }, []) // Init once
+
+    // ESC key handler to clear selection
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === "Escape" && selectedIdRef.current) {
+                const map = mapRef.current
+                if (map) {
+                    const zoom = map.getZoom()
+                    const sourceLayer = getSourceLayer(zoom)
+                        ;["forecast-a", "forecast-b"].forEach((s) => {
+                            try {
+                                map.setFeatureState(
+                                    { source: s, sourceLayer, id: selectedIdRef.current! },
+                                    { selected: false }
+                                )
+                            } catch (err) { /* ignore */ }
+                        })
+                }
+                selectedIdRef.current = null
+                setSelectedId(null)
+                setSelectedProps(null)
+                setFixedTooltipPos(null)
+                setFanChartData(null)
+                setHistoricalValues(undefined)
+                setComparisonData(null)
+                setComparisonHistoricalValues(undefined)
+                comparisonFetchRef.current = null
+                detailFetchRef.current = null
+                onFeatureSelect(null)
+            }
+        }
+        window.addEventListener("keydown", handleKeyDown)
+        return () => window.removeEventListener("keydown", handleKeyDown)
+    }, [onFeatureSelect])
+
+    // UPDATE MODE — reactive fill-color paint
+    useEffect(() => {
+        if (!isLoaded || !mapRef.current) return
+        const map = mapRef.current
+        const newColor = buildFillColor(filters.mode)
+        for (const lvl of GEO_LEVELS) {
+            for (const suffix of ["a", "b"]) {
+                const layerId = `forecast-fill-${lvl.name}-${suffix}`
+                if (map.getLayer(layerId)) {
+                    map.setPaintProperty(layerId, "fill-color", newColor)
+                }
+            }
+        }
+    }, [filters.mode, isLoaded])
 
     // UPDATE YEAR — Seamless A/B swap (same pattern as vector-map.tsx)
     useEffect(() => {
@@ -619,7 +736,92 @@ export function ForecastMap({
 
     // Determine display tooltip info
     const displayPos = selectedId && fixedTooltipPos ? fixedTooltipPos : tooltipData
-    const displayProps = tooltipData?.properties
+    // When locked, show the SELECTED feature's properties (not hover)
+    const displayProps = selectedId && selectedProps ? selectedProps : tooltipData?.properties
+
+    // Comparison: when locked, fetch comparison detail for hovered feature
+    // Skip updates when Shift is held (freeze current comparison)
+    useEffect(() => {
+        if (isShiftHeld) return // freeze comparison
+        if (!selectedId || !tooltipData?.properties) {
+            setComparisonData(null)
+            setComparisonHistoricalValues(undefined)
+            comparisonFetchRef.current = null
+            return
+        }
+        const hoveredId = tooltipData.properties.id as string
+        if (!hoveredId || hoveredId === selectedId) {
+            setComparisonData(null)
+            setComparisonHistoricalValues(undefined)
+            comparisonFetchRef.current = null
+            return
+        }
+        // Debounce comparison fetch
+        if (comparisonTimerRef.current) clearTimeout(comparisonTimerRef.current)
+        comparisonTimerRef.current = setTimeout(async () => {
+            const map = mapRef.current
+            if (!map) return
+            const zoom = map.getZoom()
+            const level = getSourceLayer(zoom)
+            const cacheKey = `${level}:${hoveredId}`
+            if (comparisonFetchRef.current === cacheKey) return
+            comparisonFetchRef.current = cacheKey
+            try {
+                const res = await fetch(`/api/forecast-detail?level=${level}&id=${encodeURIComponent(hoveredId)}&originYear=${originYear}`)
+                if (!res.ok) return
+                const json = await res.json()
+                if (json.years?.length > 0) {
+                    setComparisonData(json as FanChartData)
+                } else {
+                    setComparisonData(null)
+                }
+                if (json.historicalValues?.some((v: any) => v != null)) {
+                    setComparisonHistoricalValues(json.historicalValues)
+                } else {
+                    setComparisonHistoricalValues(undefined)
+                }
+            } catch {
+                setComparisonData(null)
+                setComparisonHistoricalValues(undefined)
+            }
+        }, 200)
+        return () => {
+            if (comparisonTimerRef.current) clearTimeout(comparisonTimerRef.current)
+        }
+    }, [selectedId, tooltipData?.properties?.id, originYear, isShiftHeld])
+
+    // Viewport Y domain: compute from visible features on moveend
+    useEffect(() => {
+        if (!mapRef.current || !isLoaded) return
+        const map = mapRef.current
+        const computeYDomain = () => {
+            const zoom = map.getZoom()
+            const sourceLayer = getSourceLayer(zoom)
+            const activeSuffix = (map as any)._activeSuffix || 'a'
+            const layerId = `forecast-fill-${sourceLayer}-${activeSuffix}`
+            if (!map.getLayer(layerId)) return
+            const features = map.queryRenderedFeatures(undefined, { layers: [layerId] })
+            if (features.length === 0) return
+            const allVals: number[] = []
+            for (const f of features) {
+                const p = f.properties
+                if (p?.value != null && Number.isFinite(p.value)) allVals.push(p.value)
+                if (p?.p10 != null && Number.isFinite(p.p10)) allVals.push(p.p10)
+                if (p?.p90 != null && Number.isFinite(p.p90)) allVals.push(p.p90)
+            }
+            if (allVals.length < 2) return
+            allVals.sort((a, b) => a - b)
+            // Use P10/P90 of visible values to exclude outliers
+            const lo = allVals[Math.floor(allVals.length * 0.1)]
+            const hi = allVals[Math.ceil(allVals.length * 0.9) - 1]
+            if (lo < hi) {
+                setViewportYDomain([lo, hi])
+            }
+        }
+        map.on('moveend', computeYDomain)
+        computeYDomain() // compute initial
+        return () => { map.off('moveend', computeYDomain) }
+    }, [isLoaded])
 
     return (
         <div className={cn("relative w-full h-full", className)}>
@@ -636,114 +838,212 @@ export function ForecastMap({
                 </div>
             )}
 
-            {/* Forecast Tooltip - styled to match MapTooltip */}
-            {isLoaded && displayPos && displayProps && (
+            {/* Forecast Tooltip — portal-based, responsive for mobile + desktop */}
+            {isLoaded && displayPos && displayProps && createPortal(
                 <div
-                    className="fixed z-[9999] pointer-events-none"
-                    style={{
+                    className={cn(
+                        "z-[9999] glass-panel shadow-2xl overflow-hidden",
+                        isMobile
+                            ? "fixed bottom-0 left-0 right-0 w-full rounded-t-xl rounded-b-none border-t border-x-0 border-b-0 pointer-events-auto"
+                            : "fixed rounded-xl w-[320px]",
+                        !isMobile && (selectedId ? "pointer-events-auto cursor-move" : "pointer-events-none")
+                    )}
+                    style={isMobile ? {
+                        transform: `translateY(calc(${mobileMinimized ? '100% - 24px' : '0px'} + ${swipeDragOffset}px))`,
+                        transition: swipeTouchStart === null ? 'transform 0.3s ease-out' : 'none',
+                        maxHeight: '55vh',
+                        overflowY: 'hidden',
+                    } : {
                         left: displayPos.globalX,
                         top: displayPos.globalY,
+                        maxHeight: 'calc(100vh - 40px)',
+                        overflowY: 'auto',
                     }}
+                    onTouchStart={isMobile ? (e) => setSwipeTouchStart(e.touches[0].clientY) : undefined}
+                    onTouchMove={isMobile ? (e) => {
+                        if (swipeTouchStart === null) return
+                        const delta = e.touches[0].clientY - swipeTouchStart
+                        if (mobileMinimized) { if (delta < 0) setSwipeDragOffset(delta) }
+                        else { if (delta > 0) setSwipeDragOffset(delta) }
+                    } : undefined}
+                    onTouchEnd={isMobile ? () => {
+                        if (mobileMinimized) {
+                            if (swipeDragOffset < -50) setMobileMinimized(false)
+                        } else {
+                            if (swipeDragOffset > 150) {
+                                // Dismiss completely
+                                onFeatureSelect(null)
+                            } else if (swipeDragOffset > 50) {
+                                setMobileMinimized(true)
+                            }
+                        }
+                        setSwipeDragOffset(0)
+                        setSwipeTouchStart(null)
+                    } : undefined}
                 >
-                    <div className="glass-panel shadow-2xl overflow-hidden rounded-xl w-[320px]">
-                        {/* Header - matching MapTooltip */}
-                        <div className="flex items-center justify-between px-3 py-2 border-b border-border/50 bg-muted/40 backdrop-blur-md">
-                            <div className="flex items-center gap-2">
-                                <HomecastrLogo size={18} />
-                                <span className="font-bold text-[10px] tracking-wide text-foreground uppercase">Homecastr</span>
-                                <span className="px-1.5 py-0.5 bg-violet-500/20 text-violet-400 text-[8px] font-semibold uppercase tracking-wider rounded">Forecast</span>
-                            </div>
+                    {/* Mobile Drag Handle */}
+                    {isMobile && (
+                        <div className="w-full flex justify-center py-2 bg-muted/40 backdrop-blur-md cursor-grab active:cursor-grabbing">
+                            <div className="w-10 h-1 bg-muted-foreground/30 rounded-full" />
                         </div>
+                    )}
 
-                        {/* Subheader - geography level */}
-                        <div className="p-3 border-b border-border/50 bg-muted/30">
-                            <div className="flex justify-between items-start">
-                                <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">
-                                    {getLevelLabel(mapRef.current?.getZoom() || 10)} Scale
+                    {/* Header - matching MapTooltip (hidden on mobile) */}
+                    {!isMobile && (
+                        <>
+                            <div className="flex items-center justify-between px-3 py-2 border-b border-border/50 bg-muted/40 backdrop-blur-md">
+                                <div className="flex items-center gap-2">
+                                    <HomecastrLogo size={18} />
+                                    <span className="font-bold text-[10px] tracking-wide text-foreground uppercase">Homecastr</span>
+                                    <span className="px-1.5 py-0.5 bg-violet-500/20 text-violet-400 text-[8px] font-semibold uppercase tracking-wider rounded">Forecast</span>
+                                    {selectedId && (
+                                        <span className="px-1.5 py-0.5 bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 text-[8px] font-semibold uppercase tracking-wider rounded">Locked</span>
+                                    )}
                                 </div>
-                                <div className="text-[9px] px-1.5 py-0.5 bg-primary/10 text-primary rounded-full font-bold">
-                                    {displayProps.n != null ? `${displayProps.n} Prop` : ""}
+                                {selectedId && <span className="text-[9px] text-muted-foreground">ESC to exit</span>}
+                            </div>
+
+                            {/* Subheader - geography level */}
+                            <div className="p-3 border-b border-border/50 bg-muted/30">
+                                <div className="flex justify-between items-start">
+                                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">
+                                        {getLevelLabel(mapRef.current?.getZoom() || 10)} Scale
+                                    </div>
+                                    <div className="text-[9px] px-1.5 py-0.5 bg-primary/10 text-primary rounded-full font-bold">
+                                        {displayProps.n != null ? `${displayProps.n} Prop` : ""}
+                                    </div>
+                                </div>
+                                <div className="font-mono text-xs text-muted-foreground truncate">
+                                    {displayProps.id}
                                 </div>
                             </div>
-                            <div className="font-mono text-xs text-muted-foreground truncate">
-                                {displayProps.id}
-                            </div>
+                        </>
+                    )}
+
+                    {/* Street View Carousel */}
+                    {process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY && tooltipCoords && (
+                        <StreetViewCarousel
+                            h3Ids={[]}
+                            apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY}
+                            coordinates={tooltipCoords}
+                        />
+                    )}
+
+                    {/* Content Body */}
+                    {isMobile ? (
+                        /* Mobile Layout: [Now] [Chart] [Forecast] with values flanking */
+                        <div className="px-2 py-2">
+                            {(() => {
+                                const currentVal = historicalValues?.[historicalValues.length - 1] ?? null
+                                const forecastVal = displayProps.p50 ?? displayProps.value ?? null
+                                const pctChange = currentVal && forecastVal ? ((forecastVal - currentVal) / currentVal * 100) : null
+                                return (
+                                    <>
+                                        <div className="flex items-stretch gap-1">
+                                            {/* Left: Current value */}
+                                            <div className="flex flex-col justify-center items-center min-w-[55px] max-w-[80px] shrink-0 text-center">
+                                                <div className="text-[8px] uppercase tracking-wider text-muted-foreground font-semibold">2026</div>
+                                                <div className="text-xs font-bold text-foreground">{formatValue(currentVal)}</div>
+                                            </div>
+                                            {/* Center: FanChart */}
+                                            <div className="flex-1 min-w-0 h-[150px]">
+                                                {fanChartData ? (
+                                                    <FanChart data={fanChartData} currentYear={year} height={150} historicalValues={historicalValues} comparisonData={comparisonData} comparisonHistoricalValues={comparisonHistoricalValues} yDomain={viewportYDomain} />
+                                                ) : isLoadingDetail ? (
+                                                    <div className="h-full flex items-center justify-center">
+                                                        <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                                                    </div>
+                                                ) : null}
+                                            </div>
+                                            {/* Right: Forecast value + % change */}
+                                            <div className="flex flex-col justify-center items-center min-w-[55px] max-w-[80px] shrink-0 text-center">
+                                                <div className="text-[8px] uppercase tracking-wider text-muted-foreground font-semibold">{year}</div>
+                                                <div className="text-xs font-bold text-foreground">{formatValue(forecastVal)}</div>
+                                                {pctChange != null && (
+                                                    <div className={`text-[9px] font-bold ${pctChange >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                                                        {pctChange >= 0 ? '▲' : '▼'} {Math.abs(pctChange).toFixed(1)}%
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </>
+                                )
+                            })()}
                         </div>
+                    ) : (
+                        /* Desktop Layout: Values above, full-width chart below */
+                        <div className="p-4 space-y-3">
+                            {/* Current → Forecast header with % change */}
+                            {(() => {
+                                const currentVal = historicalValues?.[historicalValues.length - 1] ?? null
+                                const forecastVal = displayProps.p50 ?? displayProps.value ?? null
+                                const pctChange = currentVal && forecastVal ? ((forecastVal - currentVal) / currentVal * 100) : null
+                                return (
+                                    <div className="flex items-center justify-between gap-3">
+                                        <div className="text-center flex-1">
+                                            <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">2026</div>
+                                            <div className="text-lg font-bold text-foreground tracking-tight">{formatValue(currentVal)}</div>
+                                        </div>
+                                        <div className="text-center shrink-0">
+                                            {pctChange != null && (
+                                                <div className={`text-sm font-bold ${pctChange >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                                                    {pctChange >= 0 ? '▲' : '▼'} {Math.abs(pctChange).toFixed(1)}%
+                                                </div>
+                                            )}
+                                            <div className="text-[9px] text-muted-foreground">→ {year}</div>
+                                        </div>
+                                        <div className="text-center flex-1">
+                                            <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">{year}</div>
+                                            <div className="text-lg font-bold text-foreground tracking-tight">{formatValue(forecastVal)}</div>
+                                        </div>
+                                    </div>
+                                )
+                            })()}
 
-                        {/* Content Body - matching MapTooltip desktop layout */}
-                        <div className="p-4 space-y-5">
-                            <div className="grid grid-cols-2 gap-3">
-                                <div className="text-center pl-6">
-                                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">
-                                        Forecast ({year})
+                            {/* Fan Chart full-width with P-values overlaid top-right */}
+                            <div className="relative h-52 -mx-2">
+                                {fanChartData ? (
+                                    <FanChart
+                                        data={fanChartData}
+                                        currentYear={year}
+                                        height={200}
+                                        historicalValues={historicalValues}
+                                        comparisonData={comparisonData}
+                                        comparisonHistoricalValues={comparisonHistoricalValues}
+                                        yDomain={viewportYDomain}
+                                    />
+                                ) : isLoadingDetail ? (
+                                    <div className="h-full flex items-center justify-center">
+                                        <div className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
                                     </div>
-                                    <div className="text-xl font-bold text-foreground tracking-tight">
-                                        {formatValue(displayProps.p50 ?? displayProps.value)}
+                                ) : null}
+
+                                {/* P-values overlay — top-right corner */}
+                                {(displayProps.p10 != null || displayProps.p90 != null) && (
+                                    <div className="absolute top-5 right-4 text-[8px] leading-snug rounded px-1 py-0.5" style={{ textShadow: '0 0 3px var(--background), 0 0 3px var(--background)' }}>
+                                        <div className="flex items-baseline gap-1">
+                                            <span className="font-medium text-[9px]">{formatValue(displayProps.p90)}</span>
+                                            <span className="text-muted-foreground/50">P90</span>
+                                        </div>
+                                        <div className="flex items-baseline gap-1">
+                                            <span className="font-medium text-[9px]">{formatValue(displayProps.p75)}</span>
+                                            <span className="text-muted-foreground/50">P75</span>
+                                        </div>
+                                        <div className="flex items-baseline gap-1 bg-primary/10 rounded px-0.5">
+                                            <span className="font-bold text-[9px] text-primary">{formatValue(displayProps.p50 ?? displayProps.value)}</span>
+                                            <span className="text-primary/70">P50</span>
+                                        </div>
+                                        <div className="flex items-baseline gap-1">
+                                            <span className="font-medium text-[9px]">{formatValue(displayProps.p25)}</span>
+                                            <span className="text-muted-foreground/50">P25</span>
+                                        </div>
+                                        <div className="flex items-baseline gap-1">
+                                            <span className="font-medium text-[9px]">{formatValue(displayProps.p10)}</span>
+                                            <span className="text-muted-foreground/50">P10</span>
+                                        </div>
                                     </div>
-                                </div>
-                                <div className="text-center pr-6">
-                                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Horizon</div>
-                                    <div className="text-xl font-bold text-foreground tracking-tight">
-                                        {displayProps.horizon_m != null ? `+${displayProps.horizon_m}mo` : "—"}
-                                    </div>
-                                    <div className="text-[10px] text-muted-foreground mt-1">
-                                        Origin {displayProps.origin_year ?? originYear}
-                                    </div>
-                                </div>
+                                )}
                             </div>
-
-                            {/* Fan Chart - multi-horizon forecast */}
-                            {fanChartData ? (
-                                <div className="space-y-2">
-                                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold flex justify-between">
-                                        <span>Value Timeline</span>
-                                        <span className="text-primary/70">{year}</span>
-                                    </div>
-                                    <div className="h-44 -mx-2 mb-2">
-                                        <FanChart
-                                            data={fanChartData}
-                                            currentYear={year}
-                                            height={160}
-                                            historicalValues={historicalValues}
-                                        />
-                                    </div>
-                                </div>
-                            ) : isLoadingDetail ? (
-                                <div className="h-32 flex items-center justify-center">
-                                    <div className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-                                </div>
-                            ) : null}
-
-                            {/* Fan quantiles - P10 to P90 */}
-                            {(displayProps.p10 != null || displayProps.p90 != null) && (
-                                <div className="space-y-2">
-                                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
-                                        Prediction Interval
-                                    </div>
-                                    <div className="grid grid-cols-5 gap-1 text-center text-[9px]">
-                                        <div>
-                                            <div className="text-muted-foreground/60">P10</div>
-                                            <div className="font-medium">{formatValue(displayProps.p10)}</div>
-                                        </div>
-                                        <div>
-                                            <div className="text-muted-foreground/60">P25</div>
-                                            <div className="font-medium">{formatValue(displayProps.p25)}</div>
-                                        </div>
-                                        <div className="bg-primary/10 rounded px-1">
-                                            <div className="text-primary/80">P50</div>
-                                            <div className="font-bold text-primary">{formatValue(displayProps.p50 ?? displayProps.value)}</div>
-                                        </div>
-                                        <div>
-                                            <div className="text-muted-foreground/60">P75</div>
-                                            <div className="font-medium">{formatValue(displayProps.p75)}</div>
-                                        </div>
-                                        <div>
-                                            <div className="text-muted-foreground/60">P90</div>
-                                            <div className="font-medium">{formatValue(displayProps.p90)}</div>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
 
                             <div className="pt-1 mt-0 border-t border-border/50 text-center">
                                 <div className="text-[9px] text-muted-foreground flex justify-center items-center gap-1.5">
@@ -751,9 +1051,30 @@ export function ForecastMap({
                                     <span>AI Forecast • {displayProps.series_kind ?? "forecast"}</span>
                                 </div>
                             </div>
+
+                            {/* Talk to Homecastr button — only when selected */}
+                            {selectedId && onConsultAI && (
+                                <div className="pt-2 mt-1 border-t border-border/50">
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation()
+                                            onConsultAI({
+                                                predictedValue: displayProps.p50 ?? displayProps.value ?? null,
+                                                opportunityScore: null,
+                                                capRate: null,
+                                            })
+                                        }}
+                                        className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-primary/15 hover:bg-primary/25 border border-primary/30 text-primary text-xs font-semibold transition-all hover:scale-[1.02] active:scale-[0.98]"
+                                    >
+                                        <Bot className="w-3.5 h-3.5" />
+                                        Talk to Homecastr
+                                    </button>
+                                </div>
+                            )}
                         </div>
-                    </div>
-                </div>
+                    )}
+                </div>,
+                document.body
             )}
 
             {/* Forecast mode badge */}

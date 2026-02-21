@@ -5,8 +5,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { cn } from "@/lib/utils"
 
 // Continuous legend gradient
-// Purple (Hue 300) -> White (Purple Hue) -> White (Blue Hue) -> Blue (Hue 240)
-const OPPORTUNITY_GRADIENT = "linear-gradient(to right, oklch(0.55 0.22 300), oklch(0.97 0 300) 50%, oklch(0.97 0 240) 50%, oklch(0.55 0.22 240))"
+// Growth mode: red-amber-white-blue (diverging around median)
+const OPPORTUNITY_GRADIENT = "linear-gradient(to right, #ef4444, #f59e0b 30%, #f8f8f8 50%, #60a5fa 70%, #3b82f6)"
 
 // Magma-like: Deep Purple -> Red -> Orange -> Yellow
 const VALUE_GRADIENT = "linear-gradient(to right, oklch(0.25 0.10 280), oklch(0.60 0.20 30), oklch(0.95 0.15 80))"
