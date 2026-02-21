@@ -5,10 +5,10 @@ interface HomecastrLogoProps {
     size?: number
 }
 
-export function HomecastrLogo({ className = "", size = 24 }: HomecastrLogoProps) {
+export function HomecastrLogo({ className = "", size = 32 }: HomecastrLogoProps) {
     return (
         <Image
-            src="/homecastr-logo.png"
+            src="/homecastr-logo-cropped.png"
             alt="Homecastr"
             width={size}
             height={size}
