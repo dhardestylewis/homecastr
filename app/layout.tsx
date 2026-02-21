@@ -11,8 +11,8 @@ export const metadata: Metadata = {
   title: "Homecastr - Home Forecasts",
   description: "Interactive dashboard for real estate investment analysis and model diagnostics",
   icons: {
-    icon: "/homecastr-icon.svg",
-    apple: "/homecastr-icon.svg",
+    icon: "/homecastr-logo.png",
+    apple: "/homecastr-logo.png",
   },
 }
 
