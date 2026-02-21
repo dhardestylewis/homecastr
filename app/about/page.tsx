@@ -1,5 +1,6 @@
 import Link from 'next/link'
-import { ArrowRight, BarChart3, Building2, Globe, Layers, Sparkles, TrendingUp, Terminal } from 'lucide-react'
+import { ArrowRight, BarChart3, Globe, Layers, Sparkles, TrendingUp, Terminal } from 'lucide-react'
+import { HomecastrLogo } from '@/components/homecastr-logo'
 import { FanChart } from '@/components/fan-chart'
 
 // Static demo data for landing page FanChart — realistic Houston ~$300K property
@@ -270,7 +271,7 @@ export default function AboutPage() {
                 <section className="max-w-6xl mx-auto px-6 py-24 md:py-32">
                     <div className="max-w-3xl">
                         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-[10px] font-bold uppercase tracking-widest mb-8">
-                            <Building2 className="w-3 h-3" />
+                            <HomecastrLogo size={12} />
                             For Real Estate Investors &amp; Operators
                         </div>
                         <h2 className="text-4xl md:text-5xl font-bold tracking-tight leading-[1.1] mb-6">
@@ -339,7 +340,7 @@ export default function AboutPage() {
                     <div className="grid md:grid-cols-2 gap-16 items-center">
                         <div className="p-8 rounded-2xl glass-panel">
                             <div className="flex items-center gap-3 mb-6">
-                                <Building2 className="w-5 h-5 text-primary" />
+                                <HomecastrLogo size={20} />
                                 <span className="font-bold">Built for</span>
                             </div>
                             <ul className="space-y-3 text-sm text-muted-foreground">

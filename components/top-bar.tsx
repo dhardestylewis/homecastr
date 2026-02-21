@@ -1,6 +1,7 @@
 "use client"
 
-import { Building2, Menu, X } from "lucide-react"
+import { Menu, X } from "lucide-react"
+import { HomecastrLogo } from "./homecastr-logo"
 import { Button } from "@/components/ui/button"
 import { SearchBox } from "./search-box"
 import type { FilterState } from "@/lib/types"
@@ -36,7 +37,7 @@ export function TopBar({ filters, isFiltersPanelOpen, onToggleFiltersPanel, onSe
         >
           {isFiltersPanelOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         </Button>
-        <Building2 className="h-6 w-6 text-primary" />
+        <HomecastrLogo size={24} />
         <span className="font-semibold text-lg hidden sm:inline">Homecastr</span>
       </div>
 
