@@ -1,7 +1,14 @@
 "use server"
 
 import { z } from "zod"
+import { initLogger, traced, flush } from "braintrust"
 
+if (typeof process !== "undefined" && process.env.BRAINTRUST_API_KEY) {
+  initLogger({
+    projectName: "Homecastr",
+    apiKey: process.env.BRAINTRUST_API_KEY,
+  })
+}
 
 /**
  * Server action to create a Tavus Conversational Video Agent session.
@@ -240,23 +247,33 @@ COMPARISON WORKFLOW (CRITICAL):
           }
         };
 
-        const personaRes = await fetch("https://tavusapi.com/v2/personas", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Api-Key": apiKey,
-          },
-          body: JSON.stringify(personaBody),
-        });
+        const personaResult = await traced(async (span) => {
+          const personaRes = await fetch("https://tavusapi.com/v2/personas", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Api-Key": apiKey,
+            },
+            body: JSON.stringify(personaBody),
+          });
 
-        if (!personaRes.ok) {
-          const errText = await personaRes.text();
-          console.error(`[TAVUS] Persona Creation Failed: ${personaRes.status} - ${errText}`);
-          return { error: `Failed to create persona: ${errText}` };
+          if (!personaRes.ok) {
+            const errText = await personaRes.text();
+            span.log({ input: { persona_name: personaBody.persona_name }, output: { error: errText }, metadata: { status: personaRes.status } });
+            return { error: errText, status: personaRes.status };
+          }
+
+          const data = await personaRes.json();
+          span.log({ input: { persona_name: personaBody.persona_name, model: "tavus-gpt-oss" }, output: { persona_id: data.persona_id }, metadata: { status: personaRes.status } });
+          return { persona_id: data.persona_id };
+        }, { name: "Tavus Persona Creation" });
+
+        if (personaResult.error) {
+          console.error(`[TAVUS] Persona Creation Failed: ${personaResult.status} - ${personaResult.error}`);
+          return { error: `Failed to create persona: ${personaResult.error}` };
         }
 
-        const personaData = await personaRes.json();
-        activePersonaId = personaData.persona_id;
+        activePersonaId = personaResult.persona_id;
         console.log(`[TAVUS] Created transient persona: ${activePersonaId}`);
       } catch (e) {
         console.error("[TAVUS] Error creating persona:", e);
@@ -284,28 +301,42 @@ COMPARISON WORKFLOW (CRITICAL):
       body.replica_id = replicaId
     }
 
-    const response = await fetch("https://tavusapi.com/v2/conversations", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-      },
-      body: JSON.stringify(body),
-    })
+    const result = await traced(async (span) => {
+      const response = await fetch("https://tavusapi.com/v2/conversations", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+        },
+        body: JSON.stringify(body),
+      })
 
-    if (!response.ok) {
-      const errorText = await response.text()
-      console.error("[TAVUS] API error:", response.status, errorText)
-      return { error: `Tavus API error: ${response.status} - ${errorText}` }
+      if (!response.ok) {
+        const errorText = await response.text()
+        span.log({ input: { persona_id: activePersonaId, address }, output: { error: errorText }, metadata: { status: response.status } })
+        console.error("[TAVUS] API error:", response.status, errorText)
+        return { error: `Tavus API error: ${response.status} - ${errorText}` }
+      }
+
+      const data = await response.json()
+      span.log({
+        input: { persona_id: activePersonaId, address },
+        output: { conversation_id: data.conversation_id },
+        metadata: { status: response.status },
+      })
+      console.log("[TAVUS] Conversation created:", data.conversation_id)
+
+      return {
+        conversation_id: data.conversation_id,
+        conversation_url: data.conversation_url,
+      }
+    }, { name: "Tavus Conversation Creation" })
+
+    if (process.env.BRAINTRUST_API_KEY) {
+      await flush().catch(() => {})
     }
 
-    const data = await response.json()
-    console.log("[TAVUS] Conversation created:", data.conversation_id)
-
-    return {
-      conversation_id: data.conversation_id,
-      conversation_url: data.conversation_url,
-    }
+    return result
   } catch (err) {
     console.error("[TAVUS] Unexpected error:", err)
     return { error: `Unexpected error: ${err instanceof Error ? err.message : String(err)}` }
