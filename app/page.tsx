@@ -3,6 +3,7 @@
 import React, { useState, useCallback, Suspense, useEffect } from "react"
 import { MapView } from "@/components/map-view"
 import { VectorMap } from "@/components/vector-map"
+import { ForecastMap } from "@/components/forecast-map"
 import H3Map from "@/components/h3-map"
 import { Legend } from "@/components/legend"
 import { cn, getZoomForRes } from "@/lib/utils"
@@ -14,7 +15,7 @@ import { useToast } from "@/hooks/use-toast"
 import type { PropertyForecast } from "@/app/actions/property-forecast"
 import { TimeControls } from "@/components/time-controls"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { AlertCircle, Plus, Minus, RotateCcw, ArrowLeftRight, Copy, Bot, Terminal } from "lucide-react"
+import { AlertCircle, Plus, Minus, RotateCcw, ArrowLeftRight, Copy, Bot, Terminal, Activity } from "lucide-react"
 import { geocodeAddress, reverseGeocode } from "@/app/actions/geocode"
 
 import { cellToLatLng, latLngToCell } from "h3-js"
@@ -358,7 +359,17 @@ function DashboardContent() {
           </Alert>
         )}
 
-        {filters.useVectorMap ? (
+        {filters.useForecastMap ? (
+          <ForecastMap
+            filters={filters}
+            mapState={mapState}
+            onFeatureSelect={selectFeature}
+            onFeatureHover={hoverFeature}
+            year={currentYear}
+            className="absolute inset-0 z-0"
+            onConsultAI={handleConsultAI}
+          />
+        ) : filters.useVectorMap ? (
           <VectorMap
             filters={filters}
             mapState={mapState}
@@ -455,6 +466,26 @@ function DashboardContent() {
             <div className={cn(
               "w-2 h-2 rounded-full",
               filters.useVectorMap ? "bg-primary animate-pulse" : "bg-muted-foreground/30"
+            )} />
+          </button>
+
+          {/* Forecast Map Toggle */}
+          <button
+            onClick={() => setFilters({ useForecastMap: !filters.useForecastMap, useVectorMap: false })}
+            className={cn(
+              "w-full py-1.5 px-3 rounded-lg border text-[10px] font-bold uppercase tracking-wider transition-all shadow-sm flex items-center justify-between",
+              filters.useForecastMap
+                ? "bg-violet-500/20 border-violet-500/50 text-violet-300"
+                : "bg-muted/30 border-border/50 text-muted-foreground hover:bg-muted/50"
+            )}
+          >
+            <span className="flex items-center gap-1.5">
+              <Activity className="w-3 h-3" />
+              Forecast Choropleth
+            </span>
+            <div className={cn(
+              "w-2 h-2 rounded-full",
+              filters.useForecastMap ? "bg-violet-500 animate-pulse" : "bg-muted-foreground/30"
             )} />
           </button>
 

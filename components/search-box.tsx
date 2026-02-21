@@ -111,7 +111,7 @@ export function SearchBox({ onSearch, placeholder = "Search address or ID...", v
         <div className="glass-panel shadow-lg h-10 flex items-center px-3 gap-3 rounded-md w-full md:w-80 md:focus-within:w-[480px] transition-all duration-300 ease-in-out">
           {/* Branding */}
           <div className="flex items-center gap-2 text-primary shrink-0 border-r border-border pr-3">
-            <HomecastrLogo size={16} />
+            <HomecastrLogo size={20} />
             <span className="font-bold text-sm tracking-tight hidden sm:inline-block text-foreground">Homecastr</span>
           </div>
 

@@ -301,6 +301,7 @@ export interface FilterState {
   layerOverride?: number
   usePMTiles?: boolean
   useVectorMap?: boolean
+  useForecastMap?: boolean
   dscrMin?: number
   scoreMin?: number
   excludeAlerts?: boolean
