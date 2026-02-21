@@ -4,15 +4,17 @@ import React, { useEffect, useRef } from 'react';
 import maplibregl, { AddLayerObject } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { Protocol } from 'pmtiles';
+import type { MapState } from '@/lib/types';
 
 const PMTILES_URL = 'http://localhost:3000/tiles/h3_data.pmtiles';
 
 interface H3MapProps {
     year?: number;
     colorMode?: "growth" | "value";
+    mapState?: MapState;
 }
 
-export default function H3Map({ year = 2026, colorMode = "growth" }: H3MapProps) {
+export default function H3Map({ year = 2026, colorMode = "growth", mapState }: H3MapProps) {
     const mapContainer = useRef<HTMLDivElement>(null);
     const map = useRef<maplibregl.Map | null>(null);
     const currentYear = useRef<number>(year);
@@ -28,7 +30,7 @@ export default function H3Map({ year = 2026, colorMode = "growth" }: H3MapProps)
 
         map.current = new maplibregl.Map({
             container: mapContainer.current,
-            style: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
+            style: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
             center: [-95.36, 29.76], // Houston
             zoom: 10,
             pitch: 0,
@@ -55,23 +57,23 @@ export default function H3Map({ year = 2026, colorMode = "growth" }: H3MapProps)
                 const layerId = `h3-res${res}-fill`;
 
                 // Growth mode color scale (opportunity-based)
-                const growthColorExpr = [
+                const growthColorExpr: any = [
                     'interpolate',
                     ['linear'],
                     ['get', 'opportunity_pct'],
-                    -50, '#8b5cf6',  // Purple for negative
-                    0, '#f5f5f5',    // White for neutral
-                    50, '#3b82f6'    // Blue for positive
+                    -50, '#be123c',  // Rose
+                    0, '#e2e8f0',    // Soft Slate (Neutral)
+                    50, '#059669'    // Emerald/Sage
                 ];
 
                 // Value mode color scale (med_predicted_value-based)
-                const valueColorExpr = [
+                const valueColorExpr: any = [
                     'interpolate',
                     ['linear'],
                     ['coalesce', ['get', 'med_predicted_value'], 0],
-                    100000, '#3d1f5c',   // Deep purple (low)
-                    500000, '#c44536',   // Red-orange (mid)
-                    1500000, '#f5e663'   // Yellow (high)
+                    100000, '#4a1d96', // Deep Purple
+                    500000, '#be123c', // Rose
+                    1500000, '#d97706' // Warm Amber
                 ];
 
                 map.current?.addLayer({
@@ -171,18 +173,18 @@ export default function H3Map({ year = 2026, colorMode = "growth" }: H3MapProps)
             'interpolate',
             ['linear'],
             ['get', 'opportunity_pct'],
-            -50, '#8b5cf6',
-            0, '#f5f5f5',
-            50, '#3b82f6'
+            -50, '#be123c',
+            0, '#e2e8f0',
+            50, '#059669'
         ];
 
         const valueColorExpr: any = [
             'interpolate',
             ['linear'],
             ['coalesce', ['get', 'med_predicted_value'], 0],
-            100000, '#3d1f5c',
-            500000, '#c44536',
-            1500000, '#f5e663'
+            100000, '#4a1d96',
+            500000, '#be123c',
+            1500000, '#d97706'
         ];
 
         resLevels.forEach(res => {
@@ -196,6 +198,52 @@ export default function H3Map({ year = 2026, colorMode = "growth" }: H3MapProps)
             }
         });
     }, [colorMode]);
+
+    // Sync with external mapState (Search / Tavus / URL)
+    useEffect(() => {
+        if (!map.current || !mapState) return;
+
+        console.log(`[H3Map] Syncing camera to:`, mapState.center, mapState.zoom);
+
+        map.current.flyTo({
+            center: mapState.center,
+            zoom: mapState.zoom,
+            essential: true
+        });
+    }, [mapState?.center, mapState?.zoom]);
+
+    // Handle Highlighting and Selection in PMTiles
+    useEffect(() => {
+        if (!map.current || !map.current.isStyleLoaded() || !mapState) return;
+
+        const selectedId = mapState.selectedId;
+        const highlightedIds = mapState.highlightedIds || [];
+        const allHighlightIds = Array.from(new Set([
+            ...(selectedId ? [selectedId] : []),
+            ...highlightedIds
+        ]));
+
+        resLevels.forEach(res => {
+            const hoverLayerId = `h3-res${res}-hover`;
+            if (map.current?.getLayer(hoverLayerId)) {
+                if (allHighlightIds.length > 0) {
+                    // Match any of the highlighted IDs
+                    map.current.setFilter(hoverLayerId, [
+                        'all',
+                        ['==', ['get', 'forecast_year'], currentYear.current],
+                        ['match', ['get', 'h3_id'], allHighlightIds, true, false]
+                    ]);
+                } else {
+                    // Clear highlights
+                    map.current.setFilter(hoverLayerId, [
+                        'all',
+                        ['==', ['get', 'forecast_year'], currentYear.current],
+                        ['==', 'h3_id', '']
+                    ]);
+                }
+            }
+        });
+    }, [mapState?.selectedId, mapState?.highlightedIds]);
 
     return <div ref={mapContainer} style={{ width: '100%', height: '100%' }} />;
 }

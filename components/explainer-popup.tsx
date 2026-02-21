@@ -62,7 +62,7 @@ export function ExplainerPopup() {
             >
                 <div
                     className={`
-                        bg-[#0f172a] border border-border/50 text-foreground w-full rounded-2xl shadow-2xl overflow-hidden glass-panel 
+                        bg-background border border-border/50 text-foreground w-full rounded-2xl shadow-2xl overflow-hidden glass-panel 
                         transition-all duration-1000 ease-[cubic-bezier(0.4,0,0.2,1)]
                         ${isMinimized
                             ? "opacity-0 scale-[0.05]" // Shrink and fade
@@ -76,11 +76,11 @@ export function ExplainerPopup() {
                     {/* Header */}
                     <div className="p-6 border-b border-white/10 bg-white/5 flex justify-between items-start">
                         <div>
-                            <h2 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-teal-400 to-amber-400">
+                            <h2 className="text-2xl font-bold text-foreground">
                                 Welcome to Homecastr
                             </h2>
-                            <p className="text-muted-foreground mt-1">
-                                A powerful platform for visualizing real estate value trends, forecasts, and confidence metrics.
+                            <p className="text-muted-foreground mt-1 text-sm font-medium">
+                                Smarter models. Clearer forecasts.
                             </p>
                         </div>
                     </div>
@@ -90,23 +90,23 @@ export function ExplainerPopup() {
                         <div className="grid md:grid-cols-2 gap-6">
                             {/* Project Overview */}
                             <div className="space-y-3">
-                                <h3 className="font-semibold text-lg text-teal-400">What is this?</h3>
-                                <p className="text-sm text-slate-300 leading-relaxed">
-                                    Homecastr aggregates property data into hexagonal grids to reveal granular market dynamics.
-                                    We define "Value" not just by price, but by predictive confidence and stability over time.
+                                <h3 className="font-semibold text-lg text-primary">About the Map</h3>
+                                <p className="text-sm text-foreground leading-relaxed">
+                                    Homecastr is a foundation model that forecasts value at the home level.
+                                    We provide probable price bands to help you with your home buying and selling decisions, generated from many scenarios of the future.
                                 </p>
-                                <p className="text-sm text-slate-300 leading-relaxed">
-                                    Use this tool to identify high-growth areas, compare neighborhoods, and visualize AI-driven future value projections.
+                                <p className="text-sm text-foreground leading-relaxed">
+                                    Use this tool to identify high-growth, compare neighborhoods, and see what the future might be.
                                 </p>
                             </div>
 
                             {/* Interaction Guide */}
                             <div className="space-y-4">
-                                <h3 className="font-semibold text-lg text-amber-400">How to use</h3>
+                                <h3 className="font-semibold text-lg text-primary">How to use</h3>
 
                                 <div className="flex gap-3 items-start">
-                                    <div className="p-2 bg-teal-500/10 rounded-lg">
-                                        <MousePointerClick className="w-5 h-5 text-teal-400" />
+                                    <div className="p-2 bg-primary/10 rounded-lg">
+                                        <MousePointerClick className="w-5 h-5 text-primary" />
                                     </div>
                                     <div>
                                         <div className="font-medium text-sm">Click to Lock</div>
@@ -115,16 +115,14 @@ export function ExplainerPopup() {
                                 </div>
 
                                 <div className="flex gap-3 items-start">
-                                    <div className="p-2 bg-amber-500/10 rounded-lg">
-                                        <GitCompare className="w-5 h-5 text-amber-400" />
+                                    <div className="p-2 bg-primary/10 rounded-lg">
+                                        <GitCompare className="w-5 h-5 text-primary" />
                                     </div>
                                     <div>
                                         <div className="font-medium text-sm">Hover to Compare</div>
                                         <div className="text-xs text-muted-foreground">While locked, hover other tiles to overlay comparison data.</div>
                                     </div>
                                 </div>
-
-
                             </div>
                         </div>
                     </div>

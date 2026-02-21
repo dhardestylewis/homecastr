@@ -55,6 +55,41 @@ export function aggregateDetails(detailsList: DetailsResponse[]): DetailsRespons
 
     const count = detailsList.length
 
+    // Initialize sums for metrics
+    let sumValue = 0
+    let validValueCount = 0
+    let sumNOI = 0
+    let validNOICount = 0
+    let sumOpportunity = 0
+    let sumReliability = 0
+    let sumAccts = 0
+
+    // Iterate to sum up metrics
+    detailsList.forEach(d => {
+        // Value
+        if (d.proforma?.predicted_value) {
+            sumValue += d.proforma.predicted_value
+            validValueCount++
+        }
+        // NOI
+        if (d.proforma?.noi) {
+            sumNOI += d.proforma.noi
+            validNOICount++
+        }
+        // Opportunity
+        if (d.opportunity?.value) {
+            sumOpportunity += d.opportunity.value
+        }
+        // Reliability
+        if (d.reliability?.value) {
+            sumReliability += d.reliability.value
+        }
+        // Accounts
+        if (d.metrics?.n_accts) {
+            sumAccts += d.metrics.n_accts
+        }
+    })
+
     // Aggregate Historical Values (Array of numbers)
     const firstHist = detailsList[0].historicalValues
     const aggHistorical = Array.isArray(firstHist) && firstHist.length > 0
@@ -104,9 +139,33 @@ export function aggregateDetails(detailsList: DetailsResponse[]): DetailsRespons
 
     return {
         id: "aggregated-selection",
+        locationLabel: "Selected Area (Avg)",
+        opportunity: {
+            value: sumOpportunity / count,
+            unit: detailsList[0].opportunity.unit,
+            trend: (sumOpportunity / count) >= 0 ? "up" : "down"
+        },
+        reliability: {
+            value: sumReliability / count,
+            components: detailsList[0].reliability.components // Just take first for structure
+        },
+        metrics: {
+            n_accts: sumAccts,
+            med_mean_ape_pct: 0,
+            med_n_years: 0,
+            med_mean_pred_cv_pct: 0
+        },
+        proforma: {
+            predicted_value: validValueCount > 0 ? sumValue / validValueCount : 0,
+            noi: validNOICount > 0 ? sumNOI / validNOICount : 0,
+            monthly_rent: 0, // Could aggregate if needed
+            dscr: 0,
+            breakeven_occ: 0,
+            cap_rate: 0,
+            liquidity_rank: 0
+        },
         historicalValues: aggHistorical,
-        fanChart: aggFan,
-        reliability: detailsList[0].reliability
+        fanChart: aggFan
     } as DetailsResponse
 }
 

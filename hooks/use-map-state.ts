@@ -51,13 +51,17 @@ export function useMapState() {
     router.replace(`?${params.toString()}`, { scroll: false })
   }, [mapState.selectedId, mapState.highlightedIds, router])
 
-  const setMapState = useCallback((updates: Partial<MapState>) => {
-    setMapStateInternal((prev) => ({ ...prev, ...updates }))
+  const setMapState = useCallback((updates: Partial<MapState> | ((prev: MapState) => Partial<MapState>)) => {
+    setMapStateInternal((prev) => {
+      const resolvedUpdates = typeof updates === "function" ? updates(prev) : updates
+      return { ...prev, ...resolvedUpdates }
+    })
   }, [])
 
   const selectFeature = useCallback(
     (id: string | null) => {
-      setMapState({ selectedId: id })
+      // When manually selecting, clear any voice-generated highlights to reset context
+      setMapState({ selectedId: id, highlightedIds: [] })
     },
     [setMapState],
   )

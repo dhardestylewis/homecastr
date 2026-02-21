@@ -3,9 +3,10 @@
 import React, { useState, useCallback, Suspense, useEffect } from "react"
 import { MapView } from "@/components/map-view"
 import { VectorMap } from "@/components/vector-map"
+import { ForecastMap } from "@/components/forecast-map"
 import H3Map from "@/components/h3-map"
 import { Legend } from "@/components/legend"
-import { cn } from "@/lib/utils"
+import { cn, getZoomForRes } from "@/lib/utils"
 
 import { SearchBox } from "@/components/search-box"
 import { useFilters } from "@/hooks/use-filters"
@@ -14,7 +15,7 @@ import { useToast } from "@/hooks/use-toast"
 import type { PropertyForecast } from "@/app/actions/property-forecast"
 import { TimeControls } from "@/components/time-controls"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { AlertCircle, Plus, Minus, RotateCcw, ArrowLeftRight, Copy, Bot } from "lucide-react"
+import { AlertCircle, Plus, Minus, RotateCcw, ArrowLeftRight, Copy, Bot, Terminal, Activity } from "lucide-react"
 import { geocodeAddress, reverseGeocode } from "@/app/actions/geocode"
 
 import { cellToLatLng, latLngToCell } from "h3-js"
@@ -30,6 +31,8 @@ const TavusMiniWindow = dynamic(
   () => import("@/components/tavus-mini-window").then((mod) => mod.TavusMiniWindow),
   { ssr: false }
 ) as React.ComponentType<{ conversationUrl: string; onClose: () => void; chatOpen?: boolean }>
+
+
 
 function DashboardContent() {
   const { filters, setFilters, resetFilters } = useFilters()
@@ -59,6 +62,134 @@ function DashboardContent() {
       description: `Navigating to ${action.lat.toFixed(4)}, ${action.lng.toFixed(4)}`,
       duration: 2000,
     })
+  }, [setMapState, toast])
+
+  // Listen for Tavus tool events (dispatched from window by TavusMiniWindow)
+  useEffect(() => {
+    const handleTavusAction = (e: Event) => {
+      const { action, params, result } = (e as CustomEvent).detail
+
+      console.log(`[PAGE] Received Tavus action: ${action}`, { params, result })
+
+      if (action === "fly_to_location") {
+        setMapState(prev => {
+          // If we have highlightedIds (e.g. from location_to_hex), preserve them unless new ones are provided.
+          const nextHighlightedIds = params.selected_hex_ids || prev.highlightedIds
+
+          // ZOOM SAFETY: If we have highlighted IDs (neighborhood mode), don't let AI force a zoom that hides them (e.g. Zoom 12 is too far out for Res 9 hexes? No, Res 9 needs ~13. Zoom 12 might be okay but let's check).
+          // Actually, Res 9 hexes are rendered at Zoom 12?
+          // getZoomForRes(9) -> 13.2.
+          // If AI says Zoom 12, and we have Res 9 hexes, we should probably prefer 13.
+          // Let's rely on the AI's zoom mostly, but if we have IDs and no specific selection, ensure we can see them.
+          let nextZoom = params.zoom || 12
+          if (nextHighlightedIds && nextHighlightedIds.length > 0 && nextZoom < 13) {
+            nextZoom = 13 // Force at least 13 if we are highlighting things
+          }
+
+          return {
+            center: [params.lng, params.lat],
+            zoom: nextZoom,
+            selectedId: params.select_hex_id || prev.selectedId, // Preserve selectedId if not overwriting
+            highlightedIds: nextHighlightedIds
+          }
+        })
+        toast({ title: "Homecastr Agent", description: "Moving map..." })
+      } else if (action === "inspect_location") {
+        setMapState({
+          center: [params.lng, params.lat],
+          zoom: params.zoom || 15,
+          selectedId: params.h3_id
+        })
+        toast({ title: "Homecastr Agent", description: "Inspecting property..." })
+      } else if (action === "inspect_neighborhood") {
+        setMapState(prev => {
+          // If we already have a selectedId and it's in the new set, keep it.
+          // Otherwise, default to the first one to ensure tooltip appears.
+          const newHighlights = params.h3_ids || []
+          const keepSelected = prev.selectedId && newHighlights.includes(prev.selectedId)
+
+          return {
+            ...prev,
+            center: [params.lng, params.lat],
+            zoom: params.zoom || 13,
+            highlightedIds: newHighlights,
+            selectedId: keepSelected ? prev.selectedId : (newHighlights[0] || null)
+          }
+        })
+        toast({ title: "Homecastr Agent", description: "Inspecting neighborhood..." })
+      } else if (action === "location_to_hex") {
+        if (result?.h3?.h3_id) {
+          const isNeighborhood = result.h3.context === "neighborhood_average" || (result.h3.neighbors && result.h3.neighbors.length > 1)
+          const targetRes = result.h3.h3_res || 9
+          const targetZoom = getZoomForRes(targetRes)
+
+          setMapState(prev => ({
+            ...prev,
+            center: [result.chosen.lng, result.chosen.lat],
+            zoom: targetZoom,
+            selectedId: result.h3.h3_id,
+            // If we have neighbors (neighborhood context), highlight them all
+            highlightedIds: result.h3.neighbors || undefined
+          }))
+          toast({ title: "Homecastr Agent", description: `Found ${result.chosen.label}` })
+        }
+      } else if (action === "add_location_to_selection") {
+        const resultIds = result?.h3?.h3_ids || (result?.h3?.h3_id ? [result.h3.h3_id] : [])
+        // Fallback for neighborhood context from resolveLocationToHex
+        const neighborIds = result?.h3?.neighbors || []
+
+        const idsToAdd = [...resultIds, ...neighborIds]
+
+        if (idsToAdd.length > 0) {
+          // If we have a single new location with lat/lng, maybe zoom/pan? 
+          // But for "Compare top 3", we likely just want to highlight them.
+          // Let's decide zoom based on the FIRST added item if we don't have a bounding box.
+
+          setMapState(prev => {
+            const currentHighlights = prev.highlightedIds || (prev.selectedId ? [prev.selectedId] : [])
+            const combined = Array.from(new Set([...currentHighlights, ...idsToAdd]))
+
+            // If we have an H3 ID but no explicit lat/lng (e.g. adding by ID), derive it
+            let targetCenter = result.chosen?.lat ? [result.chosen.lng, result.chosen.lat] : undefined
+            if (!targetCenter && result.h3?.h3_id) {
+              const [lat, lng] = cellToLatLng(result.h3.h3_id)
+              targetCenter = [lng, lat]
+            }
+
+            return {
+              ...prev,
+              highlightedIds: combined,
+              ...(targetCenter && result.h3?.h3_id ? {
+                center: targetCenter as [number, number],
+                zoom: getZoomForRes(result.h3.h3_res || 9),
+                selectedId: result.h3.h3_id // Select the new location so the tooltip appears!
+              } : {})
+            }
+          })
+          toast({ title: "Homecastr Agent", description: `Added ${result.chosen?.label || idsToAdd.length + " locations"} to comparison` })
+        }
+      } else if (action === "clear_selection") {
+        setMapState(prev => ({
+          ...prev,
+          selectedId: null,
+          highlightedIds: undefined
+        }))
+        toast({ title: "Homecastr Agent", description: "Selection cleared" })
+      } else if (action === "rank_h3_hexes") {
+        if (result?.hexes?.length > 0) {
+          const topHex = result.hexes[0]
+          setMapState({
+            center: [topHex.location.lng, topHex.location.lat],
+            zoom: 12,
+            highlightedIds: result.hexes.map((h: any) => h.h3_id),
+            selectedId: topHex.h3_id
+          })
+          toast({ title: "Homecastr Agent", description: "Ranking locations..." })
+        }
+      }
+    }
+    window.addEventListener("tavus-map-action", handleTavusAction)
+    return () => window.removeEventListener("tavus-map-action", handleTavusAction)
   }, [setMapState, toast])
 
   // Reverse Geocode Effect
@@ -134,7 +265,7 @@ function DashboardContent() {
     setFilters({ colorMode: mode })
   }, [setFilters])
 
-  // Homecastr handler (called with pre-fetched details from tooltip buttons)
+  /* Homecastr handler */
   const handleConsultAI = useCallback(async (details: {
     predictedValue: number | null
     opportunityScore: number | null
@@ -148,7 +279,13 @@ function DashboardContent() {
         predictedValue: details.predictedValue,
         opportunityScore: details.opportunityScore,
         capRate: details.capRate,
+        address: searchBarValue && !searchBarValue.includes("Loading") ? searchBarValue : "this neighborhood",
       })
+
+      if (result.error || !result.conversation_url) {
+        throw new Error(result.error || "Failed to create conversation")
+      }
+
       setTavusConversationUrl(result.conversation_url)
     } catch (err) {
       const message = err instanceof Error ? err.message : "Could not connect to Homecastr agent."
@@ -165,7 +302,7 @@ function DashboardContent() {
     }
   }, [isTavusLoading, toast])
 
-  // Floating button handler — fetches details on the fly from map center or selected hex
+  /* Floating button handler */
   const handleFloatingConsultAI = useCallback(async () => {
     if (isTavusLoading) return
 
@@ -185,7 +322,13 @@ function DashboardContent() {
         predictedValue: details?.proforma?.predicted_value ?? null,
         opportunityScore: details?.opportunity?.value ?? null,
         capRate: details?.proforma?.cap_rate ?? null,
+        address: searchBarValue && !searchBarValue.includes("Loading") && !searchBarValue.startsWith("8") ? searchBarValue : "this neighborhood",
       })
+
+      if (result.error || !result.conversation_url) {
+        throw new Error(result.error || "Failed to create conversation")
+      }
+
       setTavusConversationUrl(result.conversation_url)
     } catch (err) {
       const message = err instanceof Error ? err.message : "Could not connect to Homecastr agent."
@@ -222,7 +365,17 @@ function DashboardContent() {
           </Alert>
         )}
 
-        {filters.useVectorMap ? (
+        {filters.useForecastMap ? (
+          <ForecastMap
+            filters={filters}
+            mapState={mapState}
+            onFeatureSelect={selectFeature}
+            onFeatureHover={hoverFeature}
+            year={currentYear}
+            className="absolute inset-0 z-0"
+            onConsultAI={handleConsultAI}
+          />
+        ) : filters.useVectorMap ? (
           <VectorMap
             filters={filters}
             mapState={mapState}
@@ -234,7 +387,7 @@ function DashboardContent() {
           />
         ) : filters.usePMTiles ? (
           <div className="absolute inset-0 z-0">
-            <H3Map year={currentYear} colorMode={filters.colorMode} />
+            <H3Map year={currentYear} colorMode={filters.colorMode} mapState={mapState} />
           </div>
         ) : (
           <MapView
@@ -293,6 +446,18 @@ function DashboardContent() {
             className="w-full"
           />
 
+          <div className="flex justify-between items-center px-1">
+            <a
+              href="/api-docs"
+              className="text-[10px] text-muted-foreground hover:text-primary transition-colors flex items-center gap-1 font-medium"
+              target="_blank"
+            >
+              <Terminal className="w-3 h-3" />
+              API Documentation
+            </a>
+            <div className="text-[10px] text-muted-foreground/50 font-mono">v1.4.0-beige</div>
+          </div>
+
           {/* Migration Toggle */}
           <button
             onClick={() => setFilters({ useVectorMap: !filters.useVectorMap })}
@@ -307,6 +472,26 @@ function DashboardContent() {
             <div className={cn(
               "w-2 h-2 rounded-full",
               filters.useVectorMap ? "bg-primary animate-pulse" : "bg-muted-foreground/30"
+            )} />
+          </button>
+
+          {/* Forecast Map Toggle */}
+          <button
+            onClick={() => setFilters({ useForecastMap: !filters.useForecastMap, useVectorMap: false })}
+            className={cn(
+              "w-full py-1.5 px-3 rounded-lg border text-[10px] font-bold uppercase tracking-wider transition-all shadow-sm flex items-center justify-between",
+              filters.useForecastMap
+                ? "bg-violet-500/20 border-violet-500/50 text-violet-300"
+                : "bg-muted/30 border-border/50 text-muted-foreground hover:bg-muted/50"
+            )}
+          >
+            <span className="flex items-center gap-1.5">
+              <Activity className="w-3 h-3" />
+              Forecast Choropleth
+            </span>
+            <div className={cn(
+              "w-2 h-2 rounded-full",
+              filters.useForecastMap ? "bg-violet-500 animate-pulse" : "bg-muted-foreground/30"
             )} />
           </button>
 
@@ -397,7 +582,7 @@ function DashboardContent() {
           <button
             onClick={handleFloatingConsultAI}
             className={cn(
-              "fixed bottom-5 z-[9999] flex items-center gap-2.5 px-5 py-3 rounded-2xl bg-[#16161e] hover:bg-[#1e1e2a] border border-white/15 hover:border-primary/40 text-white shadow-2xl transition-all duration-300 hover:scale-105 active:scale-95 group",
+              "fixed bottom-5 z-[9999] flex items-center gap-2.5 px-5 py-3 rounded-2xl glass-panel hover:bg-accent/50 text-foreground shadow-2xl transition-all duration-300 hover:scale-105 active:scale-95 group",
               isChatOpen ? "left-[420px]" : "left-5"
             )}
           >
@@ -405,8 +590,8 @@ function DashboardContent() {
               <Bot className="w-4 h-4 text-primary" />
             </div>
             <div className="flex flex-col items-start">
-              <span className="text-xs font-semibold text-white/90">Talk to Homecastr Live Agent</span>
-              <span className="text-[10px] text-white/40">Powered by Tavus</span>
+              <span className="text-xs font-semibold">Talk to Homecastr Live Agent</span>
+              <span className="text-[10px] text-muted-foreground">Powered by Tavus</span>
             </div>
           </button>
         )}
@@ -414,7 +599,7 @@ function DashboardContent() {
         {/* Homecastr Loading Indicator */}
         {isTavusLoading && (
           <div className={cn(
-            "fixed bottom-5 z-[10000] bg-[#16161e] text-white/90 rounded-2xl px-5 py-4 shadow-2xl border border-white/10 flex items-center gap-3 transition-all duration-300",
+            "fixed bottom-5 z-[10000] glass-panel text-foreground rounded-2xl px-5 py-4 shadow-2xl flex items-center gap-3 transition-all duration-300",
             isChatOpen ? "left-[420px]" : "left-5"
           )}>
             <div className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
