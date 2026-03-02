@@ -199,7 +199,7 @@ def train_worldmodel(
                 # Find nearest prior year
                 prior = max(y for y in existing_years if y < gap_yr)
                 gap_fill = df.filter(pl.col("yr") == prior).with_columns(
-                    pl.lit(gap_yr).cast(pl.Int32).alias("yr")
+                    pl.lit(gap_yr).cast(df["yr"].dtype).alias("yr")
                 )
                 df = pl.concat([df, gap_fill])
                 print(f"  {prior} → {gap_yr}: {len(gap_fill):,} rows carried forward")
@@ -505,8 +505,17 @@ def train_worldmodel(
             size_mb = os.path.getsize(local_path) / 1e6
             print(f"  Uploaded {fname} ({size_mb:.1f} MB) → gs://{bucket_name}/{gcs_path}")
 
-    # Also persist to Modal volume
-    print(f"[{ts()}] Checkpoints saved to Modal volume at /output/{jurisdiction}_v11/")
+    # Actually persist checkpoints to Modal volume
+    vol_ckpt_dir = f"/output/{jurisdiction}_v11"
+    os.makedirs(vol_ckpt_dir, exist_ok=True)
+    import shutil
+    for fname in os.listdir(out_dir):
+        if fname.endswith(".pt") or fname.endswith(".json"):
+            src = os.path.join(out_dir, fname)
+            dst = os.path.join(vol_ckpt_dir, fname)
+            shutil.copy2(src, dst)
+            print(f"  Volume: {fname} → {vol_ckpt_dir}")
+    print(f"[{ts()}] Checkpoints saved to Modal volume at {vol_ckpt_dir}/")
 
     return {
         "jurisdiction": jurisdiction,

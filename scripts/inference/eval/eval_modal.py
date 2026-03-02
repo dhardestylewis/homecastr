@@ -96,12 +96,25 @@ os.environ["INFERENCE_ONLY"] = "1"
         wm_code = f.read()
         
     modified_wm_code = patch_code + "\n" + wm_code.replace("if __name__ == '__main__' or globals().get('__colab__'):", "if False:")
-    modified_wm_code = patch_code + "\n" + wm_code.replace("if __name__ == '__main__' or globals().get('__colab__'):", "if False:")
-    # Force the local path override to bypass os.path.exists checks at import time
-    modified_wm_code = modified_wm_code.replace('PANEL_PATH = PANEL_PATH_LOCAL if os.path.exists(PANEL_PATH_LOCAL) else PANEL_PATH_DRIVE', 'PANEL_PATH = "/tmp/panel_actuals.parquet"')
     
-    # Force bypassing the explicit check on line 299-301 in worldmodel
-    modified_wm_code = modified_wm_code.replace('if not os.path.exists(PANEL_PATH):\n    raise FileNotFoundError("Panel not found")', 'pass')
+    # Robust path patching: regex-replace ANY PANEL_PATH assignment
+    import re
+    modified_wm_code = re.sub(
+        r'^PANEL_PATH_LOCAL\s*=\s*.*$',
+        'PANEL_PATH_LOCAL = "/tmp/panel_actuals.parquet"',
+        modified_wm_code, flags=re.MULTILINE
+    )
+    modified_wm_code = re.sub(
+        r'^PANEL_PATH_DRIVE\s*=\s*.*$',
+        'PANEL_PATH_DRIVE = "/tmp/panel_actuals.parquet"',
+        modified_wm_code, flags=re.MULTILINE
+    )
+    modified_wm_code = re.sub(
+        r'^PANEL_PATH\s*=\s*(?!.*\bpl\.).*$',
+        'PANEL_PATH = "/tmp/panel_actuals.parquet"',
+        modified_wm_code, flags=re.MULTILINE
+    )
+    # Force bypassing the explicit panel existence check
     modified_wm_code = modified_wm_code.replace('if not os.path.exists(PANEL_PATH):', 'if False:')
     
     # ─── 2.5 Load and Format Panel (Must happen BEFORE worldmodel exec) ───
