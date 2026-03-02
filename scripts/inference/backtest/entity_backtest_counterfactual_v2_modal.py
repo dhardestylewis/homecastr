@@ -518,4 +518,3 @@ def main(sample_entities: int = 500, sample_parcels: int = 0):
         sample_parcels=sample_parcels,
     )
     print(f"\n✅ Counterfactual backtest v2: {result}")
-""", "")
