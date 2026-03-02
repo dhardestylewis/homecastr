@@ -42,7 +42,7 @@ output_vol = modal.Volume.from_name("entity-backtest-results", create_if_missing
     memory=16384,
     volumes={"/output": output_vol},
 )
-def build_entity_portfolios(min_parcels: int = 3):
+def build_entity_portfolios(min_parcels: int = 10, min_portfolio_value: float = 1_000_000):
     """Load panel + owner data, build owner→acct mapping, save to GCS."""
     import json, io, zipfile, tempfile, time
     import pandas as pd
@@ -121,13 +121,28 @@ def build_entity_portfolios(min_parcels: int = 3):
 
     # Filter to ICP entities (>= min_parcels)
     icp_entities = {k: sorted(v) for k, v in all_entities.items() if len(v) >= min_parcels}
+
+    # Portfolio value floor: sum assessed values per entity from panel
+    if min_portfolio_value > 0:
+        val_col = next((c for c in panel.columns if 'tot_appr' in c.lower() or 'tot_mkt' in c.lower() or 'prior_tot' in c.lower()), None)
+        if val_col:
+            acct_vals = panel.groupby(acct_col)[val_col].max().to_dict()  # latest value per acct
+            before = len(icp_entities)
+            icp_entities = {
+                owner: accts for owner, accts in icp_entities.items()
+                if sum(float(acct_vals.get(a, 0) or 0) for a in accts) >= min_portfolio_value
+            }
+            print(f"  Portfolio value floor ${min_portfolio_value:,.0f}: {before:,} → {len(icp_entities):,} entities")
+        else:
+            print(f"  ⚠️ No value column found for portfolio floor, skipping value filter")
+
     all_icp_accts = set()
     for accts in icp_entities.values():
         all_icp_accts.update(accts)
 
     print(f"\n[{ts()}] Entity portfolios built:")
     print(f"  Total entities: {len(all_entities):,}")
-    print(f"  ICP entities (>={min_parcels} parcels): {len(icp_entities):,}")
+    print(f"  ICP entities (>={min_parcels} parcels, >=${min_portfolio_value:,.0f}): {len(icp_entities):,}")
     print(f"  ICP accts: {len(all_icp_accts):,}")
 
     # Save to GCS for sharing with worker containers
@@ -338,7 +353,7 @@ def aggregate_all(results: list):
     timeout=21600,   # 6h — full backtest across all origins/horizons
     memory=4096,
 )
-def run_full_backtest(origins: list, horizons: list, min_parcels: int = 3):
+def run_full_backtest(origins: list, horizons: list, min_parcels: int = 10, min_portfolio_value: float = 1_000_000):
     """
     Full orchestration that runs on Modal cloud.
     Calls other Modal functions via .remote()/.starmap() from inside Modal —
@@ -348,8 +363,8 @@ def run_full_backtest(origins: list, horizons: list, min_parcels: int = 3):
     ts = lambda: time.strftime("%Y-%m-%d %H:%M:%S")
 
     # Step 1: Build entity portfolios
-    print(f"[{ts()}] 🏗️  Building entity portfolios (min_parcels={min_parcels})...")
-    portfolio_info = build_entity_portfolios.remote(min_parcels=min_parcels)
+    print(f"[{ts()}] 🏗️  Building entity portfolios (min_parcels={min_parcels}, min_value=${min_portfolio_value:,.0f})...")
+    portfolio_info = build_entity_portfolios.remote(min_parcels=min_parcels, min_portfolio_value=min_portfolio_value)
     print(f"[{ts()}]   → {portfolio_info['n_entities']:,} ICP entities, {portfolio_info['n_accts']:,} accts")
 
     # Step 2: Process all (origin, horizon) pairs
@@ -376,11 +391,12 @@ def run_full_backtest(origins: list, horizons: list, min_parcels: int = 3):
 @app.local_entrypoint()
 def main(origins: str = "2023,2024",
          horizons: str = "1,2,3,4,5",
-         min_parcels: int = 3):
+         min_parcels: int = 10,
+         min_portfolio_value: float = 1_000_000):
     origin_list = [int(x.strip()) for x in origins.split(",")]
     horizon_list = [int(x.strip()) for x in horizons.split(",")]
-    print(f"🚀 Running entity backtest: origins={origin_list} horizons={horizon_list}")
-    result = run_full_backtest.remote(origin_list, horizon_list, min_parcels)
+    print(f"🚀 Running entity backtest: origins={origin_list} horizons={horizon_list} min_parcels={min_parcels} min_value=${min_portfolio_value:,.0f}")
+    result = run_full_backtest.remote(origin_list, horizon_list, min_parcels, min_portfolio_value)
     print(f"✅ Done: {result}")
 
 
