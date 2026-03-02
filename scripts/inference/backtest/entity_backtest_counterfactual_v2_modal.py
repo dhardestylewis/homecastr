@@ -112,9 +112,20 @@ def run_counterfactual_backtest(sample_entities: int = 0, sample_parcels: int = 
 
     print(f"  Forecast lookup: {len(forecast_lookup):,} entries")
 
-    # ─── 3. Load owner data ──────────────────────────────────────────
-    print(f"\n[{ts()}] Loading owner data...")
+    # ─── 3. Load owner data + permits from same zip ────────────────
+    print(f"\n[{ts()}] Loading owner data + permits...")
     owners_by_year = {}
+    all_permits = []  # Collect permits from all years
+
+    # Renovation-related permit types from HCAD codebook
+    RENO_PERMIT_TYPES = {
+        '10', '11', '12',  # New construction
+        '20', '21',        # Demolition
+        '30', '31', '32',  # Additions, Remodels, Lease Space
+        '40', '41',        # Foundation repair
+        '50',              # Disaster review
+    }
+
     for blob in bucket.list_blobs(prefix="hcad/owner/"):
         if not blob.name.endswith(".zip"):
             continue
@@ -129,6 +140,7 @@ def run_counterfactual_backtest(sample_entities: int = 0, sample_parcels: int = 
         buf.seek(0)
 
         with zipfile.ZipFile(buf) as zf:
+            # --- Owner data ---
             owner_file = next((n for n in zf.namelist() if 'owner' in n.lower()), None)
             if not owner_file:
                 continue
@@ -137,18 +149,53 @@ def run_counterfactual_backtest(sample_entities: int = 0, sample_parcels: int = 
                 df = pl.read_csv(io.StringIO(raw), separator="\t", infer_schema_length=0,
                                  quote_char=None, has_header=True)
 
-        acct_c = next((c for c in df.columns if c.lower().strip() == 'acct'), df.columns[0])
-        owner_c = next((c for c in df.columns if c.lower().strip() == 'name'), df.columns[2])
+            acct_c = next((c for c in df.columns if c.lower().strip() == 'acct'), df.columns[0])
+            owner_c = next((c for c in df.columns if c.lower().strip() == 'name'), df.columns[2])
 
-        pairs = df.select([acct_c, owner_c]).to_pandas()
-        pairs.columns = ['acct', 'owner']
-        pairs['acct'] = pairs['acct'].astype(str).str.strip()
-        pairs['owner'] = pairs['owner'].astype(str).str.strip()
-        pairs = pairs[(pairs['owner'] != '') & (pairs['owner'] != 'nan')]
-        owner_map = pairs.groupby('owner')['acct'].apply(set).to_dict()
+            pairs = df.select([acct_c, owner_c]).to_pandas()
+            pairs.columns = ['acct', 'owner']
+            pairs['acct'] = pairs['acct'].astype(str).str.strip()
+            pairs['owner'] = pairs['owner'].astype(str).str.strip()
+            pairs = pairs[(pairs['owner'] != '') & (pairs['owner'] != 'nan')]
+            owner_map = pairs.groupby('owner')['acct'].apply(set).to_dict()
+            owners_by_year[year] = owner_map
 
-        owners_by_year[year] = owner_map
-        print(f"  {year}: {len(owner_map):,} owners")
+            # --- Permits data (same zip!) ---
+            permit_file = next((n for n in zf.namelist() if 'permit' in n.lower()), None)
+            n_permits = 0
+            if permit_file:
+                try:
+                    with zf.open(permit_file) as f:
+                        raw_p = f.read().decode("latin-1")
+                        pdf = pl.read_csv(io.StringIO(raw_p), separator="\t",
+                                          infer_schema_length=0, quote_char=None,
+                                          has_header=True)
+                    # Extract relevant columns
+                    p_acct = next((c for c in pdf.columns if c.lower().strip() == 'acct'), None)
+                    p_yr = next((c for c in pdf.columns if c.lower().strip() == 'yr'), None)
+                    p_type = next((c for c in pdf.columns if c.lower().strip() == 'permit_type'), None)
+                    p_descr = next((c for c in pdf.columns if c.lower().strip() == 'permit_tp_descr'), None)
+
+                    if p_acct and p_yr and p_type:
+                        cols = [p_acct, p_yr, p_type]
+                        if p_descr:
+                            cols.append(p_descr)
+                        perm_df = pdf.select(cols).to_pandas()
+                        perm_df.columns = ['acct', 'yr', 'permit_type'] + (['descr'] if p_descr else [])
+                        perm_df['acct'] = perm_df['acct'].astype(str).str.strip()
+                        perm_df['yr'] = pd.to_numeric(perm_df['yr'], errors='coerce')
+                        perm_df['permit_type'] = perm_df['permit_type'].astype(str).str.strip()
+                        perm_df = perm_df.dropna(subset=['yr'])
+                        perm_df['yr'] = perm_df['yr'].astype(int)
+                        # Filter to renovation-related permits
+                        reno_mask = perm_df['permit_type'].isin(RENO_PERMIT_TYPES)
+                        reno_permits = perm_df[reno_mask]
+                        n_permits = len(reno_permits)
+                        all_permits.append(reno_permits[['acct', 'yr']])
+                except Exception as e:
+                    print(f"    ⚠️ Could not parse permits for {year}: {e}")
+
+        print(f"  {year}: {len(owner_map):,} owners, {n_permits:,} renovation permits")
 
     # ─── 4. ICP entities and acquisitions ────────────────────────────
     print(f"\n[{ts()}] Identifying ICP entities...")
@@ -192,34 +239,44 @@ def run_counterfactual_backtest(sample_entities: int = 0, sample_parcels: int = 
         icp_entities = {k: icp_entities[k] for k in sampled_keys}
         print(f"  Sampled to {sample_entities} entities")
 
-    # ─── 5. Renovation screening (tighter thresholds) ────────────────
+    # ─── 5. Renovation screening (permit data + heuristics) ──────────
     print(f"\n[{ts()}] Screening renovated parcels...")
     renovated_parcels = set()
 
-    # Remodel year flag
+    # PRIMARY: HCAD permit records (definitive — from permits.txt)
+    if all_permits:
+        permit_df = pd.concat(all_permits, ignore_index=True)
+        permit_keys = set(zip(permit_df['acct'].values, permit_df['yr'].values))
+        renovated_parcels.update(permit_keys)
+        print(f"  HCAD permits (types {RENO_PERMIT_TYPES}): {len(permit_keys):,} (acct,year) pairs")
+    else:
+        print("  ⚠️ No permit data found in owner zips")
+
+    # SECONDARY: Remodel year flag from panel
     if 'remodel_year' in panel.columns:
         rm = panel.loc[panel['remodel_year'].notna() & (panel['remodel_year'] > 0),
                       ['acct', 'remodel_year']].drop_duplicates()
         yrs = rm['remodel_year'].astype(int).values
         accts = rm['acct'].values
         remo_keys = set(zip(accts, yrs)) | set(zip(accts, yrs + 1))
+        n_new = len(remo_keys - renovated_parcels)
         renovated_parcels.update(remo_keys)
-        print(f"  Remodel year flag: {len(remo_keys):,} (acct,year) pairs")
+        print(f"  Remodel year flag: {n_new:,} additional")
 
-    # Building value jump >20% (tighter than 30%)
+    # TERTIARY: Building value jump >20%
     if 'bld_val_lag1' in panel.columns:
         bv = panel[['acct', 'year', 'bld_val_lag1', 'value']].dropna(
             subset=['bld_val_lag1']
         ).copy()
-        bv = bv[bv['bld_val_lag1'] > 10000]  # Need meaningful prior building value
+        bv = bv[bv['bld_val_lag1'] > 10000]
         bv['bld_chg'] = (bv['value'] - bv['bld_val_lag1']) / bv['bld_val_lag1']
-        bv_flagged = bv[bv['bld_chg'] > 0.20]  # Tighter: 20% (was 30%)
+        bv_flagged = bv[bv['bld_chg'] > 0.20]
         bv_keys = set(zip(bv_flagged['acct'].values, bv_flagged['year'].astype(int).values))
         n_new = len(bv_keys - renovated_parcels)
         renovated_parcels.update(bv_keys)
         print(f"  Building value jump (>20%): {n_new:,} additional")
 
-    # New construction detection
+    # QUATERNARY: New construction from panel
     if 'new_construction_val_lag1' in panel.columns:
         nc = panel[panel['new_construction_val_lag1'].notna() & (panel['new_construction_val_lag1'] > 0)]
         nc_keys = set(zip(nc['acct'].values, nc['year'].astype(int).values))
@@ -227,8 +284,9 @@ def run_counterfactual_backtest(sample_entities: int = 0, sample_parcels: int = 
         renovated_parcels.update(nc_keys)
         print(f"  New construction flag: {n_new:,} additional")
 
-    # Development detection: value <$30K at origin AND >$100K at target
-    print(f"  Scanning for development parcels (value <$30K → >$100K)...")
+    # QUINARY: Development detection (value <$30K→>$100K)
+    print(f"  Scanning for development parcels...")
+    n_dev = 0
     for origin in ORIGINS:
         for horizon in HORIZONS:
             target_year = origin + horizon
@@ -239,9 +297,13 @@ def run_counterfactual_backtest(sample_entities: int = 0, sample_parcels: int = 
             common = orig_vals_check.index.intersection(tgt_vals_check.index)
             for a in common:
                 if orig_vals_check[a] < 30_000 and tgt_vals_check[a] > 100_000:
-                    renovated_parcels.add((a, target_year))
+                    if (a, target_year) not in renovated_parcels:
+                        renovated_parcels.add((a, target_year))
+                        n_dev += 1
+    print(f"  Development detection: {n_dev:,} additional")
 
     print(f"  Total flagged: {len(renovated_parcels):,} (acct, year) pairs")
+
 
     # ─── 6. Vectorized counterfactual comparison ─────────────────────
     print(f"\n[{ts()}] Running counterfactual comparisons (vectorized)...")
