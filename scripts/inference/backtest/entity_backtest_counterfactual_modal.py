@@ -123,13 +123,13 @@ def run_counterfactual_backtest():
         acct_c = next((c for c in df.columns if c.lower().strip() == 'acct'), df.columns[0])
         owner_c = next((c for c in df.columns if c.lower().strip() == 'name'), df.columns[2])
 
-        owner_map = {}
-        for row in df.select([acct_c, owner_c]).iter_rows():
-            acct, owner = str(row[0]).strip(), str(row[1]).strip()
-            if owner and owner != 'nan' and owner != 'None':
-                if owner not in owner_map:
-                    owner_map[owner] = set()
-                owner_map[owner].add(acct)
+        # Vectorized: group by owner to get sets of accts
+        pairs = df.select([acct_c, owner_c]).to_pandas()
+        pairs.columns = ['acct', 'owner']
+        pairs['acct'] = pairs['acct'].astype(str).str.strip()
+        pairs['owner'] = pairs['owner'].astype(str).str.strip()
+        pairs = pairs[(pairs['owner'] != '') & (pairs['owner'] != 'nan') & (pairs['owner'] != 'None')]
+        owner_map = pairs.groupby('owner')['acct'].apply(set).to_dict()
 
         owners_by_year[year] = owner_map
         print(f"  {year}: {len(owner_map):,} owners")
@@ -197,23 +197,20 @@ def run_counterfactual_backtest():
             panel['permits_sum_value'].notna() &
             (panel['permits_sum_value'] > PERMIT_VALUE_THRESHOLD)
         )
-        permit_flagged = panel.loc[permit_mask, ['acct', 'year']]
-        for _, row in permit_flagged.iterrows():
-            renovated_parcels.add((row['acct'], int(row['year'])))
+        pf = panel.loc[permit_mask, ['acct', 'year']]
+        renovated_parcels = set(zip(pf['acct'].values, pf['year'].astype(int).values))
         print(f"  Permit screen (>${PERMIT_VALUE_THRESHOLD:,}): {len(renovated_parcels):,} (acct,year) flagged")
 
-        # Also flag year of remodel
+        # Also flag year of remodel (vectorized)
         if 'remodel_year' in panel.columns:
-            remodel_mask = panel['remodel_year'].notna() & (panel['remodel_year'] > 0)
-            remodel_rows = panel.loc[remodel_mask, ['acct', 'remodel_year']].drop_duplicates()
-            n_remodel = 0
-            for _, row in remodel_rows.iterrows():
-                yr = int(row['remodel_year'])
-                # Flag the remodel year and year after
-                renovated_parcels.add((row['acct'], yr))
-                renovated_parcels.add((row['acct'], yr + 1))
-                n_remodel += 1
-            print(f"  Remodel year flag: {n_remodel:,} parcels")
+            rm = panel.loc[panel['remodel_year'].notna() & (panel['remodel_year'] > 0),
+                          ['acct', 'remodel_year']].drop_duplicates()
+            yrs = rm['remodel_year'].astype(int).values
+            accts = rm['acct'].values
+            remo_keys = set(zip(accts, yrs)) | set(zip(accts, yrs + 1))
+            n_new = len(remo_keys - renovated_parcels)
+            renovated_parcels.update(remo_keys)
+            print(f"  Remodel year flag: {n_new:,} additional")
 
     # SECONDARY: Building value jump heuristic
     # If building value jumped >30% YoY while land stayed flat (<10%), flag as renovation
