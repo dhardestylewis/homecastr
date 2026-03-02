@@ -48,7 +48,7 @@ output_vol = modal.Volume.from_name("inference-outputs", create_if_missing=True)
     image=image,
     secrets=[gcs_secret, supabase_secret, wandb_secret],
     gpu="A100",
-    timeout=7200,     # 2 hours max
+    timeout=86400,    # 24 hours — full 1.2M acct inference needs ~13h
     memory=32768,     # 32 GB RAM
     volumes={"/output": output_vol},
 )
