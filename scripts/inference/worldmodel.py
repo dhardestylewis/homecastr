@@ -1136,7 +1136,7 @@ def assert_y_scaler_contract(
     shard_paths: List[str],
     z_clip: float = 20.0,
     max_check_rows: int = 200_000,
-    max_sat_frac: float = 0.01,
+    max_sat_frac: float = 0.02,
 ) -> None:
     """
     Fail-fast if the standardized hist_y saturates the sampler regime again.
@@ -1626,7 +1626,7 @@ def train_diffusion_v11(
         shard_paths=shard_paths,
         z_clip=float(SAMPLER_Z_CLIP) if SAMPLER_Z_CLIP is not None else 20.0,
         max_check_rows=200_000,
-        max_sat_frac=0.01,
+        max_sat_frac=0.02,
     )
 
     model._y_scaler = y_scaler

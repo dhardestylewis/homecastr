@@ -291,7 +291,7 @@ def train_worldmodel(
     df = df.filter(pl.col("tot_appr_val").is_not_null() & (pl.col("tot_appr_val") > 0))
 
     # Winsorize extreme outliers in tot_appr_val to prevent y_scaler_contract failure
-    # worldmodel.py asserts <1% of |z|>20; fat-tailed parcel data can exceed this
+    # worldmodel.py asserts <2% of |z|>20; fat-tailed parcel data can exceed this
     _vals = df["tot_appr_val"].to_numpy()
     import numpy as _np
     _p005 = float(_np.nanpercentile(_vals, 0.5))

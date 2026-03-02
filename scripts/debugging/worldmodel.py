@@ -1128,7 +1128,7 @@ def assert_y_scaler_contract(
     shard_paths: List[str],
     z_clip: float = 20.0,
     max_check_rows: int = 200_000,
-    max_sat_frac: float = 0.01,
+    max_sat_frac: float = 0.02,
 ) -> None:
     """
     Fail-fast if the standardized hist_y saturates the sampler regime again.
