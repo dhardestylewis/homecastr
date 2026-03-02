@@ -32,20 +32,34 @@ gcs_secret = modal.Secret.from_name("gcs-creds")
 
 # ACS tables and variables to download
 ACS_VARIABLES = {
+    # TARGET
     "B25077_001E": "median_home_value",    # Median value (dollars) — TARGET
+    # Income / affordability
     "B19013_001E": "median_hh_income",     # Median household income
+    "B25071_001E": "rent_burden_pct",      # Median gross rent as % of income
+    "B25064_001E": "median_gross_rent",    # Median gross rent
+    # Demographics
     "B01003_001E": "total_population",     # Total population
-    "B25002_001E": "total_housing_units",  # Total housing units
+    "B23025_003E": "employed_pop",         # Employed civilian pop 16+
+    "B23025_005E": "unemployed_pop",       # Unemployed civilian pop 16+
+    "B15003_022E": "bachelors_degree",     # Pop with bachelor's degree
+    "B15003_023E": "masters_degree",       # Pop with master's degree
+    "B15003_025E": "doctorate_degree",     # Pop with doctorate
+    # Housing supply
+    "B25001_001E": "total_housing_units",  # Total housing units (supply)
     "B25002_002E": "occupied_units",       # Occupied housing units
     "B25002_003E": "vacant_units",         # Vacant housing units
     "B25003_002E": "owner_occupied",       # Owner-occupied units
     "B25003_003E": "renter_occupied",      # Renter-occupied units
+    # Structure
     "B25035_001E": "median_year_built",    # Median year structure built
-    "B25064_001E": "median_gross_rent",    # Median gross rent
+    # Mobility
+    "B07001_001E": "total_movers",         # Geographic mobility (total)
+    "B07001_017E": "moved_from_abroad",    # Moved from abroad
 }
 
-# Years with 5-year ACS tract data available
-ACS_YEARS = [2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023]
+# Years: ACS 5-year estimates available from 2009 (first 5-year release) through 2023
+ACS_YEARS = list(range(2009, 2024))  # 2009-2023 = 15 years
 
 
 @app.function(
@@ -128,6 +142,60 @@ def build_acs_panel():
     panel["home_value_growth"] = (
         (panel["median_home_value"] - panel["prior_home_value"]) / panel["prior_home_value"]
     )
+
+    # Derived rates
+    panel["vacancy_rate"] = panel["vacant_units"] / panel["total_housing_units"].replace(0, float('nan'))
+    panel["owner_occ_rate"] = panel["owner_occupied"] / panel["occupied_units"].replace(0, float('nan'))
+    total_labor = (panel.get("employed_pop", 0) + panel.get("unemployed_pop", 0))
+    if "employed_pop" in panel.columns and "unemployed_pop" in panel.columns:
+        labor_force = panel["employed_pop"] + panel["unemployed_pop"]
+        panel["unemployment_rate"] = panel["unemployed_pop"] / labor_force.replace(0, float('nan'))
+    if all(c in panel.columns for c in ["bachelors_degree", "masters_degree", "doctorate_degree"]):
+        panel["college_rate"] = (
+            panel["bachelors_degree"] + panel["masters_degree"] + panel["doctorate_degree"]
+        ) / panel["total_population"].replace(0, float('nan'))
+
+    # Try to join FHFA HPI (3-digit zip level)
+    print(f"\n[{ts()}] Joining FHFA HPI...")
+    try:
+        hpi_blob = bucket.blob("fhfa/HPI_AT_3zip.csv")
+        if hpi_blob.exists():
+            hpi_buf = io.BytesIO()
+            hpi_blob.download_to_file(hpi_buf)
+            hpi_buf.seek(0)
+            hpi = pd.read_csv(hpi_buf)
+            print(f"  HPI loaded: {hpi.shape}, cols={list(hpi.columns)}")
+            # FHFA HPI has: ThreeDigitZIPCode, Year, Quarter, IndexSA, IndexNSA
+            yr_col = next((c for c in hpi.columns if c.lower() in ('yr', 'year')), None)
+            zip_col = next((c for c in hpi.columns if '3' in c.lower() or 'zip' in c.lower()), None)
+            idx_col = next((c for c in hpi.columns if 'index' in c.lower() and 'sa' in c.lower()), None)
+            if yr_col and zip_col and idx_col:
+                # Annual average
+                hpi_annual = hpi.groupby([zip_col, yr_col])[idx_col].mean().reset_index()
+                hpi_annual.columns = ["zip3", "year", "hpi_index"]
+                hpi_annual["zip3"] = hpi_annual["zip3"].astype(str).str.zfill(3)
+                # Tract → zip3: use first 3 digits of state+county as proxy (imperfect but useful)
+                # Better: use HUD USPS crosswalk, but for now state-level is fine
+                panel["state_fips"] = panel["geoid"].str[:2]
+                # Join at state level instead (HPI_AT_state)
+                st_blob = bucket.blob("fhfa/HPI_AT_state.csv")
+                if st_blob.exists():
+                    st_buf = io.BytesIO()
+                    st_blob.download_to_file(st_buf)
+                    st_buf.seek(0)
+                    st_hpi = pd.read_csv(st_buf)
+                    yr_c2 = next((c for c in st_hpi.columns if c.lower() in ('yr', 'year')), None)
+                    st_c2 = next((c for c in st_hpi.columns if 'state' in c.lower() or 'fips' in c.lower()), None)
+                    idx_c2 = next((c for c in st_hpi.columns if 'index' in c.lower()), None)
+                    if yr_c2 and idx_c2:
+                        st_annual = st_hpi.groupby([yr_c2])[idx_c2].mean().reset_index()
+                        st_annual.columns = ["year", "hpi_national"]
+                        panel = panel.merge(st_annual, on="year", how="left")
+                        print(f"  Joined national HPI: {panel['hpi_national'].notna().sum():,} matches")
+        else:
+            print("  No FHFA HPI files on GCS yet")
+    except Exception as e:
+        print(f"  HPI join failed: {e}")
 
     # Add acct column (alias for geoid, needed by world model)
     panel["acct"] = panel["geoid"]
