@@ -145,8 +145,10 @@ def main():
                 continue
 
             try:
-                # CONCURRENTLY is safest — doesn't lock the table while building
-                sql = f"CREATE INDEX CONCURRENTLY IF NOT EXISTS {idx_name} ON {table} ({col})"
+                # Use regular CREATE INDEX (not CONCURRENTLY) — faster, avoids
+                # Supabase's 2-minute statement_timeout that kills CONCURRENTLY
+                # (CONCURRENTLY does multiple slow scans; regular is single-pass)
+                sql = f"CREATE INDEX IF NOT EXISTS {idx_name} ON {table} ({col})"
                 cur.execute(sql)
                 elapsed = time.time() - t0
                 print(f"[{ts()}]   ✅ Created {idx_name} on {table}({col})  [{elapsed:.1f}s]")
