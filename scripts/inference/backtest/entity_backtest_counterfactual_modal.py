@@ -6,7 +6,7 @@ actual entity portfolio performance?"
 
 Steps:
   1. Load HCAD panel + owner data → identify entity acquisitions per year
-  2. Download Houston building permits → definitive renovation screen
+  2. Use HCAD panel's built-in permit columns for definitive renovation screen
   3. Load model forecasts from existing backtest data
   4. For each ICP entity at each origin:
      a. Compute actual returns (value at origin+h vs origin)
@@ -22,7 +22,7 @@ import modal, os
 
 app = modal.App("entity-counterfactual-backtest")
 image = modal.Image.debian_slim(python_version="3.11").pip_install(
-    "google-cloud-storage", "pandas", "pyarrow", "polars", "requests"
+    "google-cloud-storage", "pandas", "pyarrow", "polars"
 )
 gcs_secret = modal.Secret.from_name("gcs-creds")
 supabase_secret = modal.Secret.from_name("supabase-creds")
@@ -64,42 +64,36 @@ def run_counterfactual_backtest():
     buf.seek(0)
     panel = pd.read_parquet(buf)
 
-    # Normalize column names
-    acct_col = next(c for c in panel.columns if 'acct' in c.lower())
-    yr_col = next(c for c in panel.columns if c.lower() in ('yr', 'year'))
-    val_col = next(c for c in panel.columns if 'tot_appr' in c.lower() or 'property_value' in c.lower())
-
-    # Find improvement/land value columns for renovation heuristic fallback
-    impr_col = next((c for c in panel.columns if 'impr' in c.lower() and 'val' in c.lower()), None)
-    land_col = next((c for c in panel.columns if 'land' in c.lower() and ('val' in c.lower() or 'ar' not in c.lower())), None)
-
-    # Property type column
-    type_col = next((c for c in panel.columns if any(k in c.lower() for k in
-                    ['state_class', 'class_cd', 'property_type', 'bldg_style', 'use_code'])), None)
-
-    # Geographic columns for matching
-    zip_col = next((c for c in panel.columns if 'zip' in c.lower()), None)
-    lat_col = next((c for c in panel.columns if c.lower() in ('lat', 'gis_lat', 'latitude')), None)
-    lon_col = next((c for c in panel.columns if c.lower() in ('lon', 'gis_lon', 'longitude')), None)
-
-    panel = panel.rename(columns={acct_col: 'acct', yr_col: 'year', val_col: 'value'})
-    if type_col:
-        panel = panel.rename(columns={type_col: 'prop_type'})
-    if impr_col:
-        panel = panel.rename(columns={impr_col: 'impr_val'})
-    if land_col and land_col != impr_col:
-        panel = panel.rename(columns={land_col: 'land_val'})
-    if zip_col:
-        panel = panel.rename(columns={zip_col: 'zip_code'})
+    # Use exact HCAD panel column names (64 columns known from schema check)
+    panel = panel.rename(columns={
+        'acct': 'acct',
+        'yr': 'year',
+        'tot_appr_val': 'value',
+        'state_class': 'prop_type',
+        'gis_zip': 'zip_code',
+        # Permit columns (already in panel from HCAD data)
+        'permits_count': 'permits_count',
+        'permits_sum_value': 'permits_sum_value',
+        'permits_last_event_year': 'permits_last_event_year',
+        'permits_count_5yr': 'permits_count_5yr',
+        # Building/land value lags
+        'bld_val_lag1': 'bld_val_lag1',
+        'land_val_lag1': 'land_val_lag1',
+        # Remodel year
+        'bld_max_yr_remodel': 'remodel_year',
+    })
 
     panel['acct'] = panel['acct'].astype(str)
     panel['year'] = panel['year'].astype(int)
     panel['value'] = pd.to_numeric(panel['value'], errors='coerce')
     panel = panel[panel['value'] > 0].copy()
 
+    has_permits = 'permits_count' in panel.columns
+    has_bld_val = 'bld_val_lag1' in panel.columns
+
     print(f"  Panel: {len(panel):,} rows, {panel['acct'].nunique():,} accts")
     print(f"  Years: {sorted(panel['year'].unique())}")
-    print(f"  Columns used: prop_type={'prop_type' in panel.columns}, impr_val={'impr_val' in panel.columns}, zip_code={'zip_code' in panel.columns}")
+    print(f"  Columns: prop_type={'prop_type' in panel.columns}, permits={has_permits}, bld_val_lag={has_bld_val}, zip={'zip_code' in panel.columns}")
 
     # ─── 2. Load owner data to identify acquisitions ─────────────────
     print(f"\n[{ts()}] Loading owner data...")
@@ -140,56 +134,16 @@ def run_counterfactual_backtest():
         owners_by_year[year] = owner_map
         print(f"  {year}: {len(owner_map):,} owners")
 
-    # ─── 3. Download Houston building permits ────────────────────────
-    print(f"\n[{ts()}] Downloading Houston building permits...")
-    import requests
-
-    permits = pd.DataFrame()
-    # City of Houston Open Data - Building Permits
-    # Try COH Socrata API
-    permit_url = "https://data.houstontx.gov/api/3/action/package_search?q=building+permits"
-    try:
-        resp = requests.get(permit_url, timeout=30)
-        if resp.ok:
-            pkg = resp.json()
-            # Find CSV resource
-            results = pkg.get("result", {}).get("results", [])
-            for r in results:
-                for res in r.get("resources", []):
-                    if res.get("format", "").lower() == "csv":
-                        print(f"  Found permit CSV: {res['url']}")
-                        pdf = pd.read_csv(res["url"], low_memory=False, nrows=500000)
-                        permits = pdf
-                        break
-                if len(permits) > 0:
-                    break
-    except Exception as e:
-        print(f"  Permit download failed: {e}")
-
-    if len(permits) == 0:
-        # Try direct known URL patterns
-        alt_urls = [
-            "https://data.houstontx.gov/dataset/building-permits/resource/building-permits.csv",
-            "https://cohgis-mycity.opendata.arcgis.com/api/download/v1/items/building_permits/csv",
-        ]
-        for url in alt_urls:
-            try:
-                permits = pd.read_csv(url, low_memory=False, nrows=500000)
-                if len(permits) > 0:
-                    print(f"  Downloaded {len(permits):,} permits from {url}")
-                    break
-            except Exception:
-                continue
-
-    has_permits = len(permits) > 0
-    permit_accts = set()
+    # ─── 3. Permit data is already in the HCAD panel ──────────────────
+    print(f"\n[{ts()}] Permit data from HCAD panel:")
     if has_permits:
-        print(f"  Permits loaded: {len(permits):,} rows")
-        print(f"  Permit columns: {list(permits.columns)[:15]}")
-        # Try to extract address-based matching or account numbers
-        # This will be refined based on actual column names
+        has_permit_mask = panel['permits_count'].notna() & (panel['permits_count'] > 0)
+        print(f"  Rows with permit data: {has_permit_mask.sum():,} / {len(panel):,} ({has_permit_mask.mean()*100:.1f}%)")
+        permitted = panel[has_permit_mask]
+        print(f"  permits_sum_value: mean=${permitted['permits_sum_value'].mean():,.0f} median=${permitted['permits_sum_value'].median():,.0f}")
+        print(f"  permits_count: mean={permitted['permits_count'].mean():.1f} max={permitted['permits_count'].max():.0f}")
     else:
-        print("  ⚠️ No permit data available — falling back to improvement value heuristic")
+        print("  ⚠️ No permit columns in panel")
 
     # ─── 4. Identify ICP entities and their acquisitions ─────────────
     print(f"\n[{ts()}] Identifying ICP entity acquisitions...")
@@ -231,42 +185,56 @@ def run_counterfactual_backtest():
 
     print(f"  ICP entities: {len(icp_entities):,}")
 
-    # ─── 5. Renovation screening ────────────────────────────────────
+    # ─── 5. Renovation screening (using HCAD panel's built-in permit + value data) ──
     print(f"\n[{ts()}] Screening renovated parcels...")
     renovated_parcels = set()  # (acct, year) pairs flagged as renovated
 
-    if 'impr_val' in panel.columns and 'land_val' in panel.columns:
-        # Improvement value heuristic: if impr jumps >30% while land moves <10%
-        for acct in panel['acct'].unique():
-            adf = panel[panel['acct'] == acct].sort_values('year')
-            if len(adf) < 2:
-                continue
-            for j in range(1, len(adf)):
-                prev = adf.iloc[j-1]
-                curr = adf.iloc[j]
-                if prev.get('impr_val', 0) > 0 and prev.get('land_val', 0) > 0:
-                    impr_chg = (curr.get('impr_val', 0) - prev.get('impr_val', 0)) / prev.get('impr_val', 1)
-                    land_chg = (curr.get('land_val', 0) - prev.get('land_val', 0)) / prev.get('land_val', 1)
-                    if impr_chg > 0.30 and abs(land_chg) < 0.10:
-                        renovated_parcels.add((acct, int(curr['year'])))
-        print(f"  Flagged {len(renovated_parcels):,} (acct, year) pairs via improvement value heuristic")
-    else:
-        print("  No impr_val/land_val columns — skipping improvement heuristic")
+    # PRIMARY: Permit-based screening (definitive)
+    # If a parcel had permits with total value > $25K, it was renovated
+    PERMIT_VALUE_THRESHOLD = 25_000
+    if has_permits:
+        permit_mask = (
+            panel['permits_sum_value'].notna() &
+            (panel['permits_sum_value'] > PERMIT_VALUE_THRESHOLD)
+        )
+        permit_flagged = panel.loc[permit_mask, ['acct', 'year']]
+        for _, row in permit_flagged.iterrows():
+            renovated_parcels.add((row['acct'], int(row['year'])))
+        print(f"  Permit screen (>${PERMIT_VALUE_THRESHOLD:,}): {len(renovated_parcels):,} (acct,year) flagged")
 
-    # Tract-relative outlier detection
-    # If a parcel appreciates >2× the tract median for that year, flag it
-    panel_sorted = panel.sort_values(['acct', 'year'])
-    panel_sorted['prev_value'] = panel_sorted.groupby('acct')['value'].shift(1)
-    panel_sorted['growth'] = (panel_sorted['value'] - panel_sorted['prev_value']) / panel_sorted['prev_value']
+        # Also flag year of remodel
+        if 'remodel_year' in panel.columns:
+            remodel_mask = panel['remodel_year'].notna() & (panel['remodel_year'] > 0)
+            remodel_rows = panel.loc[remodel_mask, ['acct', 'remodel_year']].drop_duplicates()
+            n_remodel = 0
+            for _, row in remodel_rows.iterrows():
+                yr = int(row['remodel_year'])
+                # Flag the remodel year and year after
+                renovated_parcels.add((row['acct'], yr))
+                renovated_parcels.add((row['acct'], yr + 1))
+                n_remodel += 1
+            print(f"  Remodel year flag: {n_remodel:,} parcels")
 
-    # Compute median growth by year (proxy for market)
-    for year in panel_sorted['year'].unique():
-        yr_data = panel_sorted[panel_sorted['year'] == year]
-        med_growth = yr_data['growth'].median()
-        if pd.notna(med_growth) and med_growth > 0:
-            outliers = yr_data[yr_data['growth'] > 2 * med_growth]
-            for _, row in outliers.iterrows():
-                renovated_parcels.add((row['acct'], int(row['year'])))
+    # SECONDARY: Building value jump heuristic
+    # If building value jumped >30% YoY while land stayed flat (<10%), flag as renovation
+    if has_bld_val:
+        # bld_val_lag1 is the PRIOR year's building value
+        # Current building value = value - land_val_lag1 (approximate)
+        bv = panel[['acct', 'year', 'bld_val_lag1', 'land_val_lag1', 'value']].dropna(
+            subset=['bld_val_lag1', 'land_val_lag1']
+        ).copy()
+        bv = bv[(bv['bld_val_lag1'] > 0) & (bv['land_val_lag1'] > 0)]
+        # Approximate current building value
+        bv['bld_val_curr'] = bv['value'] - bv['land_val_lag1']  # rough
+        bv['bld_chg'] = (bv['bld_val_curr'] - bv['bld_val_lag1']) / bv['bld_val_lag1']
+        bv_flagged = bv[bv['bld_chg'] > 0.30]
+        n_bv = 0
+        for _, row in bv_flagged.iterrows():
+            key = (row['acct'], int(row['year']))
+            if key not in renovated_parcels:
+                renovated_parcels.add(key)
+                n_bv += 1
+        print(f"  Building value jump (>30%): {n_bv:,} additional flagged")
 
     print(f"  Total flagged renovated: {len(renovated_parcels):,} (acct, year) pairs")
 
