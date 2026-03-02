@@ -43,9 +43,9 @@ export function getStreetViewImageUrl(lat: number, lng: number, apiKey: string, 
 }
 
 // ── Cache constants ───────────────────────────────────────────────────────────
-const LS_KEY      = "properlytic_sv_v1"   // localStorage key
-const LS_MAX      = 2000                   // max entries in localStorage store
-const MEM_MAX     = 500                    // in-memory LRU mirror size
+const LS_KEY = "properlytic_sv_v1"   // localStorage key
+const LS_MAX = 2000                   // max entries in localStorage store
+const MEM_MAX = 500                    // in-memory LRU mirror size
 
 // In-memory LRU mirror for hot reads (avoids JSON.parse on every call)
 const memCache = new Map<string, string>()
@@ -132,25 +132,27 @@ export async function getSignedStreetViewUrl(
 
     // 1. In-memory
     const mem = memCache.get(key)
-    if (mem) { memCache.delete(key); memCache.set(key, mem); return mem }
+    if (mem) { memCache.delete(key); memCache.set(key, mem); console.log(`[SV] ✅ MEM HIT  ${key}`); return mem }
 
     // 2. localStorage
     const stored = lsGet(key)
-    if (stored) { memSet(key, stored); return stored }
+    if (stored) { memSet(key, stored); console.log(`[SV] ✅ LS HIT   ${key}`); return stored }
 
     // 3. H3 ancestor zoom sharing
     if (h3Id) {
         const ancestor = getCachedAncestorStreetView(h3Id, width, height)
-        if (ancestor) return ancestor
+        if (ancestor) { console.log(`[SV] ✅ ANCESTOR ${key} (reused parent cell)`); return ancestor }
     }
 
     // 4. API call
+    console.log(`[SV] 🌐 API CALL ${key} (cache miss — will cost $0.007)`)
     try {
         const res = await fetch(`/api/streetview-sign?lat=${lat}&lng=${lng}&w=${width}&h=${height}`)
         if (res.ok) {
             const { url } = await res.json()
             memSet(key, url)
             lsSet(key, url)
+            console.log(`[SV] 💾 CACHED  ${key} (mem + localStorage)`)
             return url
         }
     } catch { /* fall through to unsigned */ }
