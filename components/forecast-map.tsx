@@ -1746,16 +1746,23 @@ export function ForecastMap({
                     {isMobile && !(isKeyboardOpen) ? (
                         /* Mobile: Side-by-side — StreetView left, Chart right */
                         <div className="flex flex-row flex-1 min-h-0 overflow-hidden">
-                            {/* StreetView — left half */}
-                            {process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY && (selectedId ? selectedCoords : (hoverDwell ? tooltipCoords : null)) && (
-                                <div className="w-1/2 h-full overflow-hidden">
+                            {/* StreetView — left half (always visible, shows loading placeholder) */}
+                            <div className="w-1/2 h-full overflow-hidden">
+                                {process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY && (selectedId ? selectedCoords : (hoverDwell ? tooltipCoords : null)) ? (
                                     <StreetViewCarousel
                                         h3Ids={[]}
                                         apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY}
                                         coordinates={(selectedId ? selectedCoords : tooltipCoords)!}
                                     />
-                                </div>
-                            )}
+                                ) : (
+                                    /* Loading placeholder while dwell timer is active */
+                                    <div className="w-full h-full bg-zinc-900/80 flex flex-col items-center justify-center gap-2">
+                                        <div className="w-6 h-6 border-2 border-white/20 border-t-white/60 rounded-full animate-spin" />
+                                        <span className="text-[10px] text-white/40 uppercase tracking-wider">Street View</span>
+                                    </div>
+                                )}
+                            </div>
+
                             {/* Chart — right half */}
                             <div className="w-1/2 h-full overflow-hidden flex flex-col">
                                 {(() => {
