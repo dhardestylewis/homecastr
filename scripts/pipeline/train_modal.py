@@ -186,6 +186,25 @@ def train_worldmodel(
     elif "tot_appr_val" not in df.columns:
         raise ValueError("Panel contains no sale_price, property_value, assessed_value, median_home_value, market_value, value, or tot_appr_val to form a target.")
 
+    # ─── Fill year gaps (carry forward) ───
+    # TxGIO has gaps (e.g. 2019→2021, no 2020). Shard builder needs contiguous years.
+    if "yr" in df.columns:
+        existing_years = sorted(df["yr"].unique().to_list())
+        yr_min, yr_max = int(min(existing_years)), int(max(existing_years))
+        all_years = set(range(yr_min, yr_max + 1))
+        missing_years = sorted(all_years - set(existing_years))
+        if missing_years:
+            print(f"[{ts()}] Year gaps detected: {missing_years}. Carrying forward...")
+            for gap_yr in missing_years:
+                # Find nearest prior year
+                prior = max(y for y in existing_years if y < gap_yr)
+                gap_fill = df.filter(pl.col("yr") == prior).with_columns(
+                    pl.lit(gap_yr).cast(pl.Int32).alias("yr")
+                )
+                df = pl.concat([df, gap_fill])
+                print(f"  {prior} → {gap_yr}: {len(gap_fill):,} rows carried forward")
+            df = df.sort(["acct", "yr"])
+
     # Explicitly DROP all canonical valuation components to strictly prevent model leakage into the features
     leaky_cols = ["sale_price", "property_value", "assessed_value", "land_value", "improvement_value", "median_home_value", "market_value", "value", "total_value", "prior_value", "growth_pct"]
     drop_leaks = [c for c in leaky_cols if c in df.columns]
