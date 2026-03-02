@@ -76,104 +76,81 @@ def build_acs_panel():
     from google.cloud import storage
 
     ts = lambda: time.strftime("%Y-%m-%d %H:%M:%S")
-    BASE_URL = "https://api.census.gov/data/{year}/acs/acs5"
+    BASE = "https://api.census.gov/data/{year}/acs/acs5"
     import time as _time
 
-    # Diagnostic: test one known-good variable for 2022
-    print(f"[{ts()}] Testing Census API connectivity...")
-    test_url = BASE_URL.format(year=2022)
-    try:
-        test_resp = requests.get(test_url, params={
-            'get': 'NAME,B25077_001E',
-            'for': 'tract:*',
-            'in': 'state:48',  # Texas only as test
-        }, timeout=60)
-        print(f"  Test response: {test_resp.status_code} ({len(test_resp.content)} bytes)")
-        if test_resp.status_code != 200:
-            print(f"  Response body: {test_resp.text[:500]}")
-    except Exception as e:
-        print(f"  Test failed: {e}")
+    # All state FIPS codes (50 states + DC + PR)
+    STATE_FIPS = [f"{i:02d}" for i in list(range(1, 57)) + [72] if i not in (3, 7, 14, 43, 52)]
 
-    # Find which variables work for each year (some tables added later)
     all_vars = list(ACS_VARIABLES.keys())
     all_dfs = []
 
     for year in ACS_YEARS:
-        print(f"\n[{ts()}] Downloading ACS {year} tract data...")
-        api_url = BASE_URL.format(year=year)
+        print(f"\n[{ts()}] ACS {year}...")
+        url_base = BASE.format(year=year)
 
-        # Try all variables at once first (fastest if it works)
-        var_str = ','.join(all_vars)
+        # Probe which variables work for this year (test against Texas)
+        var_str = ",".join(all_vars)
+        test_url = f"{url_base}?get=NAME,{var_str}&for=tract:*&in=state:48"
         try:
-            resp = requests.get(api_url, params={
-                'get': f'NAME,{var_str}',
-                'for': 'tract:*',
-                'in': 'state:*',
-            }, timeout=300)
-            if resp.status_code == 200:
-                data = resp.json()
-                header = data[0]
-                rows = data[1:]
-                df = pd.DataFrame(rows, columns=header)
-                df["geoid"] = df["state"] + df["county"] + df["tract"]
-                df["year"] = year
-                for cv, fn in ACS_VARIABLES.items():
-                    if cv in df.columns:
-                        df[fn] = pd.to_numeric(df[cv], errors="coerce")
-                keep = ["geoid", "year"] + [v for v in ACS_VARIABLES.values() if v in df.columns]
-                df = df[keep]
-                df = df.dropna(subset=["median_home_value"])
-                df = df[df["median_home_value"] > 0]
-                all_dfs.append(df)
-                print(f"  ✅ {year}: {len(df):,} tracts, {len(df.columns)} cols (single request)")
-                _time.sleep(1)
-                continue
+            r = requests.get(test_url, timeout=60)
+            if r.status_code == 200:
+                working_vars = all_vars  # All work
+                print(f"  All {len(all_vars)} vars available")
             else:
-                print(f"  All-at-once failed ({resp.status_code}): {resp.text[:200]}")
+                # Probe individually
+                print(f"  Some vars unavailable, probing...")
+                working_vars = []
+                for v in all_vars:
+                    try:
+                        r2 = requests.get(f"{url_base}?get=NAME,{v}&for=tract:*&in=state:48", timeout=20)
+                        if r2.status_code == 200:
+                            working_vars.append(v)
+                    except:
+                        pass
+                    _time.sleep(0.2)
+                print(f"  {len(working_vars)}/{len(all_vars)} vars available")
         except Exception as e:
-            print(f"  All-at-once failed: {e}")
-
-        # Fallback: request variables individually and merge
-        year_dfs = []
-        for i in range(0, len(all_vars), 5):
-            batch = all_vars[i:i+5]
-            var_str = ','.join(batch)
-            try:
-                resp = requests.get(api_url, params={
-                    'get': f'NAME,{var_str}',
-                    'for': 'tract:*',
-                    'in': 'state:*',
-                }, timeout=300)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    df = pd.DataFrame(data[1:], columns=data[0])
-                    df["geoid"] = df["state"] + df["county"] + df["tract"]
-                    df["year"] = year
-                    for cv, fn in ACS_VARIABLES.items():
-                        if cv in df.columns:
-                            df[fn] = pd.to_numeric(df[cv], errors="coerce")
-                    keep = ["geoid", "year"] + [ACS_VARIABLES[v] for v in batch if v in ACS_VARIABLES and ACS_VARIABLES[v] in df.columns]
-                    df = df[[c for c in keep if c in df.columns]]
-                    year_dfs.append(df)
-                else:
-                    print(f"  ⚠️ {year} batch {i//5} ({resp.status_code}): {resp.text[:100]}")
-            except Exception as e:
-                print(f"  ⚠️ {year} batch {i//5} failed: {e}")
-            _time.sleep(1)
-
-        if not year_dfs:
-            print(f"  ⚠️ {year}: all failed")
+            print(f"  ⚠️ Probe failed: {e}")
             continue
 
-        merged = year_dfs[0]
-        for extra_df in year_dfs[1:]:
-            merged = merged.merge(extra_df, on=["geoid", "year"], how="outer")
-        if "median_home_value" in merged.columns:
-            merged = merged.dropna(subset=["median_home_value"])
-            merged = merged[merged["median_home_value"] > 0]
-        all_dfs.append(merged)
-        print(f"  ✅ {year}: {len(merged):,} tracts, {len(merged.columns)} cols (batched)")
-        _time.sleep(2)
+        if "B25077_001E" not in working_vars:
+            print(f"  ⚠️ Target variable missing, skipping year")
+            continue
+
+        # Download per state
+        var_str = ",".join(working_vars)
+        state_dfs = []
+        for fips in STATE_FIPS:
+            url = f"{url_base}?get=NAME,{var_str}&for=tract:*&in=state:{fips}"
+            try:
+                resp = requests.get(url, timeout=120)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if len(data) > 1:
+                        sdf = pd.DataFrame(data[1:], columns=data[0])
+                        state_dfs.append(sdf)
+            except:
+                pass
+            _time.sleep(0.1)  # 100ms between states
+
+        if not state_dfs:
+            print(f"  ⚠️ No state data")
+            continue
+
+        df = pd.concat(state_dfs, ignore_index=True)
+        df["geoid"] = df["state"] + df["county"] + df["tract"]
+        df["year"] = year
+        for cv, fn in ACS_VARIABLES.items():
+            if cv in df.columns:
+                df[fn] = pd.to_numeric(df[cv], errors="coerce")
+        keep = ["geoid", "year"] + [ACS_VARIABLES[v] for v in working_vars if ACS_VARIABLES[v] in df.columns]
+        df = df[[c for c in keep if c in df.columns]]
+        if "median_home_value" in df.columns:
+            df = df.dropna(subset=["median_home_value"])
+            df = df[df["median_home_value"] > 0]
+        all_dfs.append(df)
+        print(f"  ✅ {len(df):,} tracts from {len(state_dfs)} states, {len(df.columns)} cols")
 
     if not all_dfs:
         print("❌ No data downloaded!")
