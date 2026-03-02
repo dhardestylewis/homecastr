@@ -77,68 +77,103 @@ def build_acs_panel():
 
     ts = lambda: time.strftime("%Y-%m-%d %H:%M:%S")
     BASE_URL = "https://api.census.gov/data/{year}/acs/acs5"
+    import time as _time
 
-    # Split variables into batches (Census API has per-request limits)
-    var_list = list(ACS_VARIABLES.keys())
-    BATCH_SIZE = 8
-    var_batches = [var_list[i:i+BATCH_SIZE] for i in range(0, len(var_list), BATCH_SIZE)]
-    print(f"  {len(var_list)} variables in {len(var_batches)} batches of ≤{BATCH_SIZE}")
+    # Diagnostic: test one known-good variable for 2022
+    print(f"[{ts()}] Testing Census API connectivity...")
+    test_url = BASE_URL.format(year=2022)
+    try:
+        test_resp = requests.get(test_url, params={
+            'get': 'NAME,B25077_001E',
+            'for': 'tract:*',
+            'in': 'state:48',  # Texas only as test
+        }, timeout=60)
+        print(f"  Test response: {test_resp.status_code} ({len(test_resp.content)} bytes)")
+        if test_resp.status_code != 200:
+            print(f"  Response body: {test_resp.text[:500]}")
+    except Exception as e:
+        print(f"  Test failed: {e}")
 
+    # Find which variables work for each year (some tables added later)
+    all_vars = list(ACS_VARIABLES.keys())
     all_dfs = []
 
     for year in ACS_YEARS:
-        print(f"[{ts()}] Downloading ACS {year} tract data...")
-        year_dfs = []
+        print(f"\n[{ts()}] Downloading ACS {year} tract data...")
+        api_url = BASE_URL.format(year=year)
 
-        for batch_idx, batch_vars in enumerate(var_batches):
-            variables = ",".join(batch_vars)
-            url = f"{BASE_URL.format(year=year)}?get=NAME,{variables}&for=tract:*&in=state:*"
-
-            try:
-                resp = requests.get(url, timeout=180)
-                resp.raise_for_status()
+        # Try all variables at once first (fastest if it works)
+        var_str = ','.join(all_vars)
+        try:
+            resp = requests.get(api_url, params={
+                'get': f'NAME,{var_str}',
+                'for': 'tract:*',
+                'in': 'state:*',
+            }, timeout=300)
+            if resp.status_code == 200:
                 data = resp.json()
-            except Exception as e:
-                print(f"  ⚠️ {year} batch {batch_idx} failed: {e}")
-                import time as _time; _time.sleep(2)  # rate limit backoff
+                header = data[0]
+                rows = data[1:]
+                df = pd.DataFrame(rows, columns=header)
+                df["geoid"] = df["state"] + df["county"] + df["tract"]
+                df["year"] = year
+                for cv, fn in ACS_VARIABLES.items():
+                    if cv in df.columns:
+                        df[fn] = pd.to_numeric(df[cv], errors="coerce")
+                keep = ["geoid", "year"] + [v for v in ACS_VARIABLES.values() if v in df.columns]
+                df = df[keep]
+                df = df.dropna(subset=["median_home_value"])
+                df = df[df["median_home_value"] > 0]
+                all_dfs.append(df)
+                print(f"  ✅ {year}: {len(df):,} tracts, {len(df.columns)} cols (single request)")
+                _time.sleep(1)
                 continue
+            else:
+                print(f"  All-at-once failed ({resp.status_code}): {resp.text[:200]}")
+        except Exception as e:
+            print(f"  All-at-once failed: {e}")
 
-            header = data[0]
-            rows = data[1:]
-            df = pd.DataFrame(rows, columns=header)
-
-            # Build geoid
-            df["geoid"] = df["state"] + df["county"] + df["tract"]
-            df["year"] = year
-
-            # Rename variables in this batch
-            for census_var, friendly_name in ACS_VARIABLES.items():
-                if census_var in df.columns:
-                    df[friendly_name] = pd.to_numeric(df[census_var], errors="coerce")
-
-            # Keep only geoid + year + renamed vars
-            keep = ["geoid", "year"] + [ACS_VARIABLES[v] for v in batch_vars if v in ACS_VARIABLES]
-            df = df[[c for c in keep if c in df.columns]]
-            year_dfs.append(df)
-
-            import time as _time; _time.sleep(0.5)  # be polite to Census API
+        # Fallback: request variables individually and merge
+        year_dfs = []
+        for i in range(0, len(all_vars), 5):
+            batch = all_vars[i:i+5]
+            var_str = ','.join(batch)
+            try:
+                resp = requests.get(api_url, params={
+                    'get': f'NAME,{var_str}',
+                    'for': 'tract:*',
+                    'in': 'state:*',
+                }, timeout=300)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    df = pd.DataFrame(data[1:], columns=data[0])
+                    df["geoid"] = df["state"] + df["county"] + df["tract"]
+                    df["year"] = year
+                    for cv, fn in ACS_VARIABLES.items():
+                        if cv in df.columns:
+                            df[fn] = pd.to_numeric(df[cv], errors="coerce")
+                    keep = ["geoid", "year"] + [ACS_VARIABLES[v] for v in batch if v in ACS_VARIABLES and ACS_VARIABLES[v] in df.columns]
+                    df = df[[c for c in keep if c in df.columns]]
+                    year_dfs.append(df)
+                else:
+                    print(f"  ⚠️ {year} batch {i//5} ({resp.status_code}): {resp.text[:100]}")
+            except Exception as e:
+                print(f"  ⚠️ {year} batch {i//5} failed: {e}")
+            _time.sleep(1)
 
         if not year_dfs:
-            print(f"  ⚠️ {year}: all batches failed")
+            print(f"  ⚠️ {year}: all failed")
             continue
 
-        # Merge batches on geoid + year
         merged = year_dfs[0]
         for extra_df in year_dfs[1:]:
             merged = merged.merge(extra_df, on=["geoid", "year"], how="outer")
-
-        # Filter
         if "median_home_value" in merged.columns:
             merged = merged.dropna(subset=["median_home_value"])
             merged = merged[merged["median_home_value"] > 0]
-
         all_dfs.append(merged)
-        print(f"  ✅ {year}: {len(merged):,} tracts, {len(merged.columns)} cols")
+        print(f"  ✅ {year}: {len(merged):,} tracts, {len(merged.columns)} cols (batched)")
+        _time.sleep(2)
 
     if not all_dfs:
         print("❌ No data downloaded!")
