@@ -143,6 +143,13 @@ def train_worldmodel(
         df = pl.read_parquet(panel_local)
         jurisdiction_suffix = jurisdiction
 
+    # ─── Clean Census suppression values (-666666666) if present ───
+    for col in df.columns:
+        if df[col].dtype in (pl.Float64, pl.Float32, pl.Int64, pl.Int32):
+            df = df.with_columns(
+                pl.when(pl.col(col) < -600_000_000).then(None).otherwise(pl.col(col)).alias(col)
+            )
+
     # ─── Adapt canonical → worldmodel schema ───
     print(f"[{ts()}] Raw panel: {len(df):,} rows, columns: {df.columns}")
 
@@ -170,16 +177,17 @@ def train_worldmodel(
 
     # SECURE TARGET LEAKAGE 
     # Determine the strongest valuation signal available per row
-    available_val_cols = [c for c in ["sale_price", "property_value", "assessed_value"] if c in df.columns]
+    # Support ACS median_home_value as target
+    available_val_cols = [c for c in ["sale_price", "property_value", "assessed_value", "median_home_value"] if c in df.columns]
     if available_val_cols and "tot_appr_val" not in df.columns:
         df = df.with_columns(
             pl.coalesce([pl.col(c) for c in available_val_cols]).alias("tot_appr_val")
         )
     elif "tot_appr_val" not in df.columns:
-        raise ValueError("Panel contains no sale_price, property_value, assessed_value, or tot_appr_val to form a target.")
+        raise ValueError("Panel contains no sale_price, property_value, assessed_value, median_home_value, or tot_appr_val to form a target.")
 
     # Explicitly DROP all canonical valuation components to strictly prevent model leakage into the features
-    leaky_cols = ["sale_price", "property_value", "assessed_value", "land_value", "improvement_value"]
+    leaky_cols = ["sale_price", "property_value", "assessed_value", "land_value", "improvement_value", "median_home_value"]
     drop_leaks = [c for c in leaky_cols if c in df.columns]
     if drop_leaks:
         print(f"[{ts()}] Dropping LEAKY valuation columns from feature set: {drop_leaks}")
