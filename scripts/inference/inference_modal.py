@@ -42,6 +42,7 @@ wandb_secret = modal.Secret.from_name("wandb-creds", required_keys=["WANDB_API_K
 
 # Volume for checkpoint & output persistence
 output_vol = modal.Volume.from_name("inference-outputs", create_if_missing=True)
+ckpt_vol = modal.Volume.from_name("properlytic-checkpoints", create_if_missing=True)
 
 
 @app.function(
@@ -50,7 +51,7 @@ output_vol = modal.Volume.from_name("inference-outputs", create_if_missing=True)
     gpu="A100",
     timeout=86400,    # 24 hours — full 1.2M acct inference needs ~13h
     memory=32768,     # 32 GB RAM
-    volumes={"/output": output_vol},
+    volumes={"/output": output_vol, "/checkpoints": ckpt_vol},
 )
 def run_inference(jurisdiction: str, origin_year: int, backtest: bool = False):
     """Run grand inference for one jurisdiction at one origin year."""
@@ -74,30 +75,41 @@ def run_inference(jurisdiction: str, origin_year: int, backtest: bool = False):
     wm_source = wm_blob.download_as_text()
     print(f"[{_ts()}] Downloaded worldmodel.py: {len(wm_source)} chars")
 
-    # ─── 3. Download checkpoints from GCS ────────────────────────────
+    # ─── 3. Find checkpoints (Modal volume first, then GCS) ──────────
     ckpt_dir = f"/output/{jurisdiction}_v11"
     os.makedirs(ckpt_dir, exist_ok=True)
 
+    # Check Modal volume (training saves here)
+    modal_ckpt_dir = f"/checkpoints/{jurisdiction}_v11"
+    import glob as _glob
+    modal_ckpts = _glob.glob(os.path.join(modal_ckpt_dir, "*.pt")) if os.path.isdir(modal_ckpt_dir) else []
+    if modal_ckpts:
+        import shutil
+        for src in modal_ckpts:
+            dst = os.path.join(ckpt_dir, os.path.basename(src))
+            if not os.path.exists(dst):
+                shutil.copy2(src, dst)
+                print(f"[{_ts()}] Copied checkpoint from volume: {os.path.basename(src)}")
+            else:
+                print(f"[{_ts()}] Checkpoint cached: {os.path.basename(src)}")
+    
+    # Also try GCS
     ckpt_prefix = f"checkpoints/{jurisdiction}/"
     blobs = list(bucket.list_blobs(prefix=ckpt_prefix))
     ckpt_files = [b for b in blobs if b.name.endswith(".pt")]
-
     if not ckpt_files:
-        # Try alternate path pattern
         ckpt_prefix2 = f"output/{jurisdiction}_v11/"
         blobs2 = list(bucket.list_blobs(prefix=ckpt_prefix2))
         ckpt_files = [b for b in blobs2 if b.name.endswith(".pt")]
-
     for blob in ckpt_files:
         fname = blob.name.split("/")[-1]
         local_path = os.path.join(ckpt_dir, fname)
         if not os.path.exists(local_path):
             blob.download_to_filename(local_path)
-            print(f"[{_ts()}] Downloaded checkpoint: {fname}")
-        else:
-            print(f"[{_ts()}] Checkpoint cached: {fname}")
+            print(f"[{_ts()}] Downloaded checkpoint from GCS: {fname}")
 
-    print(f"[{_ts()}] {len(ckpt_files)} checkpoints in {ckpt_dir}")
+    all_ckpts = _glob.glob(os.path.join(ckpt_dir, "*.pt"))
+    print(f"[{_ts()}] {len(all_ckpts)} checkpoints in {ckpt_dir}")
 
     # ─── 4. Download inference_pipeline.py from GCS ──────────────────
     inf_blob = bucket.blob("code/inference_pipeline.py")
@@ -144,14 +156,30 @@ def run_inference(jurisdiction: str, origin_year: int, backtest: bool = False):
     _df = pl.read_parquet(panel_path)
     print(f"[{_ts()}] Panel loaded: {len(_df):,} rows, columns: {_df.columns[:15]}")
 
-    # Derive property_value if missing
+    # Clean Census suppression values (-666666666)
+    for _col in _df.columns:
+        if _df[_col].dtype in (pl.Float64, pl.Float32, pl.Int64, pl.Int32):
+            _df = _df.with_columns(
+                pl.when(pl.col(_col) < -600_000_000).then(None).otherwise(pl.col(_col)).alias(_col)
+            )
+
+    # Derive property_value if missing (support ACS median_home_value)
     if "property_value" not in _df.columns:
-        if "sale_price" in _df.columns:
+        if "median_home_value" in _df.columns:
+            _df = _df.with_columns(pl.col("median_home_value").alias("property_value"))
+            print(f"[{_ts()}] Derived property_value from median_home_value (ACS)")
+        elif "sale_price" in _df.columns:
             _df = _df.with_columns(pl.col("sale_price").alias("property_value"))
         elif "assessed_value" in _df.columns:
             _df = _df.with_columns(pl.col("assessed_value").alias("property_value"))
         elif "tot_appr_val" in _df.columns:
             _df = _df.with_columns(pl.col("tot_appr_val").alias("property_value"))
+
+    # Derive parcel_id from geoid if missing (ACS uses geoid as tract identifier)
+    if "parcel_id" not in _df.columns and "acct" not in _df.columns:
+        if "geoid" in _df.columns:
+            _df = _df.with_columns(pl.col("geoid").alias("parcel_id"))
+            print(f"[{_ts()}] Using geoid as parcel_id (ACS)")
 
     # Derive year if missing
     if "year" not in _df.columns and "yr" not in _df.columns:
@@ -181,6 +209,12 @@ def run_inference(jurisdiction: str, origin_year: int, backtest: bool = False):
         _df = _df.drop(_drop)
     _df = _df.rename(_actual_renames)
     print(f"[{_ts()}] Renamed columns: {_actual_renames}")
+
+    # Drop original leaky columns after rename
+    _leaky = [c for c in ["median_home_value", "sale_price", "assessed_value", "land_value", "improvement_value"] if c in _df.columns]
+    if _leaky:
+        _df = _df.drop(_leaky)
+        print(f"[{_ts()}] Dropped leaky columns: {_leaky}")
 
     # Filter: need acct, yr, tot_appr_val
     if "tot_appr_val" in _df.columns:

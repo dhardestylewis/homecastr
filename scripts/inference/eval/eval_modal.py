@@ -129,10 +129,20 @@ os.environ["INFERENCE_ONLY"] = "1"
         else:
             print(f"[{ts()}] Single-jurisdiction panel (value={unique_jurs}), skipping filter")
 
+    # Clean Census suppression values (-666666666)
+    for _col in df_actuals.columns:
+        if df_actuals[_col].dtype in (pl.Float64, pl.Float32, pl.Int64, pl.Int32):
+            df_actuals = df_actuals.with_columns(
+                pl.when(pl.col(_col) < -600_000_000).then(None).otherwise(pl.col(_col)).alias(_col)
+            )
+
     # ─── Pre-rename: Coalesce missing columns before mapping ───
-    # Ensure property_value exists (fallback from sale_price or assessed_value)
+    # Support ACS median_home_value as property_value
     if "property_value" not in df_actuals.columns:
-        if "sale_price" in df_actuals.columns:
+        if "median_home_value" in df_actuals.columns:
+            df_actuals = df_actuals.with_columns(pl.col("median_home_value").alias("property_value"))
+            print(f"[{ts()}] Derived property_value from median_home_value (ACS)")
+        elif "sale_price" in df_actuals.columns:
             df_actuals = df_actuals.with_columns(pl.col("sale_price").alias("property_value"))
             print(f"[{ts()}] Derived property_value from sale_price")
         elif "assessed_value" in df_actuals.columns:
@@ -141,6 +151,12 @@ os.environ["INFERENCE_ONLY"] = "1"
         elif "tot_appr_val" in df_actuals.columns:
             df_actuals = df_actuals.with_columns(pl.col("tot_appr_val").alias("property_value"))
             print(f"[{ts()}] Using existing tot_appr_val as property_value")
+    
+    # Derive parcel_id from geoid if missing (ACS)
+    if "parcel_id" not in df_actuals.columns and "acct" not in df_actuals.columns:
+        if "geoid" in df_actuals.columns:
+            df_actuals = df_actuals.with_columns(pl.col("geoid").alias("parcel_id"))
+            print(f"[{ts()}] Using geoid as parcel_id (ACS)")
     
     # Ensure year exists (fallback from sale_date)
     if "year" not in df_actuals.columns and "yr" not in df_actuals.columns:
@@ -203,7 +219,7 @@ os.environ["INFERENCE_ONLY"] = "1"
 
     # CRITICAL: Drop leaky valuation columns — must match train_modal.py preprocessing
     # Without this, worldmodel discovers extra features, causing position misalignment
-    leaky_cols = ["sale_price", "property_value", "assessed_value", "land_value", "improvement_value"]
+    leaky_cols = ["sale_price", "property_value", "assessed_value", "land_value", "improvement_value", "median_home_value"]
     drop_leaks = [c for c in leaky_cols if c in df_actuals.columns]
     if drop_leaks:
         print(f"[{ts()}] Dropping leaky columns (matching training): {drop_leaks}")
