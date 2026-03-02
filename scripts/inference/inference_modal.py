@@ -240,9 +240,23 @@ def run_inference(jurisdiction: str, origin_year: int, backtest: bool = False):
         f'/output/{jurisdiction}_inference/'
     )
 
-    # Inject globals that inference_pipeline.py reads via globals().get()
+    # Re-inject globals (exec may have cleared them)
     globals()["FORECAST_ORIGIN_YEAR"] = origin_year
     globals()["JURISDICTION"] = jurisdiction
+    globals()["CKPT_DIR"] = ckpt_dir
+
+    # Debug: list what's actually in ckpt_dir
+    import glob as _glob2
+    actual_ckpts = _glob2.glob(os.path.join(ckpt_dir, "*.pt"))
+    print(f"[{_ts()}] Checkpoint dir {ckpt_dir} contains: {[os.path.basename(f) for f in actual_ckpts]}")
+    # Also debug the volume mount
+    if os.path.isdir("/checkpoints"):
+        vol_contents = []
+        for root, dirs, files in os.walk("/checkpoints"):
+            for f in files:
+                if f.endswith(".pt"):
+                    vol_contents.append(os.path.join(root, f))
+        print(f"[{_ts()}] /checkpoints volume .pt files: {vol_contents}")
 
     print(f"[{_ts()}] Executing inference_pipeline.py...")
     exec(inf_source_patched, globals())
