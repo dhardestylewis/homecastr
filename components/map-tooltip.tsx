@@ -175,13 +175,16 @@ export function MapTooltip({
                         </>
                     )}
 
-                    {/* Street View Carousel */}
-                    {displayProps.has_data && googleMapsApiKey && (
+                    {/* Street View Carousel — ONLY in locked/click mode, never on hover
+                       This prevents expensive Google API calls on every mouse flyover.
+                       Street view is already shown in the forecast-map inspector panel on click. */}
+                    {lockedMode && displayProps.has_data && googleMapsApiKey && (
                         <StreetViewCarousel
                             h3Ids={selectedHexes.length > 0 ? selectedHexes : hoveredDetails?.id ? [hoveredDetails.id] : []}
                             apiKey={googleMapsApiKey}
                         />
                     )}
+
 
                     {/* Content Body */}
                     {isMobile ? (

@@ -1,65 +1,75 @@
 "use client"
 
-import React, { useEffect, useState } from "react"
+import React, { useEffect, useState, useCallback } from "react"
 import useEmblaCarousel from "embla-carousel-react"
 import { ChevronLeft, ChevronRight, MapPin } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { getRepresentativeProperties, getStreetViewImageUrl, getSignedStreetViewUrl, type PropertyLocation } from "@/lib/utils/street-view"
+import { getRepresentativeProperties, getSignedStreetViewUrl, type PropertyLocation } from "@/lib/utils/street-view"
 
 interface StreetViewCarouselProps {
     h3Ids: string[]
     apiKey: string
     className?: string
-    /** Optional direct coordinates — bypasses H3 geocoding (for non-H3 geographies like census tracts) */
     coordinates?: [number, number]
+    /** Only render at this zoom or higher (default 15 = block scale) */
+    minZoom?: number
+    mapZoom?: number
 }
 
-export function StreetViewCarousel({ h3Ids, apiKey, className, coordinates }: StreetViewCarouselProps) {
+export function StreetViewCarousel({ h3Ids, apiKey, className, coordinates, minZoom = 15, mapZoom }: StreetViewCarouselProps) {
     const [emblaRef, emblaApi] = useEmblaCarousel({ loop: true, align: "start" })
     const [locations, setLocations] = useState<PropertyLocation[]>([])
+    const [selectedIndex, setSelectedIndex] = useState(0)
     const [canScrollPrev, setCanScrollPrev] = useState(false)
     const [canScrollNext, setCanScrollNext] = useState(false)
-    const [selectedIndex, setSelectedIndex] = useState(0)
+    // Only populated for slides that have been requested
     const [signedUrls, setSignedUrls] = useState<Record<string, string>>({})
+    const [loadedIdxs, setLoadedIdxs] = useState<Set<number>>(new Set())
+
+    // Skip rendering below min zoom — street view is meaningless at county/city scale
+    if (mapZoom != null && mapZoom < minZoom) return null
 
     useEffect(() => {
-        if (coordinates) {
-            // Direct lat/lng — generate offsets around the coordinate (non-H3 mode)
-            const [lat, lng] = coordinates
-            setLocations([
-                { lat, lng, label: "Center" },
-                { lat: lat + 0.0004, lng: lng + 0.0004, label: "North East" },
-                { lat: lat - 0.0004, lng: lng - 0.0004, label: "South West" },
-                { lat: lat + 0.0004, lng: lng - 0.0004, label: "North West" },
-                { lat: lat - 0.0004, lng: lng + 0.0004, label: "South East" },
-            ])
-        } else if (h3Ids.length > 0) {
-            setLocations(getRepresentativeProperties(h3Ids))
-        }
+        const locs = coordinates
+            ? [
+                { lat: coordinates[0], lng: coordinates[1], label: "Center" },
+                { lat: coordinates[0] + 0.0004, lng: coordinates[1] + 0.0004, label: "North East" },
+                { lat: coordinates[0] - 0.0004, lng: coordinates[1] - 0.0004, label: "South West" },
+                { lat: coordinates[0] + 0.0004, lng: coordinates[1] - 0.0004, label: "North West" },
+                { lat: coordinates[0] - 0.0004, lng: coordinates[1] + 0.0004, label: "South East" },
+            ]
+            : getRepresentativeProperties(h3Ids)
+        setLocations(locs)
+        setSignedUrls({})
+        setLoadedIdxs(new Set())
     }, [h3Ids, coordinates])
 
-    // Fetch signed URLs for all locations
-    useEffect(() => {
-        if (locations.length === 0) return
-        let cancelled = false
-        Promise.all(
-            locations.map(async (loc) => {
-                const key = `${loc.lat}-${loc.lng}`
-                const url = await getSignedStreetViewUrl(loc.lat, loc.lng)
-                return [key, url] as [string, string]
-            })
-        ).then((entries) => {
-            if (!cancelled) setSignedUrls(Object.fromEntries(entries))
-        })
-        return () => { cancelled = true }
+    /** Fetch signed URL for a single slide index (no-op if already loaded) */
+    const loadSlide = useCallback(async (idx: number, locs = locations) => {
+        if (idx < 0 || idx >= locs.length) return
+        const loc = locs[idx]
+        const key = `${loc.lat}-${loc.lng}`
+        setLoadedIdxs(prev => new Set(prev).add(idx))
+        const url = await getSignedStreetViewUrl(loc.lat, loc.lng)
+        setSignedUrls(prev => ({ ...prev, [key]: url }))
     }, [locations])
 
-    const onSelect = React.useCallback(() => {
+    // Load only slide 0 on mount — 1 API call, not 5
+    useEffect(() => {
+        if (locations.length > 0) loadSlide(0, locations)
+    }, [locations]) // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Lazy-load on carousel navigation, prefetch +1
+    const onSelect = useCallback(() => {
         if (!emblaApi) return
-        setSelectedIndex(emblaApi.selectedScrollSnap())
+        const idx = emblaApi.selectedScrollSnap()
+        setSelectedIndex(idx)
         setCanScrollPrev(emblaApi.canScrollPrev())
         setCanScrollNext(emblaApi.canScrollNext())
-    }, [emblaApi])
+        if (!loadedIdxs.has(idx)) loadSlide(idx)
+        const next = (idx + 1) % locations.length
+        if (!loadedIdxs.has(next)) loadSlide(next)
+    }, [emblaApi, loadedIdxs, loadSlide, locations.length])
 
     useEffect(() => {
         if (!emblaApi) return
@@ -74,71 +84,53 @@ export function StreetViewCarousel({ h3Ids, apiKey, className, coordinates }: St
         <div className={cn("relative group h-full", className)}>
             <div className="overflow-hidden rounded-t-lg h-full" ref={emblaRef}>
                 <div className="flex h-full">
-                    {locations.map((loc, index) => (
-                        <div key={`${loc.lat}-${loc.lng}-${index}`} className="flex-[0_0_100%] min-w-0 relative h-full">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                                src={signedUrls[`${loc.lat}-${loc.lng}`] || getStreetViewImageUrl(loc.lat, loc.lng, apiKey)}
-                                alt={loc.label || "Property View"}
-                                className="w-full h-full object-cover"
-                                loading="lazy"
-                            />
-                            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent pt-6 pb-2 px-2">
-                                <div className="flex items-center gap-1 text-white text-xs font-semibold drop-shadow">
-                                    <MapPin className="w-3 h-3 shrink-0" />
-                                    <span>{loc.label}</span>
+                    {locations.map((loc, index) => {
+                        const key = `${loc.lat}-${loc.lng}`
+                        const url = signedUrls[key]
+                        return (
+                            <div key={`${key}-${index}`} className="flex-[0_0_100%] min-w-0 relative h-full bg-zinc-900">
+                                {url ? (
+                                    /* eslint-disable-next-line @next/next/no-img-element */
+                                    <img src={url} alt={loc.label || "Property view"} className="w-full h-full object-cover" />
+                                ) : (
+                                    <div className="w-full h-full flex items-center justify-center">
+                                        <div className="w-5 h-5 border-2 border-white/20 border-t-white/70 rounded-full animate-spin" />
+                                    </div>
+                                )}
+                                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent pt-6 pb-2 px-2">
+                                    <div className="flex items-center gap-1 text-white text-xs font-semibold drop-shadow">
+                                        <MapPin className="w-3 h-3 shrink-0" />
+                                        <span>{loc.label}</span>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    ))}
+                        )
+                    })}
                 </div>
             </div>
 
-            {/* Slide counter — top right */}
             {locations.length > 1 && (
                 <div className="absolute top-2 right-2 z-10 bg-black/40 backdrop-blur-sm text-white text-[10px] font-medium px-1.5 py-0.5 rounded-full">
                     {selectedIndex + 1} / {locations.length}
                 </div>
             )}
-
-            {/* Navigation Dots */}
             {locations.length > 1 && (
                 <div className="absolute bottom-2 right-2 flex gap-1 z-10">
                     {locations.map((_, idx) => (
-                        <div
-                            key={idx}
-                            className={cn(
-                                "w-1.5 h-1.5 rounded-full transition-all",
-                                selectedIndex === idx ? "bg-white w-3" : "bg-white/40"
-                            )}
-                        />
+                        <div key={idx} className={cn("w-1.5 h-1.5 rounded-full transition-all", selectedIndex === idx ? "bg-white w-3" : "bg-white/40")} />
                     ))}
                 </div>
             )}
-
-            {/* Navigation Buttons */}
             {locations.length > 1 && (
                 <>
-                    <button
-                        onClick={() => emblaApi?.scrollPrev()}
-                        className={cn(
-                            "absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/30 backdrop-blur-sm border border-white/10 flex items-center justify-center text-white transition-opacity opacity-0 group-hover:opacity-100 disabled:opacity-0",
-                            !canScrollPrev && "pointer-events-none"
-                        )}
-                        disabled={!canScrollPrev}
-                        aria-label="Previous image"
-                    >
+                    <button onClick={() => emblaApi?.scrollPrev()} disabled={!canScrollPrev}
+                        className={cn("absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/30 backdrop-blur-sm border border-white/10 flex items-center justify-center text-white transition-opacity opacity-0 group-hover:opacity-100 disabled:opacity-0", !canScrollPrev && "pointer-events-none")}
+                        aria-label="Previous image">
                         <ChevronLeft className="w-5 h-5" />
                     </button>
-                    <button
-                        onClick={() => emblaApi?.scrollNext()}
-                        className={cn(
-                            "absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/30 backdrop-blur-sm border border-white/10 flex items-center justify-center text-white transition-opacity opacity-0 group-hover:opacity-100 disabled:opacity-0",
-                            !canScrollNext && "pointer-events-none"
-                        )}
-                        disabled={!canScrollNext}
-                        aria-label="Next image"
-                    >
+                    <button onClick={() => emblaApi?.scrollNext()} disabled={!canScrollNext}
+                        className={cn("absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/30 backdrop-blur-sm border border-white/10 flex items-center justify-center text-white transition-opacity opacity-0 group-hover:opacity-100 disabled:opacity-0", !canScrollNext && "pointer-events-none")}
+                        aria-label="Next image">
                         <ChevronRight className="w-5 h-5" />
                     </button>
                 </>

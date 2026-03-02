@@ -41,6 +41,7 @@ function DashboardContent() {
   const { mapState, setMapState, selectFeature, hoverFeature } = useMapState()
   const [forecastData, setForecastData] = useState<{ acct: string; data: PropertyForecast[] } | null>(null)
   const [currentYear, setCurrentYear] = useState(2026)
+  const [hasManuallySetYear, setHasManuallySetYear] = useState(false)
   const [isUsingMockData, setIsUsingMockData] = useState(false)
   const [searchBarValue, setSearchBarValue] = useState<string>("")
   const [mobileSelectionMode, setMobileSelectionMode] = useState<'replace' | 'add' | 'range'>('replace')
@@ -438,7 +439,26 @@ function DashboardContent() {
 
   const handleColorModeChange = useCallback((mode: "growth" | "value") => {
     setFilters({ colorMode: mode })
-  }, [setFilters])
+    // First time the user clicks Growth and hasn't touched the timeline — animate to 2027
+    if (mode === "growth" && !hasManuallySetYear && currentYear < 2027) {
+      try {
+        const alreadyShown = localStorage.getItem("properlytic_growth_intro_shown")
+        if (!alreadyShown) {
+          localStorage.setItem("properlytic_growth_intro_shown", "1")
+          // Animate to 2027 by stepping through years
+          let yr = currentYear + 1
+          const step = () => {
+            if (yr <= 2027) {
+              setCurrentYear(yr)
+              yr++
+              setTimeout(step, 80)
+            }
+          }
+          setTimeout(step, 200)
+        }
+      } catch { /* localStorage unavailable (SSR/private) */ }
+    }
+  }, [setFilters, hasManuallySetYear, currentYear])
 
   /* Homecastr handler */
   const handleConsultAI = useCallback(async (details: {
@@ -627,7 +647,7 @@ function DashboardContent() {
               minYear={2019}
               maxYear={2030}
               currentYear={currentYear}
-              onChange={setCurrentYear}
+              onChange={(yr) => { setHasManuallySetYear(true); setCurrentYear(yr) }}
               onPlayStart={() => {
                 console.log("[PAGE] Play started - prefetch all years triggered")
               }}

@@ -365,3 +365,13 @@ The goal is to move the temporary download directory for HCAD data to a permanen
 
 ---
 - [ ] Refactor notebooks/ProFormaHouston-LeakageFree.ipynb into modular script files
+
+---
+
+## [2026-02-28] Deferred Items
+
+- [ ] **Remove multiselect button** (`Copy` icon, line ~663 page.tsx). Replace with shift-click implicit multi-select. Keep "1" single-select button on mobile only.
+- [ ] **N/A historical values** — `metrics_tabblock_history` table in `forecast_20260220_7f31c6e4` schema likely empty. Re-run `upload_history.py` for tabblock level. Check by running: `SELECT * FROM forecast_20260220_7f31c6e4.metrics_tabblock_history LIMIT 1`
+- [ ] **Street view zoom gate** — Pass `mapZoom` prop to `StreetViewCarousel` wherever used (forecast-map.tsx, map-orchestrator.tsx) so it doesn't render below zoom 15.
+- [ ] **Data acquisition reorg** — `scripts/data_acquisition/` needs internal structure audit.
+- [ ] **Run reference data downloads** — `python scripts/data_acquisition/download/download_reference_data.py --all` (ACS B25077, FHFA HPI, TIGER block groups → Supabase)

@@ -300,8 +300,7 @@ def _ts():
 
 @app.local_entrypoint()
 def main(jurisdiction: str = "hcad_houston", origin: int = 2025, backtest: bool = False):
-    print(f"Launching inference: {jurisdiction} origin={origin} backtest={backtest}")
+    print(f"🚀 Inference: {jurisdiction} o={origin} backtest={backtest}")
     result = run_inference.remote(jurisdiction, origin, backtest)
-    print(f"\n[RESULT] {result}")
-    with open(f"scripts/logs/inference_{jurisdiction}_o{origin}.json", "w") as f:
-        f.write(result)
+    print(f"✅ Done: {result}")
+
