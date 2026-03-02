@@ -634,7 +634,12 @@ def _aggregate_forecast_levels_for_chunk(
     """
     Chunk-local aggregate rows are merged into aggregate tables using weighted ON CONFLICT logic.
     This preserves correctness across chunk boundaries.
+
+    Set SKIP_AGG_CHUNK_WRITES=True (via globals) to bypass all agg writes — used in parallel
+    inference mode where multiple shards share geographies and a post-run rebuild is safer.
     """
+    if globals().get("SKIP_AGG_CHUNK_WRITES", False):
+        return 0
     if not AGG_FORECAST_HAS_N_COL:
         raise RuntimeError("AGG_FORECAST_HAS_N_COL must be True for weighted chunk aggregation.")
 
@@ -691,49 +696,13 @@ def _aggregate_forecast_levels_for_chunk(
               AND pl.{_q_ident(ladder_col)} IS NOT NULL
             GROUP BY pl.{_q_ident(ladder_col)}, mp.origin_year, mp.horizon_m, mp.forecast_year
             ON CONFLICT ({_q_ident(ladder_col)}, origin_year, horizon_m, series_kind, variant_id)
-            DO UPDATE SET
-                forecast_year = EXCLUDED.forecast_year,
-
-                value = (
-                    (COALESCE({q_target}.value, 0.0) * COALESCE({q_target}.n, 0)) +
-                    (EXCLUDED.value * EXCLUDED.n)
-                ) / NULLIF(COALESCE({q_target}.n, 0) + EXCLUDED.n, 0),
-
-                p10 = (
-                    (COALESCE({q_target}.p10, 0.0) * COALESCE({q_target}.n, 0)) +
-                    (EXCLUDED.p10 * EXCLUDED.n)
-                ) / NULLIF(COALESCE({q_target}.n, 0) + EXCLUDED.n, 0),
-
-                p25 = (
-                    (COALESCE({q_target}.p25, 0.0) * COALESCE({q_target}.n, 0)) +
-                    (EXCLUDED.p25 * EXCLUDED.n)
-                ) / NULLIF(COALESCE({q_target}.n, 0) + EXCLUDED.n, 0),
-
-                p50 = (
-                    (COALESCE({q_target}.p50, 0.0) * COALESCE({q_target}.n, 0)) +
-                    (EXCLUDED.p50 * EXCLUDED.n)
-                ) / NULLIF(COALESCE({q_target}.n, 0) + EXCLUDED.n, 0),
-
-                p75 = (
-                    (COALESCE({q_target}.p75, 0.0) * COALESCE({q_target}.n, 0)) +
-                    (EXCLUDED.p75 * EXCLUDED.n)
-                ) / NULLIF(COALESCE({q_target}.n, 0) + EXCLUDED.n, 0),
-
-                p90 = (
-                    (COALESCE({q_target}.p90, 0.0) * COALESCE({q_target}.n, 0)) +
-                    (EXCLUDED.p90 * EXCLUDED.n)
-                ) / NULLIF(COALESCE({q_target}.n, 0) + EXCLUDED.n, 0),
-
-                n = COALESCE({q_target}.n, 0) + EXCLUDED.n,
-
-                run_id = EXCLUDED.run_id,
-                backtest_id = EXCLUDED.backtest_id,
-                model_version = EXCLUDED.model_version,
-                as_of_date = EXCLUDED.as_of_date,
-                n_scenarios = EXCLUDED.n_scenarios,
-                is_backtest = EXCLUDED.is_backtest,
-                updated_at = now()
+            DO NOTHING
         """
+        # NOTE: DO NOTHING is safe because _clear_stale_agg_for_run() deletes rows for
+        # (origin_year, series_kind, variant_id) before the first chunk runs. Within a
+        # single run, each acct_chunk is a disjoint set of accounts so geography-level
+        # aggregate keys cannot collide between chunks. DO UPDATE with a weighted merge
+        # was corrupting values across runs because run_id was absent from the conflict key.
         with conn.cursor() as cur:
             cur.execute(
                 sql,
@@ -768,7 +737,11 @@ def _aggregate_history_levels_for_chunk(
 ):
     """
     Chunk-local history aggregates are merged using weighted ON CONFLICT logic.
+
+    Set SKIP_AGG_CHUNK_WRITES=True (via globals) to bypass all agg writes.
     """
+    if globals().get("SKIP_AGG_CHUNK_WRITES", False):
+        return 0
     total_rows = 0
     q_parcel = _q_table(schema, "metrics_parcel_history")
 
@@ -813,25 +786,9 @@ def _aggregate_history_levels_for_chunk(
               AND pl.{_q_ident(ladder_col)} IS NOT NULL
             GROUP BY pl.{_q_ident(ladder_col)}, mh.year
             ON CONFLICT ({_q_ident(ladder_col)}, year, series_kind, variant_id)
-            DO UPDATE SET
-                value = (
-                    (COALESCE({q_target}.value, 0.0) * COALESCE({q_target}.n, 0)) +
-                    (EXCLUDED.value * EXCLUDED.n)
-                ) / NULLIF(COALESCE({q_target}.n, 0) + EXCLUDED.n, 0),
-
-                p50 = (
-                    (COALESCE({q_target}.p50, 0.0) * COALESCE({q_target}.n, 0)) +
-                    (EXCLUDED.p50 * EXCLUDED.n)
-                ) / NULLIF(COALESCE({q_target}.n, 0) + EXCLUDED.n, 0),
-
-                n = COALESCE({q_target}.n, 0) + EXCLUDED.n,
-
-                run_id = EXCLUDED.run_id,
-                backtest_id = EXCLUDED.backtest_id,
-                model_version = EXCLUDED.model_version,
-                as_of_date = EXCLUDED.as_of_date,
-                updated_at = now()
+            DO NOTHING
         """
+        # NOTE: same reasoning as forecast agg — pre-run clear + DO NOTHING is correct.
         with conn.cursor() as cur:
             cur.execute(
                 sql,
@@ -851,6 +808,46 @@ def _aggregate_history_levels_for_chunk(
             total_rows += int(cur.rowcount or 0)
 
     return total_rows
+
+
+# -----------------------------------------------------------------------------
+# PRE-RUN AGGREGATE CLEAR
+# -----------------------------------------------------------------------------
+def _clear_stale_agg_for_run(
+    conn,
+    schema: str,
+    origin_year: int,
+    series_kind: str,
+    variant_id: str,
+):
+    """
+    Deletes existing aggregate forecast rows for (origin_year, series_kind, variant_id)
+    before a new inference run starts writing chunks.
+
+    Required because chunk inserts now use ON CONFLICT DO NOTHING (not a weighted merge).
+    Without this clear, existing rows from a previous run would silently persist and
+    mix with new partial-run data when viewed by the frontend.
+
+    Scope is intentionally tight: other origin years, series_kinds, and variant_ids
+    are not touched.
+    """
+    total_deleted = 0
+    for _, _, tbl_forecast, _ in AGG_LEVELS:
+        q_target = _q_table(schema, tbl_forecast)
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                DELETE FROM {q_target}
+                WHERE origin_year = %s
+                  AND series_kind = %s
+                  AND variant_id = %s
+                """,
+                (int(origin_year), series_kind, variant_id),
+            )
+            total_deleted += int(cur.rowcount or 0)
+    print(f"[{_ts()}] _clear_stale_agg_for_run: deleted {total_deleted} stale aggregate rows "
+          f"for origin={origin_year} series={series_kind} variant={variant_id}")
+    return total_deleted
 
 
 # -----------------------------------------------------------------------------
@@ -1563,6 +1560,28 @@ def _run_one_origin(
             as_of_date=as_of_date,
             notes=f"H={H}, S={S}, ckpt_origin={ckpt_origin}, variant_id={variant_id}",
         )
+
+    # ── Pre-run: clear stale aggregate rows for this (origin_year, series_kind, variant_id) ──
+    # This is the safe way to start fresh. The chunk-level inserts now use DO NOTHING
+    # (not a weighted merge), so without this clear the old rows would survive unchanged.
+    # Scoped tightly: only rows matching all three columns are deleted — other origin
+    # years, other series_kinds, and other variant_ids are untouched.
+    # Skip if SKIP_AGG_CHUNK_WRITES is set (parallel mode — agg handled post-run).
+    if not globals().get("SKIP_AGG_CHUNK_WRITES", False):
+        try:
+            with _pg_tx(label="pre_run_agg_clear") as conn:
+                _clear_stale_agg_for_run(
+                    conn=conn,
+                    schema=schema,
+                    origin_year=int(origin_year),
+                    series_kind=series_kind_forecast,
+                    variant_id=variant_id,
+                )
+            print(f"[{_ts()}] Pre-run aggregate clear done for origin={origin_year} series={series_kind_forecast} variant={variant_id}")
+        except Exception as _clr_exc:
+            print(f"[{_ts()}] ⚠️  Pre-run aggregate clear failed (non-fatal, proceeding): {_clr_exc}")
+    else:
+        print(f"[{_ts()}] SKIP_AGG_CHUNK_WRITES=True — skipping pre-run agg clear; rebuild_aggregates.py will handle this post-run")
 
     n_total = len(all_accts_prod)
     n_done = 0

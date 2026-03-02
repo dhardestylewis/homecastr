@@ -392,23 +392,37 @@ def run_counterfactual_backtest(sample_entities: int = 0, sample_parcels: int = 
             t0 = time.time()
             import psycopg2
             db_url = os.environ["SUPABASE_DB_URL"]
-            conn = psycopg2.connect(db_url, options="-c statement_timeout=600000")
+            # Use explicit SET after connect — options= in DSN is not honoured by Supabase's pooler
+            pg_conn = psycopg2.connect(db_url, connect_timeout=30)
+            pg_conn.autocommit = True
+            with pg_conn.cursor() as _cur:
+                _cur.execute("SET statement_timeout = 600000")  # 10 min
+
+            # HCAD backtest origins (2021-2023) were written by inference_pipeline.py
+            # as series_kind='backtest' (not 'forecast'), so we fetch both to be safe.
+            # variant_id='__forecast__' only applies to production runs; backtest runs
+            # use variant_ids like 'bt_2021_xxx', so we don't filter on variant_id.
             query = f"""
                 SELECT acct, origin_year, forecast_year, p50
                 FROM "{SUPABASE_SCHEMA}"."metrics_parcel_forecast"
-                WHERE jurisdiction = 'hcad_houston'
-                  AND series_kind = 'forecast'
+                WHERE series_kind IN ('forecast', 'backtest')
                   AND origin_year = {origin}
             """
-            fc_df = pd.read_sql(query, conn)
-            conn.close()
+            with pg_conn.cursor() as _cur:
+                _cur.execute(query)
+                rows_raw = _cur.fetchall()
+            pg_conn.close()
 
+            fc_df = pd.DataFrame(rows_raw, columns=['acct', 'origin_year', 'forecast_year', 'p50'])
             fc_df['acct'] = fc_df['acct'].astype(str)
+            fc_df['origin_year'] = fc_df['origin_year'].astype(int)
+            fc_df['forecast_year'] = fc_df['forecast_year'].astype(int)
+            fc_df['p50'] = fc_df['p50'].astype(float)
             print(f"    {len(fc_df):,} rows from Supabase ({time.time()-t0:.1f}s)")
 
             # Vectorized dict construction (no iterrows!)
-            keys = zip(fc_df['acct'], fc_df['origin_year'].astype(int), fc_df['forecast_year'].astype(int))
-            vals = fc_df['p50'].astype(float)
+            keys = zip(fc_df['acct'], fc_df['origin_year'], fc_df['forecast_year'])
+            vals = fc_df['p50']
             forecast_lookup.update(dict(zip(keys, vals)))
 
             # Cache to GCS
