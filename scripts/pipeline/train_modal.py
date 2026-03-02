@@ -187,7 +187,7 @@ def train_worldmodel(
         raise ValueError("Panel contains no sale_price, property_value, assessed_value, median_home_value, market_value, value, or tot_appr_val to form a target.")
 
     # Explicitly DROP all canonical valuation components to strictly prevent model leakage into the features
-    leaky_cols = ["sale_price", "property_value", "assessed_value", "land_value", "improvement_value", "median_home_value", "market_value", "value", "total_value", "prior_value"]
+    leaky_cols = ["sale_price", "property_value", "assessed_value", "land_value", "improvement_value", "median_home_value", "market_value", "value", "total_value", "prior_value", "growth_pct"]
     drop_leaks = [c for c in leaky_cols if c in df.columns]
     if drop_leaks:
         print(f"[{ts()}] Dropping LEAKY valuation columns from feature set: {drop_leaks}")
@@ -210,9 +210,9 @@ def train_worldmodel(
             "macro/fred/CPIAUCSL.csv": "macro_cpi_us",
             "macro/fred/CP0000EZ19M086NEST.csv": "macro_cpi_eurozone",
             "macro/fred/DCOILWTICO.csv": "macro_oil_price",
-            # Housing
-            "macro/fred/CSUSHPINSA.csv": "macro_hpi_us",
-            "macro/fred/QFRN628BIS.csv": "macro_hpi_bis_uk",
+            # Housing (REMOVED: HPI is leaky — it directly encodes the target signal)
+            # "macro/fred/CSUSHPINSA.csv": "macro_hpi_us",
+            # "macro/fred/QFRN628BIS.csv": "macro_hpi_bis_uk",
             # Labor
             "macro/fred/UNRATE.csv": "macro_unemployment_us",
             "macro/fred/LRHUTTTTEZM156S.csv": "macro_unemployment_eurozone",
