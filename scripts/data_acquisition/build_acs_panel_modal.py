@@ -78,47 +78,67 @@ def build_acs_panel():
     ts = lambda: time.strftime("%Y-%m-%d %H:%M:%S")
     BASE_URL = "https://api.census.gov/data/{year}/acs/acs5"
 
-    variables = ",".join(ACS_VARIABLES.keys())
+    # Split variables into batches (Census API has per-request limits)
+    var_list = list(ACS_VARIABLES.keys())
+    BATCH_SIZE = 8
+    var_batches = [var_list[i:i+BATCH_SIZE] for i in range(0, len(var_list), BATCH_SIZE)]
+    print(f"  {len(var_list)} variables in {len(var_batches)} batches of ≤{BATCH_SIZE}")
+
     all_dfs = []
 
     for year in ACS_YEARS:
         print(f"[{ts()}] Downloading ACS {year} tract data...")
-        url = f"{BASE_URL.format(year=year)}?get=NAME,{variables}&for=tract:*&in=state:*"
+        year_dfs = []
 
-        try:
-            resp = requests.get(url, timeout=120)
-            resp.raise_for_status()
-            data = resp.json()
-        except Exception as e:
-            print(f"  ⚠️ {year} failed: {e}")
+        for batch_idx, batch_vars in enumerate(var_batches):
+            variables = ",".join(batch_vars)
+            url = f"{BASE_URL.format(year=year)}?get=NAME,{variables}&for=tract:*&in=state:*"
+
+            try:
+                resp = requests.get(url, timeout=180)
+                resp.raise_for_status()
+                data = resp.json()
+            except Exception as e:
+                print(f"  ⚠️ {year} batch {batch_idx} failed: {e}")
+                import time as _time; _time.sleep(2)  # rate limit backoff
+                continue
+
+            header = data[0]
+            rows = data[1:]
+            df = pd.DataFrame(rows, columns=header)
+
+            # Build geoid
+            df["geoid"] = df["state"] + df["county"] + df["tract"]
+            df["year"] = year
+
+            # Rename variables in this batch
+            for census_var, friendly_name in ACS_VARIABLES.items():
+                if census_var in df.columns:
+                    df[friendly_name] = pd.to_numeric(df[census_var], errors="coerce")
+
+            # Keep only geoid + year + renamed vars
+            keep = ["geoid", "year"] + [ACS_VARIABLES[v] for v in batch_vars if v in ACS_VARIABLES]
+            df = df[[c for c in keep if c in df.columns]]
+            year_dfs.append(df)
+
+            import time as _time; _time.sleep(0.5)  # be polite to Census API
+
+        if not year_dfs:
+            print(f"  ⚠️ {year}: all batches failed")
             continue
 
-        # First row is header
-        header = data[0]
-        rows = data[1:]
-        df = pd.DataFrame(rows, columns=header)
+        # Merge batches on geoid + year
+        merged = year_dfs[0]
+        for extra_df in year_dfs[1:]:
+            merged = merged.merge(extra_df, on=["geoid", "year"], how="outer")
 
-        # Build geoid from state + county + tract
-        df["geoid"] = df["state"] + df["county"] + df["tract"]
-        df["year"] = year
+        # Filter
+        if "median_home_value" in merged.columns:
+            merged = merged.dropna(subset=["median_home_value"])
+            merged = merged[merged["median_home_value"] > 0]
 
-        # Rename variables
-        for census_var, friendly_name in ACS_VARIABLES.items():
-            if census_var in df.columns:
-                df[friendly_name] = pd.to_numeric(df[census_var], errors="coerce")
-
-        # Select only needed columns
-        keep_cols = ["geoid", "year"] + list(ACS_VARIABLES.values())
-        df = df[[c for c in keep_cols if c in df.columns]]
-
-        # Drop rows where target is missing
-        df = df.dropna(subset=["median_home_value"])
-
-        # Filter out negative/suppressed values (Census uses -666666666 for suppressed)
-        df = df[df["median_home_value"] > 0]
-
-        all_dfs.append(df)
-        print(f"  ✅ {year}: {len(df):,} tracts with valid home values")
+        all_dfs.append(merged)
+        print(f"  ✅ {year}: {len(merged):,} tracts, {len(merged.columns)} cols")
 
     if not all_dfs:
         print("❌ No data downloaded!")

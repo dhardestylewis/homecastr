@@ -230,48 +230,43 @@ def run_counterfactual_backtest():
 
     print(f"  Total flagged renovated: {len(renovated_parcels):,} (acct, year) pairs")
 
-    # ─── 6. Run counterfactual comparison (VECTORIZED) ────────────────
+    # ─── 6. Run counterfactual comparison (FULLY VECTORIZED) ─────────
     print(f"\n[{ts()}] Running counterfactual comparisons...")
     import random
     import numpy as np
 
-    # Vectorized lookups: use dict(zip()) instead of iterrows()
-    print(f"  Building lookups...")
-    _p = panel[['acct', 'year', 'value']].copy()
-    _p['year'] = _p['year'].astype(int)
-    val_lookup = dict(zip(zip(_p['acct'].values, _p['year'].values), _p['value'].values))
-    print(f"  val_lookup: {len(val_lookup):,} entries")
+    # Pre-build acct → entity mapping (one acct can belong to multiple entities)
+    print(f"  Building acct→entity index...")
+    acct_to_entities = {}  # acct → set of entity names
+    for entity, accts in icp_entities.items():
+        for a in accts:
+            if a not in acct_to_entities:
+                acct_to_entities[a] = []
+            acct_to_entities[a].append(entity)
+    print(f"  {len(acct_to_entities):,} accts → {len(icp_entities):,} entities")
 
-    # Property type/zip: one per acct (latest)
-    if 'prop_type' in panel.columns:
-        _t = panel[['acct', 'prop_type']].drop_duplicates('acct', keep='last')
-        type_lookup = dict(zip(_t['acct'].values, _t['prop_type'].values))
-    else:
-        type_lookup = {}
+    # Pre-index renovated parcels by year for fast lookup
+    reno_by_year = {}
+    for (a, y) in renovated_parcels:
+        if y not in reno_by_year:
+            reno_by_year[y] = set()
+        reno_by_year[y].add(a)
 
+    # Precompute prop_type and zip3 per acct (numpy arrays for speed)
+    acct_prop = panel[['acct', 'prop_type']].drop_duplicates('acct', keep='last') if 'prop_type' in panel.columns else None
+    acct_zip = None
     if 'zip_code' in panel.columns:
         _z = panel[['acct', 'zip_code']].drop_duplicates('acct', keep='last').copy()
         _z['zip3'] = _z['zip_code'].astype(str).str[:3]
-        zip_lookup = dict(zip(_z['acct'].values, _z['zip3'].values))
-    else:
-        zip_lookup = {}
-
-    # Precompute per-year DataFrames with prop_type and zip3 columns
-    yearly_panels = {}
-    for yr in panel['year'].unique():
-        yp = panel[panel['year'] == yr][['acct', 'value']].copy()
-        if type_lookup:
-            yp['prop_type'] = yp['acct'].map(type_lookup)
-        if zip_lookup:
-            yp['zip3'] = yp['acct'].map(zip_lookup)
-        yearly_panels[int(yr)] = yp
-
-    # Precompute growth: join origin value with target value per acct
-    # This avoids per-entity val_lookup calls
-    print(f"  Precomputing growth matrices...")
+        acct_zip = _z[['acct', 'zip3']]
 
     results = []
     for origin in ORIGINS:
+        # Get origin-year panel slice once
+        orig_slice = panel[panel['year'] == origin][['acct', 'value']].copy()
+        orig_slice = orig_slice[orig_slice['value'] > 0]
+        orig_vals = dict(zip(orig_slice['acct'].values, orig_slice['value'].values))
+
         for horizon in HORIZONS:
             target_year = origin + horizon
             print(f"\n  Origin={origin}, Horizon={horizon} (target={target_year})")
@@ -280,97 +275,122 @@ def run_counterfactual_backtest():
                 print(f"    Skipping — target year {target_year} > latest {latest_year}")
                 continue
 
-            if origin not in yearly_panels or target_year not in yearly_panels:
-                print(f"    Skipping — missing yearly panel")
+            tgt_slice = panel[panel['year'] == target_year][['acct', 'value']].copy()
+            tgt_slice = tgt_slice[tgt_slice['value'] > 0]
+            tgt_vals = dict(zip(tgt_slice['acct'].values, tgt_slice['value'].values))
+
+            # Common accts with both origin and target values
+            common_accts = set(orig_vals.keys()) & set(tgt_vals.keys())
+
+            # Remove renovated
+            reno_origin = reno_by_year.get(origin, set())
+            reno_target = reno_by_year.get(target_year, set())
+            reno_combined = reno_origin | reno_target
+            clean_accts = common_accts - reno_combined
+
+            if len(clean_accts) < 100:
+                print(f"    Only {len(clean_accts)} clean accts, skipping")
                 continue
 
-            # Join origin and target values per acct
-            orig_df = yearly_panels[origin].rename(columns={'value': 'v0'})
-            tgt_df = yearly_panels[target_year][['acct', 'value']].rename(columns={'value': 'v1'})
-            growth_df = orig_df.merge(tgt_df, on='acct', how='inner')
-            growth_df = growth_df[(growth_df['v0'] > 0) & (growth_df['v1'] > 0)]
-            growth_df['growth'] = (growth_df['v1'] - growth_df['v0']) / growth_df['v0']
+            # Build arrays for clean accts (numpy for speed)
+            clean_list = sorted(clean_accts)
+            acct_arr = np.array(clean_list)
+            v0_arr = np.array([orig_vals[a] for a in clean_list])
+            v1_arr = np.array([tgt_vals[a] for a in clean_list])
+            growth_arr = (v1_arr - v0_arr) / v0_arr
 
-            # Mark renovated
-            reno_keys = {a for (a, y) in renovated_parcels if y == target_year or y == origin}
-            growth_df['is_renovated'] = growth_df['acct'].isin(reno_keys)
+            # Build acct → index map for O(1) lookup
+            acct_idx = {a: i for i, a in enumerate(clean_list)}
 
-            # Clean comps (non-renovated)
-            clean_df = growth_df[~growth_df['is_renovated']].copy()
-            clean_accts = set(clean_df['acct'].values)
+            # Prop type and zip3 arrays (aligned with clean_list)
+            if acct_prop is not None:
+                pt_dict = dict(zip(acct_prop['acct'].values, acct_prop['prop_type'].values))
+                pt_arr = np.array([pt_dict.get(a, '') for a in clean_list])
+            else:
+                pt_arr = None
+            if acct_zip is not None:
+                z3_dict = dict(zip(acct_zip['acct'].values, acct_zip['zip3'].values))
+                z3_arr = np.array([z3_dict.get(a, '') for a in clean_list])
+            else:
+                z3_arr = None
+
+            print(f"    {len(clean_list):,} clean parcels, growth mean={growth_arr.mean():.4f}")
 
             n_entities = 0
             for entity, all_accts in icp_entities.items():
                 acquired = entity_acquisitions.get(entity, {}).get(origin, set())
-                if not acquired:
-                    accts_at_origin = all_accts & clean_accts
-                    if not accts_at_origin:
-                        continue
-                else:
-                    accts_at_origin = acquired & clean_accts
+                entity_accts = (acquired if acquired else all_accts) & clean_accts
 
-                if len(accts_at_origin) < 3:
+                if len(entity_accts) < 3:
                     continue
 
-                # Entity's actual returns (vectorized)
-                entity_mask = clean_df['acct'].isin(accts_at_origin)
-                entity_df = clean_df[entity_mask]
-                if len(entity_df) < 2:
+                # Get indices (O(1) per acct via dict lookup)
+                eidx = [acct_idx[a] for a in entity_accts if a in acct_idx]
+                if len(eidx) < 2:
                     continue
+                eidx = np.array(eidx)
 
-                avg_actual_return = entity_df['growth'].mean()
-                avg_parcel_value = entity_df['v0'].mean()
+                # Entity returns (numpy slicing — instant)
+                e_growth = growth_arr[eidx]
+                e_v0 = v0_arr[eidx]
+                avg_actual_return = float(e_growth.mean())
+                avg_parcel_value = float(e_v0.mean())
 
-                # Entity characteristics for matching
-                entity_types = set(entity_df['prop_type'].dropna().unique()) if 'prop_type' in entity_df.columns else set()
-                entity_zips = set(entity_df['zip3'].dropna().unique()) if 'zip3' in entity_df.columns else set()
+                # Entity characteristics
+                entity_types = set(pt_arr[eidx]) - {''} if pt_arr is not None else set()
+                entity_zips = set(z3_arr[eidx]) - {''} if z3_arr is not None else set()
 
                 lo_val = avg_parcel_value * (1 - BUDGET_TOLERANCE)
                 hi_val = avg_parcel_value * (1 + BUDGET_TOLERANCE)
 
-                # Find comparable parcels (vectorized filtering)
-                comps = clean_df[
-                    (~clean_df['acct'].isin(accts_at_origin)) &
-                    (clean_df['v0'] >= lo_val) &
-                    (clean_df['v0'] <= hi_val)
-                ]
+                # Comparable universe (numpy boolean masking — fast)
+                # np.isin is implemented in C, much faster than Python list comprehension
+                entity_mask_full = np.isin(acct_arr, list(entity_accts))
+                val_mask = (v0_arr >= lo_val) & (v0_arr <= hi_val)
+                comp_mask = (~entity_mask_full) & val_mask
 
                 # Property type filter
-                if entity_types and 'prop_type' in comps.columns:
-                    typed = comps[comps['prop_type'].isin(entity_types)]
-                    if len(typed) >= 10:
-                        comps = typed
+                if entity_types and pt_arr is not None:
+                    type_mask = np.isin(pt_arr, list(entity_types))
+                    typed_mask = comp_mask & type_mask
+                    if typed_mask.sum() >= 10:
+                        comp_mask = typed_mask
 
-                # Geographic filter
-                if entity_zips and 'zip3' in comps.columns:
-                    geo = comps[comps['zip3'].isin(entity_zips)]
-                    if len(geo) >= 10:
-                        comps = geo
+                # Zip filter
+                if entity_zips and z3_arr is not None:
+                    zip_mask = np.isin(z3_arr, list(entity_zips))
+                    geo_mask = comp_mask & zip_mask
+                    if geo_mask.sum() >= 10:
+                        comp_mask = geo_mask
 
-                if len(comps) < 5:
+                n_comps = int(comp_mask.sum())
+                if n_comps < 5:
                     continue
 
-                # Model-guided: top-N by growth (vectorized sort)
-                n_picks = min(len(accts_at_origin), len(comps))
-                top_n = comps.nlargest(n_picks, 'growth')
-                avg_model_return = top_n['growth'].mean()
+                comp_growth = growth_arr[comp_mask]
+
+                # Model-guided: top-N by growth
+                n_picks = min(len(entity_accts), n_comps)
+                top_idx = np.argpartition(comp_growth, -n_picks)[-n_picks:]
+                avg_model_return = float(comp_growth[top_idx].mean())
 
                 # Benchmark and random
-                benchmark_return = comps['growth'].median()
-                random_idx = comps.sample(n=min(n_picks, len(comps)), random_state=42)
-                avg_random_return = random_idx['growth'].mean()
+                benchmark_return = float(np.median(comp_growth))
+                rng = np.random.RandomState(42)
+                rand_idx = rng.choice(n_comps, size=min(n_picks, n_comps), replace=False)
+                avg_random_return = float(comp_growth[rand_idx].mean())
 
-                n_renovated = sum(1 for a in (acquired or all_accts) if a in reno_keys)
+                n_renovated = len((acquired if acquired else all_accts) & reno_combined)
 
                 results.append({
                     "entity": entity,
                     "origin": origin,
                     "horizon": horizon,
                     "target_year": target_year,
-                    "n_parcels": len(accts_at_origin),
-                    "n_clean_parcels": len(entity_df),
+                    "n_parcels": len(entity_accts),
+                    "n_clean_parcels": len(eidx),
                     "n_renovated_excluded": n_renovated,
-                    "n_comps_available": len(comps),
+                    "n_comps_available": n_comps,
                     "actual_return": avg_actual_return,
                     "model_best_return": avg_model_return,
                     "benchmark_return": benchmark_return,
