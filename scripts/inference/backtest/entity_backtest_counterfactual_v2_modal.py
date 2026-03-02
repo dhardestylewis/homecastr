@@ -19,7 +19,7 @@ import modal
 
 app = modal.App("entity-counterfactual-backtest-v2")
 image = modal.Image.debian_slim(python_version="3.11").pip_install(
-    "pandas", "polars", "numpy", "google-cloud-storage", "psycopg2-binary"
+    "pandas", "polars", "numpy", "pyarrow", "google-cloud-storage", "psycopg2-binary"
 )
 gcs_secret = modal.Secret.from_name("gcs-creds")
 supabase_secret = modal.Secret.from_name("supabase-creds")
