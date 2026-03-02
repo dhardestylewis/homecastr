@@ -290,6 +290,19 @@ def train_worldmodel(
 
     df = df.filter(pl.col("tot_appr_val").is_not_null() & (pl.col("tot_appr_val") > 0))
 
+    # Winsorize extreme outliers in tot_appr_val to prevent y_scaler_contract failure
+    # worldmodel.py asserts <1% of |z|>20; fat-tailed parcel data can exceed this
+    _vals = df["tot_appr_val"].to_numpy()
+    import numpy as _np
+    _p005 = float(_np.nanpercentile(_vals, 0.5))
+    _p995 = float(_np.nanpercentile(_vals, 99.5))
+    _n_clipped = int((_vals < _p005).sum() + (_vals > _p995).sum())
+    if _n_clipped > 0:
+        df = df.with_columns(
+            pl.col("tot_appr_val").clip(_p005, _p995)
+        )
+        print(f"[{ts()}] Winsorized tot_appr_val: clipped {_n_clipped:,} values to [{_p005:,.0f}, {_p995:,.0f}]")
+
     # Map canonical dwelling_type values → codes the worldmodel SF filter expects
     # retrain_sample_sweep.py looks for property_type in ["SF", "SFR", "SINGLE"]
     if "property_type" in df.columns:
