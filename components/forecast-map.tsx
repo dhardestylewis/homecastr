@@ -379,6 +379,10 @@ export function ForecastMap({
     const comparisonTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const hoverDetailTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+    // Street view dwell hover: only show after hovering same feature for 1.5s
+    const [hoverDwell, setHoverDwell] = useState(false)
+    const hoverDwellTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
     // Viewport y-axis domain: fixed range from visible features
     const [viewportYDomain, setViewportYDomain] = useState<[number, number] | null>(null)
 
@@ -660,6 +664,9 @@ export function ForecastMap({
                         setTooltipData(null)
                     }
                     onFeatureHover(null)
+                    // Clear street view dwell timer
+                    if (hoverDwellTimerRef.current) { clearTimeout(hoverDwellTimerRef.current); hoverDwellTimerRef.current = null }
+                    setHoverDwell(false)
                 }
                 map.getCanvas().style.cursor = ""
                 return
@@ -709,6 +716,11 @@ export function ForecastMap({
                     const hoverLevel = getSourceLayer(hoverZoom)
                     fetchForecastDetail(id, hoverLevel)
                 }, 500)
+
+                // Street view dwell hover: 1.5s on same feature before loading images
+                if (hoverDwellTimerRef.current) clearTimeout(hoverDwellTimerRef.current)
+                setHoverDwell(false)
+                hoverDwellTimerRef.current = setTimeout(() => setHoverDwell(true), 1500)
             }
 
             if (selectedIdRef.current) {
@@ -1735,7 +1747,7 @@ export function ForecastMap({
                         /* Mobile: Side-by-side — StreetView left, Chart right */
                         <div className="flex flex-row flex-1 min-h-0 overflow-hidden">
                             {/* StreetView — left half */}
-                            {process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY && (selectedId ? selectedCoords : tooltipCoords) && (
+                            {process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY && (selectedId ? selectedCoords : (hoverDwell ? tooltipCoords : null)) && (
                                 <div className="w-1/2 h-full overflow-hidden">
                                     <StreetViewCarousel
                                         h3Ids={[]}
@@ -1794,7 +1806,7 @@ export function ForecastMap({
                     ) : (
                         <>
                             {/* Desktop: StreetView above chart */}
-                            {!(isMobile && isKeyboardOpen) && process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY && (selectedId ? selectedCoords : tooltipCoords) && (
+                            {!(isMobile && isKeyboardOpen) && process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY && (selectedId ? selectedCoords : (hoverDwell ? tooltipCoords : null)) && (
                                 <StreetViewCarousel
                                     h3Ids={[]}
                                     apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY}
