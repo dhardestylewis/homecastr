@@ -14,6 +14,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin"
  */
 
 const LEVEL_TABLE: Record<string, { table: string; key: string }> = {
+    zip3: { table: "metrics_zip3_forecast", key: "zip3" },
     zcta: { table: "metrics_zcta_forecast", key: "zcta5" },
     tract: { table: "metrics_tract_forecast", key: "tract_geoid20" },
     tabblock: { table: "metrics_tabblock_forecast", key: "tabblock_geoid20" },
@@ -21,6 +22,7 @@ const LEVEL_TABLE: Record<string, { table: string; key: string }> = {
 }
 
 const HISTORY_TABLE: Record<string, { table: string; key: string }> = {
+    zip3: { table: "metrics_zip3_history", key: "zip3" },
     zcta: { table: "metrics_zcta_history", key: "zcta5" },
     tract: { table: "metrics_tract_history", key: "tract_geoid20" },
     tabblock: { table: "metrics_tabblock_history", key: "tabblock_geoid20" },

@@ -20,7 +20,8 @@ const TOOLTIP_HEIGHT = 620
 
 // Geography level definitions — zoom breakpoints must match the SQL router
 const GEO_LEVELS = [
-    { name: "zcta", minzoom: 0, maxzoom: 7.99, label: "ZIP Code" },
+    { name: "zip3", minzoom: 0, maxzoom: 4.99, label: "ZIP3" },
+    { name: "zcta", minzoom: 5, maxzoom: 7.99, label: "ZIP Code" },
     { name: "tract", minzoom: 8, maxzoom: 11.99, label: "Tract" },
     { name: "tabblock", minzoom: 12, maxzoom: 22, label: "Block" },
     { name: "parcel", minzoom: 17, maxzoom: 22, label: "Parcel" },
