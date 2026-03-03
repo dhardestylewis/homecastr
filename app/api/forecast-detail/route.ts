@@ -84,6 +84,19 @@ export async function GET(request: Request) {
                             histMap.set(row.year, val)
                         }
                     }
+
+                    // Backfill 2024/2025 from forecast data if history table is missing them.
+                    // ACS origin_year=2024 forecasted 2025 at horizon_m=12 — now past, treat as history.
+                    if (data && data.length > 0) {
+                        for (const row of data as any[]) {
+                            const forecastYear = row.origin_year + row.horizon_m / 12
+                            // Only backfill years that are in the past (≤2025) and missing from history
+                            if (forecastYear <= 2025 && !histMap.has(forecastYear)) {
+                                histMap.set(forecastYear, row.p50 ?? 0)
+                            }
+                        }
+                    }
+
                     historicalValues = [2019, 2020, 2021, 2022, 2023, 2024, 2025].map(
                         (yr) => histMap.get(yr) ?? null
                     )
