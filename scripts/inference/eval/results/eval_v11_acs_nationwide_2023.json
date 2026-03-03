@@ -1,0 +1,19 @@
+{
+  "name": "eval_v11_acs_nationwide_2023",
+  "group": "eval_v11_acs_nationwide",
+  "state": "finished",
+  "tags": [
+    "acs_nationwide",
+    "eval",
+    "v11"
+  ],
+  "config": {
+    "origin": 2023,
+    "version": "v11",
+    "scenarios": 128,
+    "sample_size": 20000
+  },
+  "summary_metrics": {},
+  "history_steps": [],
+  "url": "https://wandb.ai/dhardestylewis-columbia-university/homecastr/runs/womek7ts"
+}

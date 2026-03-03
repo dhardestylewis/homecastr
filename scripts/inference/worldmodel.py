@@ -228,7 +228,7 @@ SAMPLER_REPORT_BAD_STEP = False    # suppresses per-step GPU→CPU syncs (.item(
 # η=0.0 = deterministic DDIM (original, near-zero VarRatio)
 # η=1.0 = stochastic DDPM (injects noise at every reverse step)
 # This is the primary lever for opening up the scenario fan.
-SAMPLER_ETA = 1.0
+SAMPLER_ETA = 0.3
 
 # Scaled shard dtype
 SCALED_SHARDS_FLOAT16 = False  # keep float32 until stability is proven
@@ -2024,6 +2024,7 @@ def sample_ddim_v11(
     Z_tokens: torch.Tensor,    # [S, K, H] pre-sampled token paths
     device: str,
     coh_scale: CoherenceScale = None,  # optional: if None, sigma_u=1.0
+    tau: float = 1.0,           # optional: temperature scaling for idiosyncratic noise
 ) -> np.ndarray:
     """
     v11 DDIM sampler with inducing-token coherence and S-block chunking.
@@ -2060,7 +2061,7 @@ def sample_ddim_v11(
     xn_absmax = float(np.max(np.abs(xn_np))) if xn_np.size > 0 else 0.0
     sb = int(S_BLOCK)
     print(f"[{ts()}] SAMPLER v11 conditioning absmax hy={hy_absmax:.3f} xn={xn_absmax:.3f} "
-          f"N={N} S={S} K={K} S_BLOCK={sb} sigma_u={sigma_u:.3f}")
+          f"N={N} S={S} K={K} S_BLOCK={sb} sigma_u={sigma_u:.3f} tau={tau:.3f}")
 
     # Move conditioning to device (shared across all S-blocks)
     hy = torch.from_numpy(hy_np).pin_memory().to(device=device, dtype=torch.float32, non_blocking=True)
@@ -2113,9 +2114,9 @@ def sample_ddim_v11(
         xc_exp = xc.repeat_interleave(sb_actual, dim=0)
         rid_exp = rid.repeat_interleave(sb_actual, dim=0)
 
-        # Initial x: structured noise = sigma_u * u_i + idiosyncratic
+        # Initial x: structured noise = sigma_u * u_i + tau * idiosyncratic
         idio_noise = torch.randn((N * sb_actual, H), device=device, dtype=torch.float32)
-        x = u_i_flat + idio_noise
+        x = u_i_flat + idio_noise * tau
         x = x.float()
 
         # DDIM denoising loop for this block

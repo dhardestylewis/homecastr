@@ -1,0 +1,18 @@
+{
+  "name": "eval_v11_uk_ppd_2019",
+  "group": "eval_v11_uk_ppd",
+  "state": "finished",
+  "tags": [
+    "eval",
+    "uk_ppd",
+    "v11"
+  ],
+  "config": {
+    "origin": 2019,
+    "scenarios": 128,
+    "sample_size": 20000
+  },
+  "summary_metrics": {},
+  "history_steps": [],
+  "url": "https://wandb.ai/dhardestylewis-columbia-university/homecastr/runs/thcewtsw"
+}

@@ -19,10 +19,10 @@
 ## Slide 3: Our Solution
 **Say:** "We built a diffusion-based foundation model — the same class of model behind image generation — applied to property price trajectories. It generates thousands of scenarios per property, producing price bands with explainable drivers."
 
-**Note:** Accuracy is stated as "14% median error." This is preliminary — be transparent about it.
+**Note:** Accuracy is stated as "9%–25% median error across 1yr–4yr." Cite the HCAD backtest, origin 2021. Be transparent about the horizon gradient — short-horizon is competitive, long-horizon is harder.
 
-> **Q: "14% median error — how does that compare?"**
-> A: "Zillow's off-market Zestimate error is about 7.5%. We're at 14% but we're forecasting *future* prices, not estimating *current* value — a fundamentally harder problem. We expect this to improve significantly with more training data and transfer learning."
+> **Q: "9% to 25% — that's a wide range. How does it compare?"**
+> A: "Zillow's off-market Zestimate error is about 7.5%, but that's estimating *current* value — not forecasting the future. At 1yr out, we're at 9% MdAE, which is competitive. At 4yr out, we're at 25% — nobody else even attempts property-level 4yr forecasts. This improves with more training data and transfer learning across metros."
 
 > **Q: "Why diffusion models instead of simpler ML?"**
 > A: "Regression gives you one number. Diffusion gives you a *distribution* — the full range of probable outcomes. That's what investors and lenders actually need for risk assessment. A property isn't worth exactly $320K next year — it's worth $285K to $355K with different probabilities."
@@ -97,10 +97,10 @@
 ---
 
 ## Slide 10: Where We Are (Traction)
-**Say:** "Houston metro: 1M+ properties indexed. 4-year forecast horizon. 14% median error. Live dashboard and API — both shipping today."
+**Say:** "Houston metro: 1M+ properties indexed. 4-year forecast horizon. 9% median error at 1yr, 25% at 4yr — from our HCAD backtest. Live dashboard and API — both shipping today."
 
-> **Q: "14% error feels high. Can you improve it?"**
-> A: "Yes. Our first ML hire's primary job is improving accuracy. With more training data from new metros and transfer learning, we expect to get below 10%. The diffusion architecture is designed to improve with more data — that's the flywheel."
+> **Q: "25% error at 4yr feels high. Can you improve it?"**
+> A: "Yes — and context matters. Nobody else does property-level 4yr forecasts at all. At 1yr we're at 9%, which is competitive with current-value estimators. The 4yr number improves with more training data and transfer learning across metros. Our first ML hire's primary job is driving that down."
 
 > **Q: "Do you have any paying users?"**
 > A: "Not yet — we're pre-revenue. The product is live and free. This raise funds the GTM hire to convert our first paying users."

@@ -1,0 +1,19 @@
+{
+  "name": "eval_v11_hcad_houston_2023",
+  "group": "eval_v11_hcad_houston",
+  "state": "finished",
+  "tags": [
+    "eval",
+    "hcad_houston",
+    "v11"
+  ],
+  "config": {
+    "origin": 2023,
+    "version": "v11",
+    "scenarios": 128,
+    "sample_size": 20000
+  },
+  "summary_metrics": {},
+  "history_steps": [],
+  "url": "https://wandb.ai/dhardestylewis-columbia-university/homecastr/runs/8j5ziezk"
+}

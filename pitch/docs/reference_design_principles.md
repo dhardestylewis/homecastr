@@ -6,7 +6,7 @@ Gap → Magic → Proof → Scale → Ask
 ## Core Rules
 1. Every slide has ONE takeaway — if you need to read to understand it, it fails
 2. Big visuals > tables — a screenshot is worth 10 bullet points
-3. Numbers should be huge — 14% Median Error, 8x LTV:CAC, $15B TAM
+3. Numbers should be huge — 9%–25% Median Error, 8x LTV:CAC, $15B TAM
 4. Show, don't tell — visuals carry the story, text supports
 
 ## What's Working (Keep)

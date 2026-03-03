@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useState, useCallback } from "react"
+import React, { useEffect, useState, useCallback, useRef } from "react"
 import useEmblaCarousel from "embla-carousel-react"
 import { ChevronLeft, ChevronRight, MapPin } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -25,9 +25,15 @@ export function StreetViewCarousel({ h3Ids, apiKey, className, coordinates, minZ
     // Only populated for slides that have been requested
     const [signedUrls, setSignedUrls] = useState<Record<string, string>>({})
     const [loadedIdxs, setLoadedIdxs] = useState<Set<number>>(new Set())
+    const locationsRef = useRef<PropertyLocation[]>([])
+    const loadedIdxsRef = useRef<Set<number>>(new Set())
 
     // Skip rendering below min zoom — street view is meaningless at county/city scale
     if (mapZoom != null && mapZoom < minZoom) return null
+
+    // Stabilize h3Ids and coordinates references to prevent dependency loops
+    const h3Key = h3Ids.join(',')
+    const coordKey = coordinates ? `${coordinates[0]},${coordinates[1]}` : ''
 
     useEffect(() => {
         const locs = coordinates
@@ -39,25 +45,30 @@ export function StreetViewCarousel({ h3Ids, apiKey, className, coordinates, minZ
                 { lat: coordinates[0] - 0.0004, lng: coordinates[1] + 0.0004, label: "South East" },
             ]
             : getRepresentativeProperties(h3Ids)
+        locationsRef.current = locs
+        loadedIdxsRef.current = new Set()
         setLocations(locs)
         setSignedUrls({})
         setLoadedIdxs(new Set())
-    }, [h3Ids, coordinates])
+    }, [h3Key, coordKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
     /** Fetch signed URL for a single slide index (no-op if already loaded) */
-    const loadSlide = useCallback(async (idx: number, locs = locations) => {
+    const loadSlide = useCallback(async (idx: number) => {
+        const locs = locationsRef.current
         if (idx < 0 || idx >= locs.length) return
+        if (loadedIdxsRef.current.has(idx)) return // already loaded
+        loadedIdxsRef.current.add(idx)
         const loc = locs[idx]
         const key = `${loc.lat}-${loc.lng}`
         setLoadedIdxs(prev => new Set(prev).add(idx))
         const url = await getSignedStreetViewUrl(loc.lat, loc.lng)
         setSignedUrls(prev => ({ ...prev, [key]: url }))
-    }, [locations])
+    }, []) // stable — reads from refs
 
     // Load only slide 0 on mount — 1 API call, not 5
     useEffect(() => {
-        if (locations.length > 0) loadSlide(0, locations)
-    }, [locations.length]) // Only trigger when we get a new set of locations
+        if (locations.length > 0) loadSlide(0)
+    }, [locations.length, loadSlide])
 
     // Lazy-load on carousel navigation, prefetch +1
     const onSelect = useCallback(() => {
@@ -66,16 +77,20 @@ export function StreetViewCarousel({ h3Ids, apiKey, className, coordinates, minZ
         setSelectedIndex(idx)
         setCanScrollPrev(emblaApi.canScrollPrev())
         setCanScrollNext(emblaApi.canScrollNext())
-        if (!loadedIdxs.has(idx)) loadSlide(idx)
-        const next = (idx + 1) % locations.length
-        if (!loadedIdxs.has(next)) loadSlide(next)
-    }, [emblaApi, loadedIdxs, loadSlide, locations.length])
+        loadSlide(idx)
+        const next = (idx + 1) % locationsRef.current.length
+        loadSlide(next)
+    }, [emblaApi, loadSlide])
 
     useEffect(() => {
         if (!emblaApi) return
         onSelect()
         emblaApi.on("select", onSelect)
         emblaApi.on("reInit", onSelect)
+        return () => {
+            emblaApi.off("select", onSelect)
+            emblaApi.off("reInit", onSelect)
+        }
     }, [emblaApi, onSelect])
 
     if (locations.length === 0) return null

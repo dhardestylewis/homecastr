@@ -408,6 +408,14 @@ export function ForecastMap({
     const originYear = isHarrisCounty ? 2025 : 2024
     const horizonM = (year - originYear) * 12
 
+    // Student inference state: triggers outside Harris County at z≥13
+    // Feature flag: set NEXT_PUBLIC_STUDENT_INFERENCE=1 to enable (off by default in prod)
+    const studentEnabled = typeof window !== 'undefined' &&
+        (process.env.NEXT_PUBLIC_STUDENT_INFERENCE === '1' || window.location.hostname === 'localhost')
+    const studentFetchRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const studentAbortRef = useRef<AbortController | null>(null)
+    const [studentLoading, setStudentLoading] = useState(false)
+
     // Fetch all horizons for a given feature to build FanChart data
     const fetchForecastDetail = useCallback(async (featureId: string, level: string) => {
         const cacheKey = `${level}:${featureId}`
@@ -465,6 +473,59 @@ export function ForecastMap({
             params.set("lng", center.lng.toFixed(5))
             params.set("zoom", zoom.toFixed(2))
             router.replace(`?${params.toString()}`, { scroll: false })
+
+            // ─── Student inference: fetch building predictions outside Harris County at z≥13 ───
+            if (!studentEnabled) return  // feature flag off
+            const outsideHarris = !(center.lat >= 29.4 && center.lat <= 30.2 && center.lng >= -95.9 && center.lng <= -94.9)
+            if (outsideHarris && zoom >= 13) {
+                // Debounce: wait 800ms after last move before fetching
+                if (studentFetchRef.current) clearTimeout(studentFetchRef.current)
+                studentFetchRef.current = setTimeout(async () => {
+                    // Abort any in-flight request
+                    if (studentAbortRef.current) studentAbortRef.current.abort()
+                    const ac = new AbortController()
+                    studentAbortRef.current = ac
+
+                    const bounds = map.getBounds()
+                    const bbox = [
+                        bounds.getSouth(),
+                        bounds.getWest(),
+                        bounds.getNorth(),
+                        bounds.getEast(),
+                    ]
+
+                    setStudentLoading(true)
+                    try {
+                        const res = await fetch('/api/student-inference', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ bbox, year }),
+                            signal: ac.signal,
+                        })
+                        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+                        const geojson = await res.json()
+
+                        // Update the GeoJSON source on the map
+                        const src = map.getSource('student-buildings') as maplibregl.GeoJSONSource
+                        if (src && geojson.features) {
+                            src.setData(geojson)
+                            console.log(`[STUDENT] Loaded ${geojson.features.length} buildings`)
+                        }
+                    } catch (err: any) {
+                        if (err.name !== 'AbortError') {
+                            console.error('[STUDENT] Inference error:', err.message)
+                        }
+                    } finally {
+                        setStudentLoading(false)
+                    }
+                }, 800)
+            } else {
+                // Inside Harris County or zoomed out — clear student layer
+                const src = map.getSource('student-buildings') as maplibregl.GeoJSONSource
+                if (src) {
+                    src.setData({ type: 'FeatureCollection', features: [] })
+                }
+            }
         }
 
         map.on("moveend", onMoveEnd)
@@ -652,6 +713,47 @@ export function ForecastMap({
 
             addLayersForSource("forecast-a", "a", true)
             addLayersForSource("forecast-b", "b", false)
+
+            // ─── Student inference: GeoJSON source + fill/outline layers for building polygons ───
+            map.addSource('student-buildings', {
+                type: 'geojson',
+                data: { type: 'FeatureCollection', features: [] },
+                promoteId: 'id',
+            })
+            map.addLayer({
+                id: 'student-buildings-fill',
+                type: 'fill',
+                source: 'student-buildings',
+                minzoom: 13,
+                paint: {
+                    'fill-color': [
+                        'interpolate', ['linear'],
+                        ['get', 'p50'],
+                        100000, '#1e1b4b',
+                        200000, '#4c1d95',
+                        335000, '#7c3aed',
+                        525000, '#db2777',
+                        1000000, '#fbbf24',
+                    ],
+                    'fill-opacity': 0.75,
+                },
+            })
+            map.addLayer({
+                id: 'student-buildings-outline',
+                type: 'line',
+                source: 'student-buildings',
+                minzoom: 13,
+                paint: {
+                    'line-color': '#fff',
+                    'line-width': [
+                        'interpolate', ['linear'], ['zoom'],
+                        13, 0.3,
+                        16, 1,
+                        18, 1.5,
+                    ],
+                    'line-opacity': 0.6,
+                },
+            })
         })
 
         // Suppress MapLibre tile loading error events (e.g. transient 500s from Supabase)
@@ -682,6 +784,70 @@ export function ForecastMap({
                 : []
 
             if (features.length === 0) {
+                // No MVT features — check student buildings layer
+                const studentFeatures = map.getLayer('student-buildings-fill')
+                    ? map.queryRenderedFeatures(e.point, { layers: ['student-buildings-fill'] })
+                    : []
+                if (studentFeatures.length > 0) {
+                    map.getCanvas().style.cursor = 'pointer'
+                    const sf = studentFeatures[0]
+                    const p = sf.properties
+                    // Show student building tooltip using the same tooltip system
+                    const smartPos = getSmartTooltipPos(
+                        e.originalEvent.clientX,
+                        e.originalEvent.clientY,
+                        window.innerWidth,
+                        window.innerHeight
+                    )
+                    setTooltipData({
+                        globalX: smartPos.x,
+                        globalY: smartPos.y,
+                        properties: {
+                            ...p,
+                            id: `student-${sf.id || Math.random()}`,
+                            p50: p?.p50,
+                            p10: p?.p10,
+                            p90: p?.p90,
+                            _isStudent: true,
+                        },
+                    })
+
+                    // Synthesize FanChartData from student model full trajectory
+                    if (p.p50_arr) {
+                        try {
+                            const p10Arr = typeof p.p10_arr === 'string' ? JSON.parse(p.p10_arr) : p.p10_arr;
+                            const p50Arr = typeof p.p50_arr === 'string' ? JSON.parse(p.p50_arr) : p.p50_arr;
+                            const p90Arr = typeof p.p90_arr === 'string' ? JSON.parse(p.p90_arr) : p.p90_arr;
+
+                            if (Array.isArray(p50Arr) && p50Arr.length > 0) {
+                                // Default forecast displays up to 5 years [2026, 2027, 2028, 2029, 2030]
+                                const len = Math.min(5, p50Arr.length)
+                                const synthYears = [2026, 2027, 2028, 2029, 2030].slice(0, len)
+
+                                setFanChartData({
+                                    years: synthYears,
+                                    p10: p10Arr.slice(0, len),
+                                    p50: p50Arr.slice(0, len),
+                                    p90: p90Arr.slice(0, len),
+                                    y_med: p50Arr.slice(0, len)
+                                })
+                                setHistoricalValues(undefined)
+                            } else {
+                                setFanChartData(null)
+                                setHistoricalValues(undefined)
+                            }
+                        } catch (err) {
+                            console.error('Failed to parse student fan arrays:', err)
+                            setFanChartData(null)
+                            setHistoricalValues(undefined)
+                        }
+                    } else {
+                        setFanChartData(null)
+                        setHistoricalValues(undefined)
+                    }
+
+                    return
+                }
                 // Clear hover
                 if (hoveredIdRef.current) {
                     ;["forecast-a", "forecast-b"].forEach((s) => {
@@ -892,7 +1058,102 @@ export function ForecastMap({
             detailFetchRef.current = null // allow click to re-fetch even if same id
 
             if (features.length === 0) {
-                // Clear selection
+                // Check if user clicked a student building layer
+                const studentFeatures = map.getLayer('student-buildings-fill')
+                    ? map.queryRenderedFeatures(e.point, { layers: ['student-buildings-fill'] })
+                    : []
+
+                if (studentFeatures.length > 0) {
+                    const sf = studentFeatures[0]
+                    const id = `student-${sf.id || Math.random()}`
+
+                    // Toggle selection logic for student building
+                    if (selectedIdRef.current === id) {
+                        selectedIdRef.current = null
+                        setSelectedId(null)
+                        setSelectedProps(null)
+                        setFixedTooltipPos(null)
+                        userDraggedRef.current = false
+                        setSelectedCoords(null)
+                        setComparisonData(null)
+                        setComparisonHistoricalValues(undefined)
+                        comparisonFetchRef.current = null
+                        onFeatureSelect(null)
+                        return
+                    }
+
+                    selectedIdRef.current = id
+                    selectedSourceLayerRef.current = "student"
+                    setSelectedId(id)
+                    const p = sf.properties
+                    const enhancedProps = {
+                        ...p,
+                        id,
+                        p50: p?.p50,
+                        p10: p?.p10,
+                        p90: p?.p90,
+                        _isStudent: true,
+                    }
+                    setSelectedProps(enhancedProps)
+                    setComparisonData(null)
+                    setComparisonHistoricalValues(undefined)
+                    comparisonFetchRef.current = null
+                    onFeatureSelect(id)
+
+                    // Synthesize FanChartData from student model full trajectory
+                    if (p.p50_arr) {
+                        try {
+                            const p10Arr = typeof p.p10_arr === 'string' ? JSON.parse(p.p10_arr) : p.p10_arr;
+                            const p50Arr = typeof p.p50_arr === 'string' ? JSON.parse(p.p50_arr) : p.p50_arr;
+                            const p90Arr = typeof p.p90_arr === 'string' ? JSON.parse(p.p90_arr) : p.p90_arr;
+
+                            if (Array.isArray(p50Arr) && p50Arr.length > 0) {
+                                const len = Math.min(5, p50Arr.length)
+                                const synthYears = [2026, 2027, 2028, 2029, 2030].slice(0, len)
+
+                                setFanChartData({
+                                    years: synthYears,
+                                    p10: p10Arr.slice(0, len),
+                                    p50: p50Arr.slice(0, len),
+                                    p90: p90Arr.slice(0, len),
+                                    y_med: p50Arr.slice(0, len)
+                                })
+                                setHistoricalValues(undefined)
+                            } else {
+                                setFanChartData(null)
+                                setHistoricalValues(undefined)
+                            }
+                        } catch (err) {
+                            console.error('Failed to parse student fan arrays:', err)
+                            setFanChartData(null)
+                            setHistoricalValues(undefined)
+                        }
+                    } else {
+                        setFanChartData(null)
+                        setHistoricalValues(undefined)
+                    }
+
+                    // Tooltip positioning
+                    const smartPos = getSmartTooltipPos(
+                        e.originalEvent.clientX,
+                        e.originalEvent.clientY,
+                        window.innerWidth,
+                        window.innerHeight
+                    )
+                    if (!userDraggedRef.current) {
+                        setFixedTooltipPos({ globalX: smartPos.x, globalY: smartPos.y })
+                    }
+                    setTooltipData({
+                        globalX: smartPos.x,
+                        globalY: smartPos.y,
+                        properties: enhancedProps,
+                    })
+                    setTooltipCoords([e.lngLat.lat, e.lngLat.lng])
+                    setSelectedCoords([e.lngLat.lat, e.lngLat.lng])
+                    return
+                }
+
+                // Normal clear selection
                 if (selectedIdRef.current) {
                     ;["forecast-a", "forecast-b"].forEach((s) => {
                         try {
@@ -1618,6 +1879,13 @@ export function ForecastMap({
                             Initializing Forecast Engine...
                         </span>
                     </div>
+                </div>
+            )}
+
+            {studentLoading && (
+                <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 bg-black/70 backdrop-blur-sm text-white text-xs font-medium px-3 py-1.5 rounded-full flex items-center gap-2">
+                    <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Loading building forecasts…
                 </div>
             )}
 

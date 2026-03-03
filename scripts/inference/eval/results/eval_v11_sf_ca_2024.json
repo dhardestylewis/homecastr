@@ -1,0 +1,179 @@
+{
+  "name": "eval_v11_sf_ca_2024",
+  "group": "eval_v11_sf_ca",
+  "state": "finished",
+  "tags": [
+    "eval",
+    "sf_ca",
+    "v11"
+  ],
+  "config": {
+    "origin": 2024,
+    "scenarios": 128,
+    "sample_size": 20000
+  },
+  "summary_metrics": {
+    "eval/cfg/DIFF_STEPS_TRAIN/o2024": 128,
+    "eval/cfg/K_ACTIVE/o2024": 4,
+    "eval/cfg/K_TOKENS/o2024": 8,
+    "eval/parcel_corr/o2024_h1": 0.01123422892303297,
+    "eval/parcel_corr/o2024_h3": 0.016778310718486292,
+    "eval/parcel_corr/o2024_h5": 0.011329699572702277,
+    "eval/parcel_corr_std/o2024_h1": 0.09317667970207064,
+    "eval/parcel_corr_std/o2024_h3": 0.09127414320312552,
+    "eval/parcel_corr_std/o2024_h5": 0.08994829396821397,
+    "eval/phi_k/o2024_k0": 0.6905592083930969,
+    "eval/phi_k/o2024_k1": 0.692905843257904,
+    "eval/phi_k/o2024_k2": 0.6952053904533386,
+    "eval/phi_k/o2024_k3": 0.6952467560768127,
+    "eval/phi_k/o2024_k4": 0.6904212832450867,
+    "eval/phi_k/o2024_k5": 0.6918867826461792,
+    "eval/phi_k/o2024_k6": 0.6986852288246155,
+    "eval/phi_k/o2024_k7": 0.6994311809539795,
+    "eval/scenario_cross_corr/o2024_h1": 0.0061676074937765035,
+    "eval/scenario_cross_corr/o2024_h2": 0.0020866240873524395,
+    "eval/scenario_cross_corr/o2024_h3": 0.009673388677087726,
+    "eval/scenario_cross_corr/o2024_h4": 0.031651238044121205,
+    "eval/scenario_cross_corr/o2024_h5": 0.003839505961740666,
+    "eval/scenario_std/o2024_h1": 0.1748475581407547,
+    "eval/scenario_std/o2024_h2": 0.1530881226062775,
+    "eval/scenario_std/o2024_h3": 0.13428209722042084,
+    "eval/scenario_std/o2024_h4": 0.1399187445640564,
+    "eval/scenario_std/o2024_h5": 0.13703489303588867,
+    "eval/scenario_std_std/o2024_h1": 0.04597024619579315,
+    "eval/scenario_std_std/o2024_h2": 0.0441909097135067,
+    "eval/scenario_std_std/o2024_h3": 0.042634785175323486,
+    "eval/scenario_std_std/o2024_h4": 0.04067185893654823,
+    "eval/scenario_std_std/o2024_h5": 0.03916596248745918
+  },
+  "history_steps": [
+    {
+      "eval/parcel_corr_std/o2024_h1": 0.09317667970207064,
+      "_timestamp": 1772163219.7864263,
+      "_step": 0,
+      "_runtime": 69.269298993,
+      "eval/parcel_corr/o2024_h1": 0.01123422892303297
+    },
+    {
+      "_runtime": 69.274415524,
+      "_timestamp": 1772163219.7916334,
+      "eval/parcel_corr_std/o2024_h3": 0.09127414320312552,
+      "_step": 1,
+      "eval/parcel_corr/o2024_h3": 0.016778310718486292
+    },
+    {
+      "_runtime": 69.278476725,
+      "_timestamp": 1772163219.7958229,
+      "eval/parcel_corr_std/o2024_h5": 0.08994829396821397,
+      "_step": 2,
+      "eval/parcel_corr/o2024_h5": 0.011329699572702277
+    },
+    {
+      "_timestamp": 1772163219.8146183,
+      "_step": 3,
+      "eval/scenario_std_std/o2024_h1": 0.04597024619579315,
+      "_runtime": 69.297399293,
+      "eval/scenario_std/o2024_h1": 0.1748475581407547,
+      "eval/scenario_cross_corr/o2024_h1": 0.0061676074937765035
+    },
+    {
+      "eval/scenario_cross_corr/o2024_h2": 0.0020866240873524395,
+      "eval/scenario_std_std/o2024_h2": 0.0441909097135067,
+      "_timestamp": 1772163219.833125,
+      "_step": 4,
+      "_runtime": 69.319547846,
+      "eval/scenario_std/o2024_h2": 0.15308812260627747
+    },
+    {
+      "_step": 5,
+      "eval/scenario_cross_corr/o2024_h3": 0.009673388677087726,
+      "eval/scenario_std_std/o2024_h3": 0.042634785175323486,
+      "_runtime": 69.335714993,
+      "eval/scenario_std/o2024_h3": 0.13428209722042084,
+      "_timestamp": 1772163219.8529222
+    },
+    {
+      "_timestamp": 1772163219.8687654,
+      "_step": 6,
+      "eval/scenario_std_std/o2024_h4": 0.04067185893654823,
+      "eval/scenario_cross_corr/o2024_h4": 0.031651238044121205,
+      "_runtime": 69.351547467,
+      "eval/scenario_std/o2024_h4": 0.1399187445640564
+    },
+    {
+      "eval/scenario_cross_corr/o2024_h5": 0.003839505961740666,
+      "_step": 7,
+      "eval/scenario_std/o2024_h5": 0.13703489303588867,
+      "_runtime": 69.368527893,
+      "eval/scenario_std_std/o2024_h5": 0.03916596248745918,
+      "_timestamp": 1772163219.8856983
+    },
+    {
+      "eval/phi_k/o2024_k0": 0.6905592083930969,
+      "_step": 8,
+      "_runtime": 69.369813826,
+      "_timestamp": 1772163219.8872688
+    },
+    {
+      "_step": 9,
+      "_runtime": 69.369973298,
+      "eval/phi_k/o2024_k1": 0.692905843257904,
+      "_timestamp": 1772163219.8875144
+    },
+    {
+      "_step": 10,
+      "_runtime": 69.3700976,
+      "eval/phi_k/o2024_k2": 0.6952053904533386,
+      "_timestamp": 1772163219.8876524
+    },
+    {
+      "eval/phi_k/o2024_k3": 0.6952467560768127,
+      "_timestamp": 1772163219.8878322,
+      "_step": 11,
+      "_runtime": 69.370311335
+    },
+    {
+      "eval/phi_k/o2024_k4": 0.6904212832450867,
+      "_timestamp": 1772163219.8879993,
+      "_step": 12,
+      "_runtime": 69.370427524
+    },
+    {
+      "eval/phi_k/o2024_k5": 0.6918867826461792,
+      "_step": 13,
+      "_runtime": 69.370618831,
+      "_timestamp": 1772163219.8881419
+    },
+    {
+      "eval/phi_k/o2024_k6": 0.6986852288246155,
+      "_step": 14,
+      "_runtime": 69.370711389,
+      "_timestamp": 1772163219.888289
+    },
+    {
+      "eval/phi_k/o2024_k7": 0.6994311809539795,
+      "_timestamp": 1772163219.8884377,
+      "_step": 15,
+      "_runtime": 69.3709025
+    },
+    {
+      "_step": 16,
+      "eval/cfg/K_TOKENS/o2024": 8,
+      "_runtime": 70.181217679,
+      "_timestamp": 1772163220.6982815
+    },
+    {
+      "_step": 17,
+      "_runtime": 70.181590043,
+      "eval/cfg/K_ACTIVE/o2024": 4,
+      "_timestamp": 1772163220.6990228
+    },
+    {
+      "eval/cfg/DIFF_STEPS_TRAIN/o2024": 128,
+      "_timestamp": 1772163220.699327,
+      "_step": 18,
+      "_runtime": 70.181924738
+    }
+  ],
+  "url": "https://wandb.ai/dhardestylewis-columbia-university/homecastr/runs/jo3ha5g0"
+}

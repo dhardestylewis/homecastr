@@ -99,15 +99,30 @@ MODEL_VERSION = "world_model_v11_inducing_token"
 # "SF200K", "SFstrat200K", etc. Must match the suffix in ckpt_origin_{year}_{suffix}.pt.
 CKPT_VARIANT_SUFFIX = globals().get("CKPT_VARIANT_SUFFIX", "SF500K")
 
-# Jurisdiction label for DB writes (set by inference_modal.py)
+# Post-Hoc Calibration parameters
+# Loads interpolator dict from CKPT_DIR/calibrators_v11_sf_ca.pkl
+# See sweep_stage1_calibration.py for fit script.
+APPLY_CALIBRATION = globals().get("APPLY_CALIBRATION", True)
+VALUE_BRACKETS = [
+    ("under_250k", 0, 250_000),
+    ("250k_to_500k", 250_000, 500_000),
+    ("500k_to_1m", 500_000, 1_000_000),
+    ("over_1m", 1_000_000, 100_000_000_000),
+]
+
+# -----------------------------------------------------------------------------
+# DAG & CHUNKING CONSTANTS
 JURISDICTION = globals().get("JURISDICTION", "hcad")
 
 # A100 / sampler tuning (adaptive backoff wrapper will use these)
-PROP_BATCH_SIZE_SAMPLER = int(globals().get("PROP_BATCH_SIZE_SAMPLER", 512))
-PROP_BATCH_SIZE_MIN = int(globals().get("PROP_BATCH_SIZE_MIN", 64))
+PROP_BATCH_SIZE_SAMPLER = int(globals().get("PROP_BATCH_SIZE_SAMPLER", 4096))
+PROP_BATCH_SIZE_MIN = int(globals().get("PROP_BATCH_SIZE_MIN", 512))
+ACCT_BATCH_SIZE_OUTER = int(globals().get("ACCT_BATCH_SIZE_OUTER", 200_000))
+
+# Inference noise temperature
+SAMPLER_TAU = float(globals().get("SAMPLER_TAU", 1.0))
 
 # Chunking
-ACCT_BATCH_SIZE_OUTER = 20000     # ← increased from 5000: reduces Polars is_in scans 4×
 PG_BATCH_ROWS = 5000
 
 # Timeout / Retry
@@ -1310,7 +1325,55 @@ def _build_inference_for_accounts_at_origin(accts_batch, origin: int, global_med
     return result
 
 
-def _sample_scenarios_for_inference_context(ctx, H: int, S: int, origin: int, prop_batch_size: int):
+def _apply_calibration_to_batch(y_levels: np.ndarray, anchor_prices: np.ndarray, calib_models: dict):
+    """
+    Applies Isotonic Regression quantile mapping loaded from Stage 1 sweep.
+    y_levels: [B, S, H]
+    anchor_prices: [B]  (dollar space)
+    """
+    B, S, H = y_levels.shape
+    sorted_p = (np.arange(S) + 0.5) / S
+
+    # Pre-compute remapped quantiles for all existing calibrators to avoid loop lookup
+    # remapped_cache[h][bkt_label] = numpy array [S]
+    remapped_cache = {}
+    for h in range(1, H + 1):
+        remapped_cache[h] = {}
+        for bkt_label, _, _ in VALUE_BRACKETS:
+            key = (h, bkt_label)
+            if key in calib_models:
+                rem = calib_models[key].predict(sorted_p)
+                remapped_cache[h][bkt_label] = np.clip(rem, 0.001, 0.999)
+
+    for i in range(B):
+        bv = anchor_prices[i]
+        bkt_label = None
+        for lbl, lo, hi in VALUE_BRACKETS:
+            if lo <= bv < hi:
+                bkt_label = lbl
+                break
+        
+        if bkt_label is None:
+            continue
+            
+        for h_idx in range(H):
+            h = h_idx + 1
+            if bkt_label in remapped_cache[h]:
+                remapped_p = remapped_cache[h][bkt_label]
+                fan = y_levels[i, :, h_idx]
+                sort_idx = np.argsort(fan)
+                sorted_fan = fan[sort_idx]
+                
+                # Interpolate from old percentiles to remapped PITs
+                new_sorted_fan = np.interp(remapped_p, sorted_p, sorted_fan)
+                
+                # Unsort to preserve feature correlation
+                reverse_sort_idx = np.empty_like(sort_idx)
+                reverse_sort_idx[sort_idx] = np.arange(S)
+                y_levels[i, :, h_idx] = new_sorted_fan[reverse_sort_idx]
+
+
+def _sample_scenarios_for_inference_context(ctx, H: int, S: int, origin: int, prop_batch_size: int, calib_models: dict = None):
     """
     v11: Run DDIM sampler over the inference context in account batches of prop_batch_size.
     Uses inducing-token paths and gating network for coherent joint scenarios.
@@ -1366,15 +1429,19 @@ def _sample_scenarios_for_inference_context(ctx, H: int, S: int, origin: int, pr
             Z_tokens=Z_tokens,
             device=_device,
             coh_scale=_coh_scale_ref,
+            tau=SAMPLER_TAU,
         )  # (end-start, S, H) numpy
 
-        # Convert deltas to y-levels and then price levels
-        # NB: deltas are INCREMENTAL per-year log-growth (training target is y_curr - y_prev,
-        #     see worldmodel.py:762).  Must cumsum to reconstruct absolute log-levels.
-        #     Backtest code at worldmodel.py:2152 does the same.
-        _y_anchor_batch = ctx["y_anchor"][start:end]                 # (B,)
+        # Conversion
+        _y_anchor_batch = ctx["y_anchor"][start:end]
         y_levels = _y_anchor_batch[:, None, None] + np.cumsum(deltas, axis=2)  # (B, S, H)
-        price_levels = np.expm1(y_levels)                             # inverse log1p
+        
+        # ── Stage 1 Calibration (Rank-Mapping PIT) ──
+        if calib_models and len(calib_models) > 0:
+            _anchor_prices_batch = np.expm1(_y_anchor_batch)
+            _apply_calibration_to_batch(y_levels, _anchor_prices_batch, calib_models)
+            
+        price_levels = np.expm1(y_levels)
 
         # ── Anchor validation: flag implausible forecast-vs-anchor ratios ──
         _anchor_prices = np.expm1(_y_anchor_batch)                    # (B,)
@@ -1453,7 +1520,7 @@ def _pick_ckpt_for_origin(ckpt_pairs, origin_year: int):
 
     return ckpt_pairs_sorted[-1]
 
-def _sample_scenarios_with_backoff(ctx, H, S, origin):
+def _sample_scenarios_with_backoff(ctx, H, S, origin, calib_models: dict = None):
     """
     Try large prop_batch_size first; back off on CUDA OOM.
     Returns (inf_out, used_batch_size).
@@ -1468,6 +1535,7 @@ def _sample_scenarios_with_backoff(ctx, H, S, origin):
                 S=int(S),
                 origin=int(origin),
                 prop_batch_size=int(bs),
+                calib_models=calib_models,
             )
             return inf_out, int(bs)
 
@@ -1646,6 +1714,22 @@ def _run_one_origin(
     history_rows_total = 0
     history_agg_rows_total = 0
     t_run0 = time.time()
+
+    # Load Calibration models if they exist
+    calib_models = {}
+    if APPLY_CALIBRATION:
+        calib_path = os.path.join(CKPT_DIR, "calibrators_v11_sf_ca.pkl") # Use jurisdiction dynamically from directory
+        jur_match = re.search(r"/(.+)_v11", CKPT_DIR)
+        if jur_match:
+            calib_path = os.path.join(CKPT_DIR, f"calibrators_v11_{jur_match.group(1)}.pkl")
+        
+        if os.path.exists(calib_path):
+            import pickle
+            with open(calib_path, "rb") as f:
+                calib_models = pickle.load(f)
+            print(f"[{_ts()}] 🏆 Loaded Post-Hoc Calbrators from {calib_path} ({len(calib_models)} blocks)")
+        else:
+            print(f"[{_ts()}] ⚠️ APPLY_CALIBRATION=True but no calibrator map found at {calib_path}")
 
     progress_csv = os.path.join(run_root, "progress_log.csv")
     eval_csv = os.path.join(run_root, "backtest_eval_summary.csv")
@@ -1931,6 +2015,7 @@ def _run_one_origin(
             H=int(H),
             S=int(S),
             origin=int(origin_year),
+            calib_models=calib_models,
         )
 
         # ── Prefetch: start building context for the NEXT chunk on a background thread ──

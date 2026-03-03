@@ -306,7 +306,7 @@ def run_inference(jurisdiction: str, origin_year: int, backtest: bool = False):
         ckpt_origin=ckpt_origin,
         ckpt_path=ckpt_path,
         out_dir=os.path.join(config_patches["OUT_ROOT"], "production"),
-        variant_id="__forecast__",
+        variant_id="__forecast_v2__",  # v2: per-horizon loss norm + anchor enforcement + fail-fast gates
         write_history_series=True,
     )
 

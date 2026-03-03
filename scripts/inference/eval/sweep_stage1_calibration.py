@@ -3,7 +3,7 @@ Modal evaluation wrapper for Properlytic world model v11.
 Runs inference across all checkpoints and computes backtest metrics logged to W&B.
 
 Usage:
-    modal run scripts/eval_modal.py --jurisdiction sf_ca
+    modal run scripts/inference/eval/sweep_stage1_calibration.py --jurisdiction sf_ca
 """
 import modal
 import os
@@ -18,7 +18,7 @@ for i, arg in enumerate(sys.argv):
     if arg == "--origin" and i + 1 < len(sys.argv):
         _ori = sys.argv[i + 1]
 
-app = modal.App(f"eval-{_jur}")
+app = modal.App(f"sweep-calib-{_jur}")
 
 inference_image = (
     modal.Image.debian_slim(python_version="3.11")
@@ -54,6 +54,9 @@ def evaluate_checkpoints(
     sample_size: int = 20_000,
     scenarios: int = 128,
     version_tag: str = "v11",
+    eta: float = 0.0,
+    diff_steps: int = 20,
+    tau: float = 1.0,
 ):
     import json, time, tempfile, glob, pickle
     import numpy as np
@@ -381,16 +384,16 @@ SimpleScaler = _DimSafeScaler
     ]
 
     _version_tag = version_tag
-    run_group = f"eval_{_version_tag}_{jurisdiction}"
+    run_group = f"sweep_stage1_{_version_tag}_{jurisdiction}"
     
     wandb.init(
         project="homecastr",
         entity="dhardestylewis-columbia-university",
-        name=f"{run_group}_{origin}",
+        name=f"{run_group}_o{origin}_eta{eta}_tau{tau}_steps{diff_steps}",
         group=run_group,
-        tags=["eval", _version_tag, jurisdiction],
-        config={"sample_size": sample_size, "scenarios": scenarios, "origin": origin, "version": _version_tag},
-        job_type="evaluation"
+        tags=["sweep", _version_tag, jurisdiction, "stage1_calib"],
+        config={"sample_size": sample_size, "scenarios": scenarios, "origin": origin, "version": _version_tag, "eta": eta, "tau": tau, "diff_steps": diff_steps},
+        job_type="sweep"
     )
 
     ckpt_dir = f"/output/{jurisdiction}_v11"
@@ -572,6 +575,11 @@ SimpleScaler = _DimSafeScaler
             else:
                 ctx["cur_num"] = ctx["cur_num"][:, :_expected_num]
     
+    # Configure generation parameters from sweep kwargs
+    import os
+    os.environ["SAMPLER_ETA"] = str(eta)
+    os.environ["DIFF_STEPS_SAMPLE"] = str(diff_steps)
+
     # Inference chunking (with NaN/clip telemetry guardrail)
     batch_size = min(256, n_valid)
     all_deltas = []
@@ -584,7 +592,7 @@ SimpleScaler = _DimSafeScaler
             model=model, gating_net=gating_net, sched=sched,
             hist_y_b=ctx["hist_y"][b_start:b_end], cur_num_b=ctx["cur_num"][b_start:b_end],
             cur_cat_b=ctx["cur_cat"][b_start:b_end], region_id_b=ctx["region_id"][b_start:b_end],
-            Z_tokens=Z_tokens, coh_scale=coh_scale, device=_device
+            Z_tokens=Z_tokens, coh_scale=coh_scale, device=_device, tau=tau,
         )
         _total_batches += 1
         if np.any(np.isnan(b_deltas)):
@@ -616,19 +624,135 @@ SimpleScaler = _DimSafeScaler
     
     accts = ctx["acct"]
     ya = ctx["y_anchor"]
-    y_levels = ya[:, None, None] + np.cumsum(deltas, axis=2)  # [N, S, H] log-space
+    # ─── 4.5 POST-HOC PIT CALIBRATION (Stage 1) ───
+    print(f"\n[{ts()}] ── Post-hoc PIT Calibration ──")
+    from sklearn.isotonic import IsotonicRegression
+    calib_models = {}
+    np.random.seed(42 + origin)
+    
+    # Randomly split valid accounts into 50% Calib / 50% Test
+    n_total = len(accts)
+    shuffled_idx = np.random.permutation(n_total)
+    calib_idx = shuffled_idx[:n_total // 2]
+    test_idx = shuffled_idx[n_total // 2:]
+    
+    y_levels_test = y_levels[test_idx].copy()
+    y_levels_calib = y_levels[calib_idx].copy()
+    accts_test = accts[test_idx]
+    accts_calib = accts[calib_idx]
+    ya_test = ya[test_idx]
+    ya_calib = ya[calib_idx]
+    
     base_v = actual_vals.get(origin, {})
+    
+    print(f"[{ts()}] Split: {len(calib_idx)} calibration, {len(test_idx)} test")
+    
+    # Fit calibrators on Calib set per (h, value_bucket)
+    for h in range(1, MAX_HORIZON + 1):
+        h_idx = h - 1
+        eyr = origin + h
+        if eyr not in actual_vals:
+            continue
+        future_v = actual_vals[eyr]
+        
+        for bkt_label, bkt_lo, bkt_hi in VALUE_BRACKETS:
+            # Collect PITs
+            pits_calib = []
+            for i in range(len(calib_idx)):
+                acct = str(accts_calib[i]).strip()
+                bv = base_v.get(acct, 0)
+                av = future_v.get(acct)
+                if bv <= 0 or av is None or not (bkt_lo <= bv < bkt_hi):
+                    continue
+                fan_prices = np.exp(y_levels_calib[i, :, h_idx])
+                pits_calib.append(float(np.mean(fan_prices <= av)))
+            
+            if len(pits_calib) > 50:
+                # Fit Isotonic Regression: mapping uniform grid to empirical CDF
+                sorted_pits = np.sort(pits_calib)
+                empirical_cdf = np.arange(1, len(sorted_pits) + 1) / len(sorted_pits)
+                ir = IsotonicRegression(out_of_bounds='clip')
+                # We fit: input=empirical CDF, target=sorted PITs to get the inverse transform
+                # Wait, calibrator G maps p -> p_calib.
+                # If PIT=0.9 occurs at nominal CDF=0.5, the model underpredicts.
+                # To fix, p_calib for nominal 0.5 should be 0.9.
+                # So we fit f(nominal_p) = empirical_PIT 
+                ir.fit(empirical_cdf, sorted_pits)
+                calib_models[(h, bkt_label)] = ir
+                print(f"  [Calib Fit] h={h} bkt={bkt_label}: fit {len(pits_calib)} samples")
+            
+    # Serialize the calibrator dict to disk for production inference
+    import pickle
+    calib_dir = f"/output/{jurisdiction}_{version_tag}"
+    os.makedirs(calib_dir, exist_ok=True)
+    calib_save_path = os.path.join(calib_dir, f"calibrators_{version_tag}_{jurisdiction}.pkl")
+    try:
+        with open(calib_save_path, "wb") as f:
+            pickle.dump(calib_models, f)
+        print(f"[{ts()}] 🏆 Saved {len(calib_models)} calibrators to {calib_save_path}")
+    except Exception as e:
+        print(f"[{ts()}] ⚠️ Failed to save calibrators: {e}")
+
+    # Apply calibrators to Test set
+    scenarios_count = y_levels_test.shape[1]
+    sorted_p = (np.arange(scenarios_count) + 0.5) / scenarios_count # Empirical p-values of sorted scenarios
+    
+    for h in range(1, MAX_HORIZON + 1):
+        h_idx = h - 1
+        eyr = origin + h
+        if eyr not in actual_vals:
+            continue
+            
+        for bkt_label, bkt_lo, bkt_hi in VALUE_BRACKETS:
+            if (h, bkt_label) not in calib_models:
+                continue
+                
+            calibrator = calib_models[(h, bkt_label)]
+            # Get remapped p-values
+            remapped_p = calibrator.predict(sorted_p)
+            # Clip strictly to prevent 0 or 1 edge anomalies mapping out of bounds
+            remapped_p = np.clip(remapped_p, 0.001, 0.999)
+            
+            for i in range(len(test_idx)):
+                acct = str(accts_test[i]).strip()
+                bv = base_v.get(acct, 0)
+                if bv <= 0 or not (bkt_lo <= bv < bkt_hi):
+                    continue
+                
+                # Fetch scenarios and sort
+                fan = y_levels_test[i, :, h_idx]
+                sort_idx = np.argsort(fan)
+                sorted_fan = fan[sort_idx]
+                
+                # Remap: the new value at sorted position `j` takes the value
+                # from the old distribution at quantile `remapped_p[j]`.
+                # We use linear interpolation on the sorted fan.
+                new_sorted_fan = np.interp(remapped_p, sorted_p, sorted_fan)
+                
+                # Unsort back to original scenario order to preserve rank coherence
+                reverse_sort_idx = np.empty_like(sort_idx)
+                reverse_sort_idx[sort_idx] = np.arange(scenarios_count)
+                
+                # Overwrite test set scenarios with calibrated ones
+                y_levels_test[i, :, h_idx] = new_sorted_fan[reverse_sort_idx]
+
+    # Replace the evaluation data with the CALIBRATED TEST SET
+    accts = accts_test
+    ya = ya_test
+    y_levels = y_levels_test
+    y_anchor = ya_test
     base_vals_arr = np.array([base_v.get(str(a).strip(), 0) for a in accts])
+    
     variant_raw_results[("v11", origin)] = {
         "accts": list(accts),
         "y_anchor": ya,
         "y_levels": y_levels,
         "base_val": base_vals_arr,
-        "deltas": deltas,  # [N, S, H] raw deltas for scenario diversity
+        "deltas": y_levels - ya[:, None, None], # Approximate deltas
     }
 
     # ─── 5. W&B Logging Metrics Engine ───
-    print(f"\n[{ts()}] ── Computing and Logging Metrics to W&B ──")
+    print(f"\n[{ts()}] ── Computing and Logging Metric to W&B (Calibrated OUT-OF-SAMPLE) ──")
     
     key = ("v11", origin)
     if key in variant_raw_results:
@@ -1537,17 +1661,26 @@ def main(
     bucket_name: str = "properlytic-raw-data",
     sample_size: int = 20_000,
     scenarios: int = 128,
-    origins: str = "2021,2022,2023,2024,2025",
+    origins: str = "2021,2022,2023",
     version_tag: str = "v11",
 ):
     origin_list = [int(o.strip()) for o in origins.split(",")]
-    print(f"\U0001f680 Launching parallel {version_tag} evaluation on Modal across {len(origin_list)} origins")
+    
+    # Grid search parameters
+    etas = [0.0, 0.1, 0.3]
+    steps_list = [20, 64]
+    taus = [1.0, 1.25]
+    
+    print(f"\U0001f680 Launching sweep {version_tag} on Modal across {len(origin_list)} origins and {len(etas)*len(steps_list)*len(taus)} hyperparams")
     print(f"   Jurisdiction: {jurisdiction}")
     print(f"   Origins: {origin_list}")
-    print(f"   Version tag: {version_tag}")
     
-    # Map across multiple origins concurrently — pass version_tag to each
-    params = [(jurisdiction, bucket_name, o, sample_size, scenarios, version_tag) for o in origin_list]
+    params = []
+    for origin in origin_list:
+        for _eta in etas:
+            for _steps in steps_list:
+                for _tau in taus:
+                    params.append((jurisdiction, bucket_name, origin, sample_size, scenarios, version_tag, _eta, _steps, _tau))
     
     results = list(evaluate_checkpoints.starmap(params))
 

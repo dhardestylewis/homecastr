@@ -1,0 +1,179 @@
+{
+  "name": "eval_v11_acs_nationwide_2024",
+  "group": "eval_v11_acs_nationwide",
+  "state": "finished",
+  "tags": [
+    "acs_nationwide",
+    "eval",
+    "v11"
+  ],
+  "config": {
+    "origin": 2024,
+    "scenarios": 128,
+    "sample_size": 20000
+  },
+  "summary_metrics": {
+    "eval/cfg/DIFF_STEPS_TRAIN/o2024": 128,
+    "eval/cfg/K_ACTIVE/o2024": 4,
+    "eval/cfg/K_TOKENS/o2024": 8,
+    "eval/parcel_corr/o2024_h1": 0.07185160785646687,
+    "eval/parcel_corr/o2024_h3": 0.29483901840905363,
+    "eval/parcel_corr/o2024_h5": 0.4076596799096785,
+    "eval/parcel_corr_std/o2024_h1": 0.09090480325767354,
+    "eval/parcel_corr_std/o2024_h3": 0.09237004137477552,
+    "eval/parcel_corr_std/o2024_h5": 0.09628800681041665,
+    "eval/phi_k/o2024_k0": 0.696041464805603,
+    "eval/phi_k/o2024_k1": 0.6966464519500732,
+    "eval/phi_k/o2024_k2": 0.6942660212516785,
+    "eval/phi_k/o2024_k3": 0.6980116963386536,
+    "eval/phi_k/o2024_k4": 0.6962736248970032,
+    "eval/phi_k/o2024_k5": 0.6979058980941772,
+    "eval/phi_k/o2024_k6": 0.6963014602661133,
+    "eval/phi_k/o2024_k7": 0.6961988210678101,
+    "eval/scenario_cross_corr/o2024_h1": 0.08171056956433383,
+    "eval/scenario_cross_corr/o2024_h2": 0.17680541489628673,
+    "eval/scenario_cross_corr/o2024_h3": 0.2356649589764906,
+    "eval/scenario_cross_corr/o2024_h4": 0.25010344664496437,
+    "eval/scenario_cross_corr/o2024_h5": 0.232854991466518,
+    "eval/scenario_std/o2024_h1": 0.08662132918834686,
+    "eval/scenario_std/o2024_h2": 0.09703407436609268,
+    "eval/scenario_std/o2024_h3": 0.09977484494447708,
+    "eval/scenario_std/o2024_h4": 0.09587091952562332,
+    "eval/scenario_std/o2024_h5": 0.0928843393921852,
+    "eval/scenario_std_std/o2024_h1": 0.019931456074118618,
+    "eval/scenario_std_std/o2024_h2": 0.02033088728785515,
+    "eval/scenario_std_std/o2024_h3": 0.018926125019788746,
+    "eval/scenario_std_std/o2024_h4": 0.017824869602918625,
+    "eval/scenario_std_std/o2024_h5": 0.016451971605420113
+  },
+  "history_steps": [
+    {
+      "_timestamp": 1772472363.4108813,
+      "_step": 0,
+      "_runtime": 75.402378429,
+      "eval/parcel_corr/o2024_h1": 0.07185160785646687,
+      "eval/parcel_corr_std/o2024_h1": 0.09090480325767354
+    },
+    {
+      "_timestamp": 1772472363.4172697,
+      "eval/parcel_corr_std/o2024_h3": 0.09237004137477552,
+      "_step": 1,
+      "eval/parcel_corr/o2024_h3": 0.29483901840905363,
+      "_runtime": 75.408827423
+    },
+    {
+      "_runtime": 75.413132665,
+      "_timestamp": 1772472363.421918,
+      "eval/parcel_corr_std/o2024_h5": 0.09628800681041663,
+      "_step": 2,
+      "eval/parcel_corr/o2024_h5": 0.4076596799096785
+    },
+    {
+      "_step": 3,
+      "eval/scenario_std_std/o2024_h1": 0.019931456074118614,
+      "_runtime": 75.435788997,
+      "eval/scenario_std/o2024_h1": 0.08662132918834686,
+      "eval/scenario_cross_corr/o2024_h1": 0.08171056956433383,
+      "_timestamp": 1772472363.444483
+    },
+    {
+      "_step": 4,
+      "_runtime": 75.459075765,
+      "eval/scenario_std/o2024_h2": 0.09703407436609268,
+      "eval/scenario_cross_corr/o2024_h2": 0.17680541489628673,
+      "eval/scenario_std_std/o2024_h2": 0.02033088728785515,
+      "_timestamp": 1772472363.4679334
+    },
+    {
+      "_step": 5,
+      "eval/scenario_cross_corr/o2024_h3": 0.2356649589764906,
+      "eval/scenario_std_std/o2024_h3": 0.018926125019788742,
+      "_runtime": 75.478918464,
+      "eval/scenario_std/o2024_h3": 0.09977484494447708,
+      "_timestamp": 1772472363.487696
+    },
+    {
+      "eval/scenario_cross_corr/o2024_h4": 0.25010344664496437,
+      "_runtime": 75.498210508,
+      "eval/scenario_std/o2024_h4": 0.09587091952562332,
+      "_timestamp": 1772472363.5070612,
+      "_step": 6,
+      "eval/scenario_std_std/o2024_h4": 0.017824869602918625
+    },
+    {
+      "eval/scenario_cross_corr/o2024_h5": 0.232854991466518,
+      "_step": 7,
+      "eval/scenario_std/o2024_h5": 0.09288433939218521,
+      "_runtime": 75.519090124,
+      "eval/scenario_std_std/o2024_h5": 0.016451971605420113,
+      "_timestamp": 1772472363.5261223
+    },
+    {
+      "eval/phi_k/o2024_k0": 0.696041464805603,
+      "_step": 8,
+      "_runtime": 75.520136221,
+      "_timestamp": 1772472363.5292008
+    },
+    {
+      "_timestamp": 1772472363.529518,
+      "_step": 9,
+      "_runtime": 75.520305371,
+      "eval/phi_k/o2024_k1": 0.6966464519500732
+    },
+    {
+      "_step": 10,
+      "_runtime": 75.520419939,
+      "eval/phi_k/o2024_k2": 0.6942660212516785,
+      "_timestamp": 1772472363.5296748
+    },
+    {
+      "eval/phi_k/o2024_k3": 0.6980116963386536,
+      "_timestamp": 1772472363.5297909,
+      "_step": 11,
+      "_runtime": 75.520587222
+    },
+    {
+      "_step": 12,
+      "_runtime": 75.52067141,
+      "eval/phi_k/o2024_k4": 0.6962736248970032,
+      "_timestamp": 1772472363.5299318
+    },
+    {
+      "_timestamp": 1772472363.5300453,
+      "eval/phi_k/o2024_k5": 0.6979058980941772,
+      "_step": 13,
+      "_runtime": 75.520798992
+    },
+    {
+      "eval/phi_k/o2024_k6": 0.6963014602661133,
+      "_step": 14,
+      "_runtime": 75.520918854,
+      "_timestamp": 1772472363.5301695
+    },
+    {
+      "_timestamp": 1772472363.5302994,
+      "_step": 15,
+      "_runtime": 75.521095664,
+      "eval/phi_k/o2024_k7": 0.6961988210678101
+    },
+    {
+      "_step": 16,
+      "eval/cfg/K_TOKENS/o2024": 8,
+      "_runtime": 75.533963429,
+      "_timestamp": 1772472363.5427108
+    },
+    {
+      "_step": 17,
+      "_runtime": 75.534148633,
+      "eval/cfg/K_ACTIVE/o2024": 4,
+      "_timestamp": 1772472363.5432882
+    },
+    {
+      "_runtime": 75.534312275,
+      "eval/cfg/DIFF_STEPS_TRAIN/o2024": 128,
+      "_timestamp": 1772472363.5434985,
+      "_step": 18
+    }
+  ],
+  "url": "https://wandb.ai/dhardestylewis-columbia-university/homecastr/runs/7qfjzhkf"
+}
