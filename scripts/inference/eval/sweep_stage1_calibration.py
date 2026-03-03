@@ -58,7 +58,7 @@ def evaluate_checkpoints(
     diff_steps: int = 20,
     tau: float = 1.0,
 ):
-    import json, time, tempfile, glob, pickle
+    import os, json, time, tempfile, glob, pickle
     import numpy as np
     import polars as pl
     import torch
