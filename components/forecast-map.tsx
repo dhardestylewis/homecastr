@@ -550,8 +550,8 @@ export function ForecastMap({
                 map.addSource(id, {
                     type: "vector",
                     tiles: [
-                        `${window.location.origin}/api/forecast-tiles/{z}/{x}/{y}?originYear=${originYear}&horizonM=${horizonM}&v=2`,
-                        // v=2 cache-buster to force fresh tiles after SQL function updates
+                        `${window.location.origin}/api/forecast-tiles/{z}/{x}/{y}?originYear=${originYear}&horizonM=${horizonM}&v=3`,
+                        // v=3 cache-buster to force fresh tiles after nationwide geometry upload
                     ],
                     minzoom: 0,
                     maxzoom: 18,
