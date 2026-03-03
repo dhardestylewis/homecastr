@@ -1608,8 +1608,10 @@ def train_diffusion_v11(
     print(f"[{ts()}] train_diffusion_v11 origin={origin} shards={len(shard_paths)} epochs={epochs} K={K_TOKENS} k={K_ACTIVE}")
     print(f"[{ts()}] initial phi_k = {[f'{p:.3f}' for p in phi_init]}  sigma_u={sigma_init:.3f}")
 
-    # IMPORTANT: raise the history scale floor to prevent tiny scales from producing huge z-scores
-    y_floor = max(float(SCALE_FLOOR_Y), 0.25)
+    # v11.2: relaxed floor — 0.25 was too aggressive and crushed parcel-level
+    # conditioning signal (ρ ≈ 0).  assert_y_scaler_contract + SAMPLER_Z_CLIP
+    # provide sufficient safeguards against tiny scales.
+    y_floor = max(float(SCALE_FLOOR_Y), 0.10)
 
     y_scaler, n_scaler, t_scaler = fit_scalers_from_shards_v102_robust_y(
         shard_paths=shard_paths,
@@ -1761,13 +1763,24 @@ def train_diffusion_v11(
                         u_i = compute_shared_driver(alpha, Z_k)  # [B, H]
                         u_i_scaled = sigma_u * u_i
 
-                        # Structured noise: ε̃ = sigma_u * u_i + ε_idio
-                        noise = u_i_scaled + eps_idio
+                        # Structured noise: ε̃ = sigma_u * u_i * h_scale + ε_idio
+                        # v11.2: apply sqrt(1..H) horizon scaling to match the sampler
+                        # (sample_ddim_v11 line 2084).  Without this, the model trains
+                        # on flat noise but samples with horizon-scaled noise.
+                        h_scale = torch.sqrt(torch.arange(1, H + 1, device=device, dtype=torch.float32)).unsqueeze(0)  # [1, H]
+                        noise = u_i_scaled * h_scale + eps_idio
 
                         t_idx = torch.randint(0, int(DIFF_STEPS_TRAIN), (B,), device=device)
                         xt = sched.q(x0, t_idx, noise)
                         noise_hat = model(xt, t_idx.float(), hy.float(), xn.float(), xc, rid, u_i_scaled)
-                        loss = ((noise_hat - noise) ** 2 * m).sum() / (m.sum() + 1e-8)
+                        # Per-horizon loss normalization:
+                        # Each horizon contributes equally regardless of mask sparsity.
+                        # Without this, h=1 (always valid) dominates and h≥2 collapse.
+                        _per_h_sq = (noise_hat - noise) ** 2 * m  # [B, H]
+                        _per_h_count = m.sum(dim=0).clamp(min=1.0)  # [H]
+                        _per_h_mse = _per_h_sq.sum(dim=0) / _per_h_count  # [H]
+                        _n_active_h = (m.sum(dim=0) > 0).sum().clamp(min=1)
+                        loss = _per_h_mse.sum() / _n_active_h
 
                     opt.zero_grad(set_to_none=True)
                     loss.backward()

@@ -34,6 +34,7 @@ training_image = (
         "wandb>=0.16",
         "google-cloud-storage>=2.10",
         "scikit-learn>=1.3",
+        "huggingface_hub>=0.20",
     )
 )
 
@@ -46,7 +47,7 @@ wandb_secret = modal.Secret.from_name("wandb-creds", required_keys=["WANDB_API_K
     image=training_image,
     gpu="A100",
     timeout=7200,  # 2 hours max
-    secrets=[gcs_secret, wandb_secret],
+    secrets=[gcs_secret, wandb_secret, modal.Secret.from_name("hf-token")],
     volumes={"/output": modal.Volume.from_name("properlytic-checkpoints", create_if_missing=True)},
 )
 def train_worldmodel(
@@ -509,14 +510,87 @@ def train_worldmodel(
 
     # ─── Upload checkpoint to GCS ───
     print(f"[{ts()}] Uploading checkpoints to GCS...")
+    import time as _time
+    _version_stamp = _time.strftime("%Y%m%d")
+    
     for fname in os.listdir(out_dir):
         if fname.endswith(".pt") or fname.endswith(".json"):
             local_path = os.path.join(out_dir, fname)
+            size_mb = os.path.getsize(local_path) / 1e6
+            
+            # 1. Write to canonical (latest) path — backward compat
             gcs_path = f"checkpoints/{jurisdiction}/{fname}"
             blob = bucket.blob(gcs_path)
             blob.upload_from_filename(local_path)
-            size_mb = os.path.getsize(local_path) / 1e6
             print(f"  Uploaded {fname} ({size_mb:.1f} MB) → gs://{bucket_name}/{gcs_path}")
+            
+            # 2. Write to versioned path — never overwritten
+            gcs_versioned = f"checkpoints/{jurisdiction}/v{_version_stamp}/{fname}"
+            blob_v = bucket.blob(gcs_versioned)
+            blob_v.upload_from_filename(local_path)
+            print(f"  Versioned → gs://{bucket_name}/{gcs_versioned}")
+    
+    # 3. Log checkpoint as WandB Artifact for full lineage tracking
+    try:
+        import wandb
+        _wandb_key = os.environ.get("WANDB_API_KEY", "")
+        if _wandb_key:
+            wandb.login(key=_wandb_key)
+            _art_run = wandb.init(
+                project="homecastr",
+                entity="dhardestylewis-columbia-university",
+                name=f"ckpt-{jurisdiction}-o{origin}-v{_version_stamp}",
+                job_type="checkpoint",
+                tags=[jurisdiction, f"origin_{origin}", f"v{_version_stamp}"],
+            )
+            art = wandb.Artifact(
+                name=f"ckpt-{jurisdiction}-o{origin}",
+                type="model",
+                metadata={
+                    "jurisdiction": jurisdiction,
+                    "origin": origin,
+                    "epochs": epochs,
+                    "sample_size": sample_size,
+                    "version_stamp": _version_stamp,
+                    "gcs_path": f"gs://{bucket_name}/checkpoints/{jurisdiction}/v{_version_stamp}/",
+                },
+            )
+            for fname in os.listdir(out_dir):
+                if fname.endswith(".pt"):
+                    art.add_file(os.path.join(out_dir, fname))
+            _art_run.log_artifact(art)
+            _art_run.finish()
+            print(f"  📦 WandB Artifact: ckpt-{jurisdiction}-o{origin}:v{_version_stamp}")
+    except Exception as e:
+        print(f"  ⚠️ WandB artifact logging failed (non-fatal): {e}")
+
+    # 4. Push to HuggingFace Hub — persistent model registry
+    try:
+        from huggingface_hub import HfApi
+        _hf_token = os.environ.get("HF_TOKEN", "")
+        if _hf_token:
+            api = HfApi(token=_hf_token)
+            repo_id = "dhardestylewis/homecastr-worldmodel"
+            # Create repo if it doesn't exist
+            try:
+                api.create_repo(repo_id, repo_type="model", exist_ok=True, private=True)
+            except Exception:
+                pass  # already exists
+            
+            for fname in os.listdir(out_dir):
+                if fname.endswith(".pt"):
+                    local_path = os.path.join(out_dir, fname)
+                    hf_path = f"{jurisdiction}/v{_version_stamp}/{fname}"
+                    api.upload_file(
+                        path_or_fileobj=local_path,
+                        path_in_repo=hf_path,
+                        repo_id=repo_id,
+                        repo_type="model",
+                        commit_message=f"Checkpoint {jurisdiction} origin={origin} v{_version_stamp}",
+                    )
+                    print(f"  🤗 HF Hub: {repo_id}/{hf_path}")
+    except Exception as e:
+        print(f"  ⚠️ HF Hub upload failed (non-fatal): {e}")
 
     # Actually persist checkpoints to Modal volume
     vol_ckpt_dir = f"/output/{jurisdiction}_v11"
@@ -526,6 +600,9 @@ def train_worldmodel(
         if fname.endswith(".pt") or fname.endswith(".json"):
             src = os.path.join(out_dir, fname)
             dst = os.path.join(vol_ckpt_dir, fname)
+            if os.path.abspath(src) == os.path.abspath(dst):
+                print(f"  Volume: {fname} already at {vol_ckpt_dir} (skipped)")
+                continue
             shutil.copy2(src, dst)
             print(f"  Volume: {fname} → {vol_ckpt_dir}")
     print(f"[{ts()}] Checkpoints saved to Modal volume at {vol_ckpt_dir}/")
@@ -536,6 +613,7 @@ def train_worldmodel(
         "epochs": epochs,
         "output_dir": out_dir,
         "files": os.listdir(out_dir),
+        "version": _version_stamp,
     }
 
 

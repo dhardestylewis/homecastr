@@ -474,6 +474,7 @@ def _build_forecast_rows_from_inf_out(
       - acct
       - y_levels (N,S,H)
       - price_levels (N,S,H)
+      - anchor_prices (N,)   [optional: if present, writes h=0 anchor row]
 
     Writes schema-compatible parcel forecast rows:
       PK = (acct, origin_year, horizon_m, series_kind, variant_id)
@@ -513,8 +514,42 @@ def _build_forecast_rows_from_inf_out(
     is_backtest = (series_kind == "backtest")
     now_iso = datetime.utcnow().isoformat()
 
+    # ── Anchor enforcement: if anchor_prices provided, write h=0 row ──
+    _anchor_arr = inf_out.get("anchor_prices", None)
+
     for i in range(N):
         acct = str(acct_arr[i])
+
+        # h=0 anchor row: value = history anchor BY CONSTRUCTION
+        if _anchor_arr is not None:
+            anchor_val = float(_anchor_arr[i])
+            if np.isfinite(anchor_val) and anchor_val > 0:
+                h0_row = {
+                    "acct": acct,
+                    "origin_year": int(origin_year),
+                    "horizon_m": 0,
+                    "forecast_year": int(origin_year),
+                    "value": anchor_val,
+                    "p10": anchor_val,
+                    "p25": anchor_val,
+                    "p50": anchor_val,
+                    "p75": anchor_val,
+                    "p90": anchor_val,
+                    "run_id": run_id,
+                    "backtest_id": backtest_id,
+                    "variant_id": variant_id,
+                    "model_version": MODEL_VERSION,
+                    "as_of_date": as_of_date.isoformat(),
+                    "n_scenarios": int(S_local),
+                    "is_backtest": bool(is_backtest),
+                    "series_kind": series_kind,
+                    "inserted_at": now_iso,
+                    "updated_at": now_iso,
+                }
+                if PARCEL_FORECAST_HAS_N_COL:
+                    h0_row["n"] = int(S_local)
+                rows.append(h0_row)
+
         for h_idx in range(H_local):
             horizon_k = int(h_idx + 1)
             horizon_m = int(12 * horizon_k)
@@ -1296,9 +1331,12 @@ def _sample_scenarios_for_inference_context(ctx, H: int, S: int, origin: int, pr
     _H = int(H)
     _S = int(S)
 
-    # Build scheduler
-    _diff_steps = int(globals().get("DIFF_STEPS_SAMPLE", 20))
-    _sched = Scheduler(_diff_steps, _device)
+    # Build scheduler — must use the TRAINING ladder length (128 steps).
+    # The DDIM sampler selects a subset of DIFF_STEPS_SAMPLE timesteps
+    # from this ladder.  Using DIFF_STEPS_SAMPLE here creates a different
+    # αbar sequence than training, breaking the noise-level contract.
+    _diff_steps_train = int(globals().get("DIFF_STEPS_TRAIN", 128))
+    _sched = Scheduler(_diff_steps_train, _device)
 
     # v11: Sample K token paths once (shared across all parcels for coherence)
     _K = int(globals().get("K_TOKENS", 8))
@@ -1331,17 +1369,35 @@ def _sample_scenarios_for_inference_context(ctx, H: int, S: int, origin: int, pr
         )  # (end-start, S, H) numpy
 
         # Convert deltas to y-levels and then price levels
+        # NB: deltas are INCREMENTAL per-year log-growth (training target is y_curr - y_prev,
+        #     see worldmodel.py:762).  Must cumsum to reconstruct absolute log-levels.
+        #     Backtest code at worldmodel.py:2152 does the same.
         _y_anchor_batch = ctx["y_anchor"][start:end]                 # (B,)
-        y_levels = _y_anchor_batch[:, None, None] + deltas            # (B, S, H)
+        y_levels = _y_anchor_batch[:, None, None] + np.cumsum(deltas, axis=2)  # (B, S, H)
         price_levels = np.expm1(y_levels)                             # inverse log1p
+
+        # ── Anchor validation: flag implausible forecast-vs-anchor ratios ──
+        _anchor_prices = np.expm1(_y_anchor_batch)                    # (B,)
+        _median_fcst = np.median(price_levels, axis=1)                # (B, H)
+        _safe_anchor = np.maximum(_anchor_prices, 1.0)[:, None]       # (B, 1)
+        _growth_ratio = _median_fcst / _safe_anchor                   # (B, H)
+        _absurd = (_growth_ratio > 10.0) | (_growth_ratio < 0.01)     # >10× or <1%
+        _n_absurd = int(_absurd.any(axis=1).sum())
+        if _n_absurd > 0:
+            print(f"[{_ts()}] ⚠️  ANCHOR VALIDATION: {_n_absurd}/{end-start} parcels have "
+                  f"implausible growth (>10× or <1% of anchor value)")
 
         all_y.append(y_levels)
         all_price.append(price_levels)
+
+    # Pass anchor through so downstream can enforce anchor identity
+    _anchor_prices = np.expm1(ctx["y_anchor"])  # (N,) dollar values
 
     return {
         "acct": ctx["acct"],
         "y_levels": np.concatenate(all_y, axis=0),
         "price_levels": np.concatenate(all_price, axis=0),
+        "anchor_prices": _anchor_prices,  # (N,) for anchor-identity enforcement
     }
 
 
@@ -1927,7 +1983,49 @@ def _run_one_origin(
             continue
 
         # ---------------------------------------------------------------------
-        # 4) Build parcel forecast rows (local)
+        # 4) FAIL-FAST GATES: validate inference output before DB write
+        # ---------------------------------------------------------------------
+        _gate_passed = True
+
+        # Gate 1: finite fraction
+        _pl = inf_out["price_levels"]
+        _fin_frac = float(np.isfinite(_pl).mean())
+        if _fin_frac < 0.95:
+            print(f"[{_ts()}] GATE FAIL (finite): only {_fin_frac:.1%} finite values in price_levels")
+            _gate_passed = False
+
+        # Gate 2: anchor-to-h1-forecast ratio sanity
+        if "anchor_prices" in inf_out:
+            _anch = inf_out["anchor_prices"]
+            _h1_med = np.median(_pl[:, :, 0], axis=1)  # median across scenarios for h=1
+            _safe_anch = np.maximum(_anch, 1.0)
+            _ratio = _h1_med / _safe_anch
+            _ratio_p99 = float(np.percentile(_ratio[np.isfinite(_ratio)], 99))
+            _ratio_p01 = float(np.percentile(_ratio[np.isfinite(_ratio)], 1))
+            _n_extreme = int(np.sum((_ratio > 10.0) | (_ratio < 0.01)))
+            if _n_extreme > 0.10 * len(_ratio):
+                print(f"[{_ts()}] GATE FAIL (anchor ratio): {_n_extreme}/{len(_ratio)} parcels "
+                      f"have h1/anchor ratio outside [0.01, 10]. "
+                      f"p01={_ratio_p01:.4f} p99={_ratio_p99:.4f}")
+                _gate_passed = False
+            else:
+                print(f"[{_ts()}] GATE OK (anchor ratio): p01={_ratio_p01:.4f} p99={_ratio_p99:.4f} "
+                      f"extreme={_n_extreme}/{len(_ratio)}")
+
+        # Gate 3: delta magnitude (in log-space)
+        _yl = inf_out["y_levels"]
+        _delta_abs_p99 = float(np.percentile(np.abs(_yl - _yl[:, :, :1]), 99))
+        if _delta_abs_p99 > 2.0:  # > 2.0 in log1p-space ≈ >600% growth, very suspicious
+            print(f"[{_ts()}] GATE WARN (delta magnitude): p99(|delta|) = {_delta_abs_p99:.3f} "
+                  f"(> 2.0 threshold in log-space)")
+            # Warning only — do not hard fail on this, but log it prominently
+
+        if not _gate_passed:
+            print(f"[{_ts()}] GATE: SKIPPING DB write for chunk {chunk_idx} (origin={origin_year})")
+            continue
+
+        # ---------------------------------------------------------------------
+        # 5) Build parcel forecast rows (local)
         # ---------------------------------------------------------------------
         forecast_chunk_df = _build_forecast_rows_from_inf_out(
             inf_out=inf_out,
