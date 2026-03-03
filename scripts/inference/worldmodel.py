@@ -224,6 +224,11 @@ SAMPLER_NOISE_CLIP = 10.0    # clamp noise_hat each step
 SAMPLER_X0_CLIP = 50.0       # clamp x0_pred each step
 SAMPLER_X_CLIP = 50.0        # clamp x each step
 SAMPLER_REPORT_BAD_STEP = False    # suppresses per-step GPU→CPU syncs (.item() calls)
+# v11.2: DDIM stochasticity parameter η (Song et al. 2020, Eq. 12)
+# η=0.0 = deterministic DDIM (original, near-zero VarRatio)
+# η=1.0 = stochastic DDPM (injects noise at every reverse step)
+# This is the primary lever for opening up the scenario fan.
+SAMPLER_ETA = 1.0
 
 # Scaled shard dtype
 SCALED_SHARDS_FLOAT16 = False  # keep float32 until stability is proven
@@ -1773,10 +1778,21 @@ def train_diffusion_v11(
                         t_idx = torch.randint(0, int(DIFF_STEPS_TRAIN), (B,), device=device)
                         xt = sched.q(x0, t_idx, noise)
                         noise_hat = model(xt, t_idx.float(), hy.float(), xn.float(), xc, rid, u_i_scaled)
-                        # Per-horizon loss normalization:
-                        # Each horizon contributes equally regardless of mask sparsity.
-                        # Without this, h=1 (always valid) dominates and h≥2 collapse.
-                        _per_h_sq = (noise_hat - noise) ** 2 * m  # [B, H]
+
+                        # v11.2: min-SNR weighted MSE (Hang et al. 2023)
+                        # Flat MSE lets low-noise timesteps dominate → model learns
+                        # conditional mean but not distribution shape.  min-SNR(γ=5)
+                        # caps per-timestep weight so high-noise steps (where the
+                        # model must learn the distribution) contribute meaningfully.
+                        # This is critical for stochastic sampling (η>0) to produce
+                        # calibrated prediction intervals.
+                        _snr = sched.abar[t_idx] / (1.0 - sched.abar[t_idx]).clamp(min=1e-8)  # [B]
+                        _min_snr_gamma = 5.0
+                        _snr_weight = torch.minimum(_snr, torch.full_like(_snr, _min_snr_gamma)) / _snr.clamp(min=1e-8)  # [B]
+                        _snr_weight = _snr_weight.unsqueeze(1)  # [B, 1] for broadcasting
+
+                        # Per-horizon loss normalization with SNR weighting:
+                        _per_h_sq = (noise_hat - noise) ** 2 * m * _snr_weight  # [B, H]
                         _per_h_count = m.sum(dim=0).clamp(min=1.0)  # [H]
                         _per_h_mse = _per_h_sq.sum(dim=0) / _per_h_count  # [H]
                         _n_active_h = (m.sum(dim=0) > 0).sum().clamp(min=1)
@@ -2129,7 +2145,21 @@ def sample_ddim_v11(
             x0_pred = x0_pred.clamp(-float(SAMPLER_X0_CLIP), float(SAMPLER_X0_CLIP))
 
             if (i_step + 1) < len(idx):
-                x = torch.sqrt(abar_prev).clamp(min=0.0) * x0_pred + torch.sqrt(1.0 - abar_prev).clamp(min=0.0) * noise_hat
+                # v11.2: Stochastic DDIM (Song et al. 2020 Eq. 12)
+                # η=0 → deterministic DDIM, η=1 → DDPM
+                _eta = float(SAMPLER_ETA)
+                if _eta > 0.0:
+                    # Compute σ_t = η * √((1-ā_{t-1})/(1-ā_t)) * √(1 - ā_t/ā_{t-1})
+                    _sigma_sq = _eta ** 2 * ((1.0 - abar_prev) / (1.0 - abar).clamp(min=1e-8)) * (1.0 - abar / abar_prev.clamp(min=1e-8))
+                    _sigma = torch.sqrt(_sigma_sq.clamp(min=0.0))
+                    # Direction coefficient shrinks to maintain correct marginal
+                    _dir_coeff = torch.sqrt((1.0 - abar_prev - _sigma_sq).clamp(min=0.0))
+                    # Stochastic reverse step
+                    _eps = torch.randn_like(x)
+                    x = torch.sqrt(abar_prev).clamp(min=0.0) * x0_pred + _dir_coeff * noise_hat + _sigma * _eps
+                else:
+                    # Original deterministic DDIM
+                    x = torch.sqrt(abar_prev).clamp(min=0.0) * x0_pred + torch.sqrt(1.0 - abar_prev).clamp(min=0.0) * noise_hat
             else:
                 x = x0_pred
 
