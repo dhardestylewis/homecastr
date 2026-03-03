@@ -22,7 +22,7 @@ const TOOLTIP_HEIGHT = 620
 const GEO_LEVELS = [
     { name: "zip3", minzoom: 0, maxzoom: 4.99, label: "ZIP3" },
     { name: "zcta", minzoom: 5, maxzoom: 7.99, label: "ZIP Code" },
-    { name: "tract", minzoom: 8, maxzoom: 11.99, label: "Tract" },
+    { name: "tract", minzoom: 8, maxzoom: 22, label: "Tract" },  // Extends to z22 as fallback underlay
     { name: "tabblock", minzoom: 12, maxzoom: 22, label: "Block" },
     { name: "parcel", minzoom: 17, maxzoom: 22, label: "Parcel" },
 ] as const
@@ -477,7 +477,7 @@ export function ForecastMap({
     useEffect(() => {
         if (!isLoaded || !mapRef.current) return
         const map = mapRef.current
-        const _v = "5" // bump cache buster to force URL reload on dev/prod for dual-origins
+        const _v = "6" // bump cache buster to force URL reload — zip3 geometry fix
 
         const updateSource = (id: string) => {
             const src = map.getSource(id) as maplibregl.VectorTileSource
@@ -567,6 +567,7 @@ export function ForecastMap({
             zoom: initialZoom,
             maxZoom: 18,
             minZoom: 2,
+            maxTileCacheSize: 500, // Default is ~300, increase to avoid stale tiles with A/B dual sources
         })
 
         map.on("load", () => {
@@ -656,7 +657,11 @@ export function ForecastMap({
         // Suppress MapLibre tile loading error events (e.g. transient 500s from Supabase)
         map.on("error", (e: any) => {
             const rawMsg = e?.error?.message || e?.message || (typeof e === 'string' ? e : "Unknown MapLibre error")
-            if (typeof rawMsg === "string" && (rawMsg.includes("status") || rawMsg.includes("AJAXError"))) {
+            if (typeof rawMsg === "string" && (
+                rawMsg.includes("status") ||
+                rawMsg.includes("AJAXError") ||
+                rawMsg.includes("Cannot read properties of undefined")
+            )) {
                 // Silently ignore tile fetch errors — the retry + empty tile fallback handles these
                 return
             }
@@ -1355,12 +1360,13 @@ export function ForecastMap({
         const currentSuffix = (map as any)._activeSuffix || "a"
         const nextSuffix = currentSuffix === "a" ? "b" : "a"
         const nextSource = `forecast-${nextSuffix}`
+        const currentSource = `forecast-${currentSuffix}`
 
         // Update NEXT source tiles
         const source = map.getSource(nextSource)
         if (source && source.type === "vector") {
             ; (source as any).setTiles([
-                `${window.location.origin}/api/forecast-tiles/{z}/{x}/{y}?originYear=${originYear}&horizonM=${horizonM}&v=2`,
+                `${window.location.origin}/api/forecast-tiles/{z}/{x}/{y}?originYear=${originYear}&horizonM=${horizonM}&v=6`,
             ])
         }
 
@@ -1401,6 +1407,12 @@ export function ForecastMap({
             }
 
             ; (map as any)._activeSuffix = nextSuffix
+
+            // Clear the old source's tile cache to free memory
+            const oldSource = map.getSource(currentSource)
+            if (oldSource && typeof (oldSource as any).clearTiles === "function") {
+                (oldSource as any).clearTiles()
+            }
         }
 
         const onSourceData = (e: any) => {
