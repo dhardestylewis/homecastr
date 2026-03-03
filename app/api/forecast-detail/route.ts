@@ -47,14 +47,15 @@ export async function GET(request: Request) {
     const supabase = getSupabaseAdmin()
 
     try {
-        // --- 1. Fetch forecast data for both 2024 (ACS) and 2025 (HCAD) available years ---
+        // --- 1. Fetch forecast data for the requested origin year ---
+        const originYear = parseInt(searchParams.get("originYear") || "2025")
+
         const { data, error } = await supabase
             .schema("forecast_20260220_7f31c6e4" as any)
             .from(meta.table)
             .select("horizon_m, p10, p25, p50, p75, p90, origin_year")
             .eq(meta.key, id)
-            .in("origin_year", [2024, 2025])
-            .order("origin_year", { ascending: true })
+            .eq("origin_year", originYear)
             .order("horizon_m", { ascending: true })
 
         if (error) {

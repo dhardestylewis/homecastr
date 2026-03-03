@@ -3,13 +3,19 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin"
 
 const TILE_HEADERS = {
     "Content-Type": "application/vnd.mapbox-vector-tile",
-    "Cache-Control": "public, max-age=3600",
+    "Cache-Control": "public, max-age=300",  // 5 min cache for successful tiles
     "Access-Control-Allow-Origin": "*",
 } as const
 
 /** Return an empty 204 so MapLibre silently skips this tile instead of throwing AJAXError */
 function emptyTile() {
-    return new NextResponse(null, { status: 204, headers: TILE_HEADERS })
+    return new NextResponse(null, {
+        status: 204,
+        headers: {
+            ...TILE_HEADERS,
+            "Cache-Control": "no-store",  // Don't cache failures — retry on next pan
+        },
+    })
 }
 
 /**
@@ -63,8 +69,8 @@ export async function GET(
         p_parcel_limit: 3500,
     }
 
-    // Retry once on transient errors before returning empty tile
-    for (let attempt = 0; attempt < 2; attempt++) {
+    // Retry up to 3 times with exponential backoff on transient errors
+    for (let attempt = 0; attempt < 3; attempt++) {
         try {
             const supabase = getSupabaseAdmin()
 
@@ -73,16 +79,15 @@ export async function GET(
                 .rpc("mvt_choropleth_forecast", rpcParams)
 
             if (error) {
-                console.error(`[FORECAST-TILE] RPC error (attempt ${attempt + 1}):`, {
+                console.error(`[FORECAST-TILE] RPC error (attempt ${attempt + 1}/3):`, {
                     message: error.message,
                     code: error.code,
                     tile: `${z}/${x}/${y}`,
                 })
-                if (attempt === 0) {
-                    await new Promise((r) => setTimeout(r, 500))
+                if (attempt < 2) {
+                    await new Promise((r) => setTimeout(r, 200 * Math.pow(3, attempt)))
                     continue
                 }
-                // Final attempt failed — return empty tile instead of 500
                 return emptyTile()
             }
 
@@ -107,12 +112,11 @@ export async function GET(
                 headers: TILE_HEADERS,
             })
         } catch (e: any) {
-            console.error(`[FORECAST-TILE] Exception (attempt ${attempt + 1}):`, e.message, `tile=${z}/${x}/${y}`)
-            if (attempt === 0) {
-                await new Promise((r) => setTimeout(r, 500))
+            console.error(`[FORECAST-TILE] Exception (attempt ${attempt + 1}/3):`, e.message, `tile=${z}/${x}/${y}`)
+            if (attempt < 2) {
+                await new Promise((r) => setTimeout(r, 200 * Math.pow(3, attempt)))
                 continue
             }
-            // Final attempt — empty tile, not 500
             return emptyTile()
         }
     }

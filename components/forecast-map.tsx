@@ -567,7 +567,7 @@ export function ForecastMap({
             zoom: initialZoom,
             maxZoom: 18,
             minZoom: 2,
-            maxTileCacheSize: 500, // Default is ~300, increase to avoid stale tiles with A/B dual sources
+            maxTileCacheSize: 30, // Keep very low — forces MapLibre to prioritize visible tiles over off-viewport prefetch
         })
 
         map.on("load", () => {
