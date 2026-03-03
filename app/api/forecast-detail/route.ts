@@ -45,29 +45,14 @@ export async function GET(request: Request) {
     const supabase = getSupabaseAdmin()
 
     try {
-        // --- 1. Dynamically determine the latest origin year ---
-        // Rather than hardcoding 2024 for ACS and 2025 for HCAD, we look up the
-        // maximum origin_year actually available for this specific geometry ID.
-        let originYear = parseInt(searchParams.get("originYear") || "0")
-        if (!originYear) {
-            const { data: yearData } = await supabase
-                .schema("forecast_20260220_7f31c6e4" as any)
-                .from(meta.table)
-                .select("origin_year")
-                .eq(meta.key, id)
-                .order("origin_year", { ascending: false })
-                .limit(1)
-
-            originYear = (yearData && yearData.length > 0) ? yearData[0].origin_year : 2025
-        }
-
-        // --- Fetch forecast data ---
+        // --- 1. Fetch forecast data for both 2024 (ACS) and 2025 (HCAD) available years ---
         const { data, error } = await supabase
             .schema("forecast_20260220_7f31c6e4" as any)
             .from(meta.table)
             .select("horizon_m, p10, p25, p50, p75, p90, origin_year")
             .eq(meta.key, id)
-            .eq("origin_year", originYear)
+            .in("origin_year", [2024, 2025])
+            .order("origin_year", { ascending: true })
             .order("horizon_m", { ascending: true })
 
         if (error) {
@@ -110,29 +95,38 @@ export async function GET(request: Request) {
         }
 
         // --- Build response ---
-        if (!data || data.length === 0) {
-            return NextResponse.json({
-                years: [], p10: [], p25: [], p50: [], p75: [], p90: [], y_med: [],
-                historicalValues,
-            })
+        // Group available forecast streams by their origin_year
+        const forecastVariants: Record<number, any> = {}
+
+        if (data && data.length > 0) {
+            const yearsSet = new Set(data.map(d => d.origin_year))
+            for (const oy of Array.from(yearsSet) as number[]) {
+                const oyData = data.filter(d => d.origin_year === oy)
+                forecastVariants[oy] = {
+                    years: oyData.map((r: any) => oy + r.horizon_m / 12),
+                    p10: oyData.map((r: any) => r.p10 ?? 0),
+                    p25: oyData.map((r: any) => r.p25 ?? 0),
+                    p50: oyData.map((r: any) => r.p50 ?? 0),
+                    p75: oyData.map((r: any) => r.p75 ?? 0),
+                    p90: oyData.map((r: any) => r.p90 ?? 0),
+                    y_med: oyData.map((r: any) => r.p50 ?? 0)
+                }
+            }
         }
 
-        const years = data.map((r: any) => originYear + r.horizon_m / 12)
-        const p10 = data.map((r: any) => r.p10 ?? 0)
-        const p25 = data.map((r: any) => r.p25 ?? 0)
-        const p50 = data.map((r: any) => r.p50 ?? 0)
-        const p75 = data.map((r: any) => r.p75 ?? 0)
-        const p90 = data.map((r: any) => r.p90 ?? 0)
-
+        // Return structured payload
         return NextResponse.json({
-            years,
-            p10,
-            p25,
-            p50,
-            p75,
-            p90,
-            y_med: p50,
             historicalValues,
+            forecastVariants, // Contains {2024: {...bands}, 2025: {...bands}} arrays dynamically
+
+            // Provide a legacy flattened fallback layout using the latest year so un-migrated frontend components don't instantly crash
+            years: forecastVariants[2025]?.years || forecastVariants[2024]?.years || [],
+            p10: forecastVariants[2025]?.p10 || forecastVariants[2024]?.p10 || [],
+            p25: forecastVariants[2025]?.p25 || forecastVariants[2024]?.p25 || [],
+            p50: forecastVariants[2025]?.p50 || forecastVariants[2024]?.p50 || [],
+            p75: forecastVariants[2025]?.p75 || forecastVariants[2024]?.p75 || [],
+            p90: forecastVariants[2025]?.p90 || forecastVariants[2024]?.p90 || [],
+            y_med: forecastVariants[2025]?.y_med || forecastVariants[2024]?.y_med || [],
         }, {
             headers: {
                 "Cache-Control": "public, max-age=3600",

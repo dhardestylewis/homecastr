@@ -19,6 +19,12 @@ interface FanChartProps {
   yDomain?: [number, number] | null
 }
 
+const COLORS = [
+  "#fb923c", // Orange (Default)
+  "#8b5cf6", // Purple (Secondary origin year)
+  "#38bdf8", // Light Blue (Tertiary)
+]
+
 
 // Fixed timeline: 2019-2032 (14 years)
 const TIMELINE_START = 2019
@@ -127,9 +133,19 @@ export function FanChart({
     if (historicalValues) {
       allValues.push(...historicalValues.filter(v => Number.isFinite(v)))
     }
-    if (p10) allValues.push(...p10.filter(v => Number.isFinite(v)))
-    if (p90) allValues.push(...p90.filter(v => Number.isFinite(v)))
-    if (p50) allValues.push(...p50.filter(v => Number.isFinite(v)))
+
+    // Process forecastVariants if available, else fallback to root arrays
+    if (data.forecastVariants && Object.keys(data.forecastVariants).length > 0) {
+      Object.values(data.forecastVariants).forEach(variant => {
+        if (variant.p10) allValues.push(...variant.p10.filter((v: number) => Number.isFinite(v)))
+        if (variant.p90) allValues.push(...variant.p90.filter((v: number) => Number.isFinite(v)))
+        if (variant.p50) allValues.push(...variant.p50.filter((v: number) => Number.isFinite(v)))
+      })
+    } else {
+      if (p10) allValues.push(...p10.filter(v => Number.isFinite(v)))
+      if (p90) allValues.push(...p90.filter(v => Number.isFinite(v)))
+      if (p50) allValues.push(...p50.filter(v => Number.isFinite(v)))
+    }
 
     // Include comparison data in Y range
     if (comparisonHistoricalValues) {
@@ -181,49 +197,49 @@ export function FanChart({
       histPath = buildPath(histYears, historicalValues, xScale, yScale)
     }
 
-    // Build Forecast fan (P10-P90 bands for 2026-2032)
+    // Build Forecast fans dynamically from forecastVariants if available
     const forecastYears = [2026, 2027, 2028, 2029, 2030]
 
-    // Fan area path
-    const hasForcastData = p10 && p90 && p10.some(v => Number.isFinite(v))
-    let fanPath = ""
-    let p50Line = ""
-    let medLine = ""
+    // Ensure we always have an iterable array of variants (fallback to root if single)
+    const activeVariants: Array<{ p10: number[], p50: number[], p90: number[] }> = []
+    if (data.forecastVariants && Object.keys(data.forecastVariants).length > 0) {
+      // Sort keys ascending so oldest origin year gets primary color, newer gets secondary
+      const sortedKeys = Object.keys(data.forecastVariants).sort()
+      sortedKeys.forEach(k => activeVariants.push(data.forecastVariants![Number(k)]))
+    } else if (p10 && p50 && p90) {
+      activeVariants.push({ p10, p50, p90 })
+    }
 
-    if (hasForcastData) {
-      const p90Path = forecastYears
-        .map((year, i) => {
-          if (!Number.isFinite(p90[i])) return null
-          return `${i === 0 ? "M" : "L"} ${xScale(year)} ${yScale(p90[i])}`
-        })
-        .filter(Boolean)
-        .join(" ")
+    const renderedVariants = activeVariants.map((variant, index) => {
+      const _p10 = variant.p10
+      const _p50 = variant.p50
+      const _p90 = variant.p90
 
-      const p10PathReverse = [...forecastYears]
-        .reverse()
-        .map((year, i) => {
+      let pathConf = { fanPath: "", p50Line: "", connectorPath: "" }
+      if (_p10 && _p90 && _p10.some(v => Number.isFinite(v))) {
+        const p90Path = forecastYears.map((year, i) => {
+          if (!Number.isFinite(_p90[i])) return null
+          return `${i === 0 ? "M" : "L"} ${xScale(year)} ${yScale(_p90[i])}`
+        }).filter(Boolean).join(" ")
+
+        const p10PathReverse = [...forecastYears].reverse().map((year, i) => {
           const idx = forecastYears.length - 1 - i
-          if (!Number.isFinite(p10[idx])) return null
-          return `L ${xScale(year)} ${yScale(p10[idx])}`
-        })
-        .filter(Boolean)
-        .join(" ")
+          if (!Number.isFinite(_p10[idx])) return null
+          return `L ${xScale(year)} ${yScale(_p10[idx])}`
+        }).filter(Boolean).join(" ")
 
-      if (p90Path && p10PathReverse) {
-        fanPath = `${p90Path} ${p10PathReverse} Z`
+        if (p90Path && p10PathReverse) {
+          pathConf.fanPath = `${p90Path} ${p10PathReverse} Z`
+        }
+
+        pathConf.p50Line = buildPath(forecastYears, _p50, xScale, yScale)
+
+        if (histPath && pathConf.p50Line && historicalValues?.[6] && _p50?.[0]) {
+          pathConf.connectorPath = `M ${xScale(2025)} ${yScale(historicalValues[6])} L ${xScale(2026)} ${yScale(_p50[0])}`
+        }
       }
-
-      // p50 solid anchor at 2026, then dashed from 2027 onward
-      p50Line = buildPath(forecastYears, p50, xScale, yScale)
-
-      medLine = buildPath(forecastYears, y_med, xScale, yScale)
-    }
-
-    // Connect historical to forecast with a dashed line
-    let connectorPath = ""
-    if (histPath && p50Line && historicalValues?.[6] && p50?.[0]) {
-      connectorPath = `M ${xScale(2025)} ${yScale(historicalValues[6])} L ${xScale(2026)} ${yScale(p50[0])}`
-    }
+      return { ...pathConf, color: COLORS[index % COLORS.length] }
+    })
 
     // --- COMPARISON DATA PATHS --- //
     // Build Comparison Historical line
@@ -484,8 +500,10 @@ export function FanChart({
           fillOpacity={0.05}
         />
 
-        {/* Fan area (forecast uncertainty) */}
-        {fanPath && <path d={fanPath} fill="#fb923c" fillOpacity={0.20} />}
+        {/* Fan area (forecast uncertainty) - Dynamic Multi-Origin Support */}
+        {renderedVariants.map((rv, idx) => (
+          rv.fanPath && <path key={`fan-${idx}`} d={rv.fanPath} fill={rv.color} fillOpacity={0.20} />
+        ))}
         {comparisonFanPath && <path d={comparisonFanPath} fill="#a3e635" fillOpacity={0.18} />}
 
         {/* Historical line (solid - actual values) */}
@@ -496,28 +514,30 @@ export function FanChart({
           <path d={comparisonHistPath} fill="none" stroke="#a3e635" strokeWidth={2} />
         )}
 
-        {connectorPath && (
-          <path d={connectorPath} fill="none" stroke="#fb923c" strokeWidth={2.5} />
-        )}
+        {renderedVariants.map((rv, idx) => (
+          rv.connectorPath && <path key={`conn-${idx}`} d={rv.connectorPath} fill="none" stroke={rv.color} strokeWidth={2.5} />
+        ))}
         {comparisonConnectorPath && (
           <path d={comparisonConnectorPath} fill="none" stroke="#a3e635" strokeWidth={2} />
         )}
 
         {/* P50 forecast line — solid at 2026, dashed from 2027 onward (forecast) */}
-        {p50Line && (() => {
-          // Split: first segment is solid (2026 anchor), rest is dashed forecast
-          const solidEnd = `M ${xScale(forecastYears[0])} ${yScale(p50[0])}`
+        {renderedVariants.map((rv, idx) => {
+          if (!rv.p50Line) return null
+          // Note: we're recalculating dashed logic manually here for the multiple arrays
+          const variantData = activeVariants[idx].p50
+          const solidEnd = `M ${xScale(forecastYears[0])} ${yScale(variantData[0])}`
           const dashedStart = forecastYears.slice(1).map((year, i) => {
-            if (!Number.isFinite(p50[i + 1])) return null
-            return `${i === 0 ? `M ${xScale(forecastYears[0])} ${yScale(p50[0])} L` : "L"} ${xScale(year)} ${yScale(p50[i + 1])}`
+            if (!Number.isFinite(variantData[i + 1])) return null
+            return `${i === 0 ? `M ${xScale(forecastYears[0])} ${yScale(variantData[0])} L` : "L"} ${xScale(year)} ${yScale(variantData[i + 1])}`
           }).filter(Boolean).join(" ")
           return (
-            <>
-              <path d={solidEnd} fill="none" stroke="#fb923c" strokeWidth={2.5} />
-              {dashedStart && <path d={dashedStart} fill="none" stroke="#fb923c" strokeWidth={2.5} strokeDasharray="5 3" />}
-            </>
+            <g key={`p50line-${idx}`}>
+              <path d={solidEnd} fill="none" stroke={rv.color} strokeWidth={2.5} />
+              {dashedStart && <path d={dashedStart} fill="none" stroke={rv.color} strokeWidth={2.5} strokeDasharray="5 3" />}
+            </g>
           )
-        })()}
+        })}
         {comparisonP50Line && comparisonData?.p50 && (() => {
           const p50Comp = comparisonData.p50
           const solidDot = `M ${xScale(forecastYears[0])} ${yScale(p50Comp[0])}`

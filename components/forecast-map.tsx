@@ -654,11 +654,12 @@ export function ForecastMap({
 
         // Suppress MapLibre tile loading error events (e.g. transient 500s from Supabase)
         map.on("error", (e: any) => {
-            if (e?.error?.message?.includes("status") || e?.error?.message?.includes("AJAXError")) {
+            const rawMsg = e?.error?.message || e?.message || (typeof e === 'string' ? e : "Unknown MapLibre error")
+            if (typeof rawMsg === "string" && (rawMsg.includes("status") || rawMsg.includes("AJAXError"))) {
                 // Silently ignore tile fetch errors — the retry + empty tile fallback handles these
                 return
             }
-            console.error("[MapLibre] Error:", e?.error?.message || e)
+            console.error("[MapLibre] Error:", rawMsg)
         })
 
         // HOVER handling

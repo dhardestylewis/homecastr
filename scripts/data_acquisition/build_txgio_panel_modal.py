@@ -93,9 +93,13 @@ def build_txgio_panel():
         print(f"  {year}: {len(df):,} parcels")
 
         # Identify key columns (TxGIO uses various naming conventions)
-        # Parcel ID columns
-        id_candidates = [c for c in df.columns if any(k in c.lower() for k in
-                        ['prop_id', 'pid', 'geo_id', 'parcel_id', 'acct', 'account', 'situs'])]
+        # Parcel ID columns: Explicit priority for TxGIO (PROP_ID often used in 2022/2023)
+        id_candidates = [c for c in df.columns if c.lower() in ['prop_id', 'pid', 'acct', 'geo_id', 'parcel_id', 'account', 'situs']]
+        if not id_candidates:
+            # Fallback to looser match
+            id_candidates = [c for c in df.columns if any(k in c.lower() for k in
+                            ['prop_id', 'pid', 'geo_id', 'parcel_id', 'acct', 'account', 'situs'])]
+        
         id_col = id_candidates[0] if id_candidates else df.columns[0]
 
         # Value columns
