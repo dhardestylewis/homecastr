@@ -33,11 +33,6 @@ export async function GET(request: Request) {
     const level = levelStr === "zip" ? "zcta" : levelStr
     const id = searchParams.get("id")
 
-    // Automatically match origin year based on data source availability.
-    // ACS data exists for 2024. HCAD parcel data exists for 2025.
-    const defaultYear = ["zcta", "tract", "tabblock"].includes(level) ? 2024 : 2025
-    const originYear = parseInt(searchParams.get("originYear") || defaultYear.toString())
-
     if (!id) {
         return NextResponse.json({ error: "id is required" }, { status: 400 })
     }
@@ -50,6 +45,22 @@ export async function GET(request: Request) {
     const supabase = getSupabaseAdmin()
 
     try {
+        // --- 1. Dynamically determine the latest origin year ---
+        // Rather than hardcoding 2024 for ACS and 2025 for HCAD, we look up the
+        // maximum origin_year actually available for this specific geometry ID.
+        let originYear = parseInt(searchParams.get("originYear") || "0")
+        if (!originYear) {
+            const { data: yearData } = await supabase
+                .schema("forecast_20260220_7f31c6e4" as any)
+                .from(meta.table)
+                .select("origin_year")
+                .eq(meta.key, id)
+                .order("origin_year", { ascending: false })
+                .limit(1)
+
+            originYear = (yearData && yearData.length > 0) ? yearData[0].origin_year : 2025
+        }
+
         // --- Fetch forecast data ---
         const { data, error } = await supabase
             .schema("forecast_20260220_7f31c6e4" as any)
