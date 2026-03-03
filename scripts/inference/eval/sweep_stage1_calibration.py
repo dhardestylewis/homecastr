@@ -59,11 +59,11 @@ def evaluate_checkpoints(
     tau: float = 1.0,
 ):
     import os, json, time, tempfile, glob, pickle
+    import wandb
     import numpy as np
     import polars as pl
     import torch
     from scipy.stats import kstest, spearmanr
-    import wandb
     
     ts = lambda: time.strftime("%Y-%m-%d %H:%M:%S")
 
