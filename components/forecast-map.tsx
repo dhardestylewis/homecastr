@@ -396,10 +396,15 @@ export function ForecastMap({
         return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up) }
     }, [])
 
-    // origin_year is 2025 for HCAD (default). Backend RPC handles ACS 2024 fallback.
-    // Negative horizon_m = past years (historical), positive = future (forecast)
-    // year 2025 (origin) → horizon_m=0, year 2026 → 12, year 2020 → -60
-    const originYear = 2025
+    // Dynamic origin_year based on Viewport Spatial checks
+    // HCAD (Harris County) boundary: ~29.4 to 30.2 Lat, -95.9 to -94.9 Lng
+    // If the map center is inside Harris County, we have 2025 data. Otherwise, ACS is 2024.
+    const [mapCenter, setMapCenter] = useState<{ lat: number, lng: number } | null>(null)
+    const isHarrisCounty = mapCenter
+        ? (mapCenter.lat >= 29.4 && mapCenter.lat <= 30.2 && mapCenter.lng >= -95.9 && mapCenter.lng <= -94.9)
+        : true // Default to true on initial load since default coordinates are Houston
+
+    const originYear = isHarrisCounty ? 2025 : 2024
     const horizonM = (year - originYear) * 12
 
     // Fetch all horizons for a given feature to build FanChart data
@@ -420,7 +425,7 @@ export function ForecastMap({
         detailFetchRef.current = cacheKey
         setIsLoadingDetail(true)
         try {
-            const res = await fetch(`/api/forecast-detail?level=${level}&id=${encodeURIComponent(featureId)}&originYear=${originYear}`)
+            const res = await fetch(`/api/forecast-detail?level=${level}&id=${encodeURIComponent(featureId)}`)
             if (!res.ok) throw new Error(`HTTP ${res.status}`)
             const json = await res.json()
             const fanChart = json.years?.length > 0 ? (json as FanChartData) : null
@@ -442,7 +447,7 @@ export function ForecastMap({
         }
     }, [originYear])
 
-    // VIEW SYNC: Update URL when map moves
+    // VIEW SYNC: Update URL and Origin State when map moves
     useEffect(() => {
         if (!mapRef.current) return
         const map = mapRef.current
@@ -450,6 +455,10 @@ export function ForecastMap({
         const onMoveEnd = () => {
             const center = map.getCenter()
             const zoom = map.getZoom()
+
+            // Spatial check for dynamic origin year
+            setMapCenter({ lat: center.lat, lng: center.lng })
+
             const params = new URLSearchParams(searchParams.toString())
             params.set("lat", center.lat.toFixed(5))
             params.set("lng", center.lng.toFixed(5))
@@ -462,6 +471,25 @@ export function ForecastMap({
             map.off("moveend", onMoveEnd)
         }
     }, [isLoaded, searchParams, router])
+
+    // HORIZON OR ORIGIN YEAR CHANGED: refresh the vector tile URLs so map grabs correct data
+    useEffect(() => {
+        if (!isLoaded || !mapRef.current) return
+        const map = mapRef.current
+        const _v = "5" // bump cache buster to force URL reload on dev/prod for dual-origins
+
+        const updateSource = (id: string) => {
+            const src = map.getSource(id) as maplibregl.VectorTileSource
+            if (src) {
+                // Maplibre doesn't have setUrl but it has setTiles
+                src.setTiles([
+                    `${window.location.origin}/api/forecast-tiles/{z}/{x}/{y}?originYear=${originYear}&horizonM=${horizonM}&v=${_v}`,
+                ])
+            }
+        }
+        updateSource("forecast-a")
+        updateSource("forecast-b")
+    }, [year, originYear, horizonM, isLoaded])
 
 
 
@@ -549,10 +577,7 @@ export function ForecastMap({
             const addSource = (id: string) => {
                 map.addSource(id, {
                     type: "vector",
-                    tiles: [
-                        `${window.location.origin}/api/forecast-tiles/{z}/{x}/{y}?originYear=${originYear}&horizonM=${horizonM}&v=4`,
-                        // v=4 cache-buster to force fresh tiles after dual-origin SQL routing update
-                    ],
+                    url: "", // The URL is set dynamically in the useEffect hook based on originYear
                     minzoom: 0,
                     maxzoom: 18,
                     promoteId: "id",
