@@ -29,9 +29,14 @@ const HISTORY_TABLE: Record<string, { table: string; key: string }> = {
 
 export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
-    const level = searchParams.get("level") || "zcta"
+    const levelStr = searchParams.get("level") || "zcta"
+    const level = levelStr === "zip" ? "zcta" : levelStr
     const id = searchParams.get("id")
-    const originYear = parseInt(searchParams.get("originYear") || "2025")
+
+    // Automatically match origin year based on data source availability.
+    // ACS data exists for 2024. HCAD parcel data exists for 2025.
+    const defaultYear = ["zcta", "tract", "tabblock"].includes(level) ? 2024 : 2025
+    const originYear = parseInt(searchParams.get("originYear") || defaultYear.toString())
 
     if (!id) {
         return NextResponse.json({ error: "id is required" }, { status: 400 })

@@ -22,7 +22,7 @@ const TOOLTIP_HEIGHT = 620
 const GEO_LEVELS = [
     { name: "zcta", minzoom: 0, maxzoom: 7.99, label: "ZIP Code" },
     { name: "tract", minzoom: 8, maxzoom: 11.99, label: "Tract" },
-    { name: "tabblock", minzoom: 12, maxzoom: 16.99, label: "Block" },
+    { name: "tabblock", minzoom: 12, maxzoom: 22, label: "Block" },
     { name: "parcel", minzoom: 17, maxzoom: 22, label: "Parcel" },
 ] as const
 
@@ -396,10 +396,10 @@ export function ForecastMap({
         return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up) }
     }, [])
 
-    // origin_year is currently 2024 for ACS data, horizon_m is (year - 2024) * 12
+    // origin_year is 2025 for HCAD (default). Backend RPC handles ACS 2024 fallback.
     // Negative horizon_m = past years (historical), positive = future (forecast)
-    // year 2024 (origin) → horizon_m=0, year 2025 → 12, year 2019 → -60
-    const originYear = 2024
+    // year 2025 (origin) → horizon_m=0, year 2026 → 12, year 2020 → -60
+    const originYear = 2025
     const horizonM = (year - originYear) * 12
 
     // Fetch all horizons for a given feature to build FanChart data
@@ -550,8 +550,8 @@ export function ForecastMap({
                 map.addSource(id, {
                     type: "vector",
                     tiles: [
-                        `${window.location.origin}/api/forecast-tiles/{z}/{x}/{y}?originYear=${originYear}&horizonM=${horizonM}&v=3`,
-                        // v=3 cache-buster to force fresh tiles after nationwide geometry upload
+                        `${window.location.origin}/api/forecast-tiles/{z}/{x}/{y}?originYear=${originYear}&horizonM=${horizonM}&v=4`,
+                        // v=4 cache-buster to force fresh tiles after dual-origin SQL routing update
                     ],
                     minzoom: 0,
                     maxzoom: 18,

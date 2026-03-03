@@ -57,7 +57,7 @@ export function StreetViewCarousel({ h3Ids, apiKey, className, coordinates, minZ
     // Load only slide 0 on mount — 1 API call, not 5
     useEffect(() => {
         if (locations.length > 0) loadSlide(0, locations)
-    }, [locations]) // eslint-disable-line react-hooks/exhaustive-deps
+    }, [locations.length]) // Only trigger when we get a new set of locations
 
     // Lazy-load on carousel navigation, prefetch +1
     const onSelect = useCallback(() => {
