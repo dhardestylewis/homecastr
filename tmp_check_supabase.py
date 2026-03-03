@@ -1,4 +1,4 @@
-"""Check exactly what's in Supabase for HCAD backtest origin years."""
+"""Check acct format overlap — sample from Supabase forecast rows vs HCAD panel."""
 import psycopg2
 
 DB_URL = "postgres://postgres.earrhbknfjnhbudsucch:Every1sentence!@aws-1-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require"
@@ -9,30 +9,40 @@ conn.autocommit = True
 cur = conn.cursor()
 cur.execute("SET statement_timeout = 30000")
 
-# Get all distinct combos for 2021-2023
+# Sample some acct values from the backtest rows
 cur.execute(f"""
-    SELECT DISTINCT variant_id, series_kind, origin_year, forecast_year
+    SELECT acct, origin_year, forecast_year, variant_id, series_kind
     FROM "{SCHEMA}"."metrics_parcel_forecast"
-    WHERE origin_year IN (2021, 2022, 2023)
-    ORDER BY origin_year, variant_id, forecast_year
-    LIMIT 50
+    WHERE series_kind = 'backtest'
+    LIMIT 10
 """)
 rows = cur.fetchall()
-print(f"Found {len(rows)} distinct combos:")
+print("Sample backtest rows from Supabase:")
 for r in rows:
-    print(f"  variant_id={r[0]!r:30s}  series_kind={r[1]!r:12s}  origin={r[2]}  forecast_year={r[3]}")
+    print(f"  acct={r[0]!r:20s}  origin={r[1]}  forecast_year={r[2]}  variant={r[3]!r:40s}  kind={r[4]!r}")
 
-# Also sample a few actual rows to check acct format
+# Also sample forecast rows
 cur.execute(f"""
-    SELECT acct, origin_year, forecast_year, p50, variant_id, series_kind
+    SELECT acct, origin_year, forecast_year, variant_id, series_kind
     FROM "{SCHEMA}"."metrics_parcel_forecast"
-    WHERE origin_year = 2021
-    LIMIT 5
+    WHERE series_kind = 'forecast'
+    LIMIT 10
 """)
-sample = cur.fetchall()
-print(f"\nSample rows (origin=2021):")
-for r in sample:
-    print(f"  acct={r[0]!r}  origin={r[1]}  forecast_year={r[2]}  p50={r[3]:.0f}  variant={r[4]!r}  kind={r[5]!r}")
+rows2 = cur.fetchall()
+print("\nSample forecast rows from Supabase:")
+for r in rows2:
+    print(f"  acct={r[0]!r:20s}  origin={r[1]}  forecast_year={r[2]}  variant={r[3]!r:40s}  kind={r[4]!r}")
+
+# Check a generic LIMIT to see all kinds
+cur.execute(f"""
+    SELECT acct, origin_year, forecast_year, variant_id, series_kind
+    FROM "{SCHEMA}"."metrics_parcel_forecast"
+    LIMIT 10
+""")
+rows3 = cur.fetchall()
+print("\nGeneric LIMIT 10:")
+for r in rows3:
+    print(f"  acct={r[0]!r:20s}  origin={r[1]}  forecast_year={r[2]}  variant={r[3]!r:40s}  kind={r[4]!r}")
 
 conn.close()
 print("Done.")

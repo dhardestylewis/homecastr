@@ -396,10 +396,10 @@ export function ForecastMap({
         return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up) }
     }, [])
 
-    // origin_year is always 2025, horizon_m is (year - 2025) * 12
+    // origin_year is currently 2024 for ACS data, horizon_m is (year - 2024) * 12
     // Negative horizon_m = past years (historical), positive = future (forecast)
-    // year 2025 (origin) → horizon_m=0, year 2026 → 12, year 2020 → -60
-    const originYear = 2025
+    // year 2024 (origin) → horizon_m=0, year 2025 → 12, year 2019 → -60
+    const originYear = 2024
     const horizonM = (year - originYear) * 12
 
     // Fetch all horizons for a given feature to build FanChart data

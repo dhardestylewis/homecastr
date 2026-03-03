@@ -1,13 +1,5 @@
 """Direct upload script: reads GCS creds from Modal secret and uploads inference_pipeline.py."""
 import os, sys, json
-
-# Set tokens if passed as env vars
-TOKEN_ID = os.environ.get("MODAL_TOKEN_ID", "ak-9PuBjYiy2yB9iXy9PBaFjf")
-TOKEN_SECRET = os.environ.get("MODAL_TOKEN_SECRET", "as-9PY5rUVwgAZ6wHTVAqr2b3Ua")
-
-os.environ["MODAL_TOKEN_ID"] = TOKEN_ID
-os.environ["MODAL_TOKEN_SECRET"] = TOKEN_SECRET
-
 import modal
 
 app = modal.App("upload-pipeline-code-v2")

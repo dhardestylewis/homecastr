@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from "next/server"
 import crypto from "crypto"
 import { getGcsBucket, gcsPublicUrl } from "@/lib/gcs"
-import { getSupabaseAdmin } from "@/lib/supabase/admin"
 
 /**
  * GET /api/streetview-sign?lat=29.76&lng=-95.36&w=400&h=300
  *
- * Cache lookup order (fastest → slowest, cheapest → most expensive):
- *   1. Supabase  – check street_view_cache for a stored GCS path → free
- *   2. GCS       – if path found, return public GCS URL             → free
- *   3. Google API – fetch image bytes, upload to GCS, upsert Supabase → $0.007
+ * GCS-only cache — no Supabase table needed.
+ *   1. Check if gs://<bucket>/streetview/<lat5>,<lng5>_<w>x<h>.jpg exists
+ *   2. HIT  → return public GCS URL (free)
+ *   3. MISS → fetch from Google ($0.007), upload to GCS, return GCS URL
+ *
+ * If GCS_STREETVIEW_BUCKET is not set, falls back to direct Google URL (old behaviour).
  */
 export async function GET(req: NextRequest) {
     const { searchParams } = req.nextUrl
@@ -22,40 +23,29 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: "Missing lat/lng" }, { status: 400 })
     }
 
-    const latF = parseFloat(lat)
-    const lngF = parseFloat(lng)
-    const lat5 = latF.toFixed(5)
-    const lng5 = lngF.toFixed(5)
-
+    const lat5 = parseFloat(lat).toFixed(5)
+    const lng5 = parseFloat(lng).toFixed(5)
     const bucketName = process.env.GCS_STREETVIEW_BUCKET
+    const gcsPath = `streetview/${lat5},${lng5}_${w}x${h}.jpg`
 
-    // ── 1 & 2. Supabase cache lookup ─────────────────────────────────────────
+    // ── 1. GCS cache lookup ──────────────────────────────────────────────────
     if (bucketName) {
         try {
-            const supabase = getSupabaseAdmin()
-            const { data } = await supabase
-                .from("street_view_cache")
-                .select("gcs_path")
-                .eq("lat5", lat5)
-                .eq("lng5", lng5)
-                .eq("w", w)
-                .eq("h", h)
-                .maybeSingle()
-
-            if (data?.gcs_path) {
-                console.log(`[SV-CACHE] HIT  ${lat5},${lng5} ${w}x${h}`)
+            const bucket = getGcsBucket(bucketName)
+            const [exists] = await bucket.file(gcsPath).exists()
+            if (exists) {
+                console.log(`[SV-CACHE] HIT  ${gcsPath}`)
                 return NextResponse.json(
-                    { url: gcsPublicUrl(bucketName, data.gcs_path) },
+                    { url: gcsPublicUrl(bucketName, gcsPath) },
                     { headers: { "Cache-Control": "public, max-age=86400" } }
                 )
             }
         } catch (err) {
-            // Non-fatal: fall through to Google API on any cache error
-            console.warn("[SV-CACHE] Supabase lookup failed:", err)
+            console.warn("[SV-CACHE] GCS lookup failed:", err)
         }
     }
 
-    // ── 3. Build the Google Street View URL ──────────────────────────────────
+    // ── 2. Build the Google Street View URL ──────────────────────────────────
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY
     const signingSecret = process.env.GOOGLE_MAPS_SIGNING_SECRET
 
@@ -82,19 +72,19 @@ export async function GET(req: NextRequest) {
         googleUrl = `https://maps.googleapis.com${path}`
     }
 
-    // ── 4. Cache miss — fetch image from Google ───────────────────────────────
+    // ── 3. No GCS configured — old behaviour ─────────────────────────────────
     if (!bucketName) {
-        // GCS not configured — return the signed Google URL directly (old behaviour)
         return NextResponse.json({ url: googleUrl })
     }
 
-    console.log(`[SV-CACHE] MISS ${lat5},${lng5} ${w}x${h} — fetching from Google`)
+    // ── 4. Cache miss — fetch from Google & upload to GCS ────────────────────
+    console.log(`[SV-CACHE] MISS ${gcsPath} — fetching from Google`)
 
     let imageBytes: Buffer
     try {
         const res = await fetch(googleUrl)
         if (!res.ok) {
-            console.warn(`[SV-CACHE] Google API returned ${res.status} — returning URL directly`)
+            console.warn(`[SV-CACHE] Google API ${res.status}, returning URL directly`)
             return NextResponse.json({ url: googleUrl })
         }
         imageBytes = Buffer.from(await res.arrayBuffer())
@@ -103,12 +93,9 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ url: googleUrl })
     }
 
-    // ── 5. Upload to GCS ──────────────────────────────────────────────────────
-    const gcsPath = `streetview/${lat5},${lng5}_${w}x${h}.jpg`
     try {
         const bucket = getGcsBucket(bucketName)
-        const file = bucket.file(gcsPath)
-        await file.save(imageBytes, {
+        await bucket.file(gcsPath).save(imageBytes, {
             contentType: "image/jpeg",
             predefinedAcl: "publicRead",
             resumable: false,
@@ -116,20 +103,7 @@ export async function GET(req: NextRequest) {
         console.log(`[SV-CACHE] Uploaded → gs://${bucketName}/${gcsPath}`)
     } catch (err) {
         console.warn("[SV-CACHE] GCS upload failed:", err)
-        // Return the signed Google URL as fallback — still usable, just not cached
         return NextResponse.json({ url: googleUrl })
-    }
-
-    // ── 6. Upsert into Supabase ───────────────────────────────────────────────
-    try {
-        const supabase = getSupabaseAdmin()
-        await supabase
-            .from("street_view_cache")
-            .upsert({ lat5, lng5, w, h, gcs_path: gcsPath })
-        console.log(`[SV-CACHE] Supabase upsert OK`)
-    } catch (err) {
-        // Non-fatal: image is in GCS, just not indexed yet
-        console.warn("[SV-CACHE] Supabase upsert failed:", err)
     }
 
     return NextResponse.json(
