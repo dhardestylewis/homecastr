@@ -47,16 +47,31 @@ export async function GET(request: Request) {
     const supabase = getSupabaseAdmin()
 
     try {
-        // --- 1. Fetch forecast data for the requested origin year ---
+        // --- 1. Fetch forecast data for the requested origin year, with fallback ---
         const originYear = parseInt(searchParams.get("originYear") || "2025")
+        const fallbackYear = originYear === 2025 ? 2024 : 2025
 
-        const { data, error } = await supabase
+        let { data, error } = await supabase
             .schema("forecast_20260220_7f31c6e4" as any)
             .from(meta.table)
             .select("horizon_m, p10, p25, p50, p75, p90, origin_year")
             .eq(meta.key, id)
             .eq("origin_year", originYear)
             .order("horizon_m", { ascending: true })
+
+        // Fallback to alternate origin year if no data found
+        if (!error && (!data || data.length === 0)) {
+            const fb = await supabase
+                .schema("forecast_20260220_7f31c6e4" as any)
+                .from(meta.table)
+                .select("horizon_m, p10, p25, p50, p75, p90, origin_year")
+                .eq(meta.key, id)
+                .eq("origin_year", fallbackYear)
+                .order("horizon_m", { ascending: true })
+            if (!fb.error && fb.data && fb.data.length > 0) {
+                data = fb.data
+            }
+        }
 
         if (error) {
             console.error("[FORECAST-DETAIL] Forecast error:", error)

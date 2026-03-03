@@ -426,7 +426,7 @@ export function ForecastMap({
         detailFetchRef.current = cacheKey
         setIsLoadingDetail(true)
         try {
-            const res = await fetch(`/api/forecast-detail?level=${level}&id=${encodeURIComponent(featureId)}`)
+            const res = await fetch(`/api/forecast-detail?level=${level}&id=${encodeURIComponent(featureId)}&originYear=${originYear}`)
             if (!res.ok) throw new Error(`HTTP ${res.status}`)
             const json = await res.json()
             const fanChart = json.years?.length > 0 ? (json as FanChartData) : null
