@@ -23,9 +23,15 @@ import modal
 import os
 import sys
 
-# Ensure local imports work reliably
+# Ensure local imports work reliably both locally and in Modal container
+if "/root" not in sys.path:
+    sys.path.append("/root")
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-from scripts.inference import worldmodel_inference as wm
+
+try:
+    from scripts.inference import worldmodel_inference as wm
+except ImportError:
+    pass # Will be imported inside the function if top-level fails
 
 app = modal.App("student-viewport-inference")
 
@@ -45,6 +51,10 @@ image = (
         "shapely>=2.0",
         "h3>=3.7",
         "fastapi[standard]",
+    )
+    .add_local_dir(
+        local_path=os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "scripts"),
+        remote_path="/root/scripts"
     )
 )
 
@@ -482,6 +492,9 @@ def predict(data: dict):
     
     print(f"[{ts()}] Viewport inference request: bbox={bbox}, year={year}")
     t0 = time.time()
+    
+    # Import locally inside the function to avoid top-level import errors in Modal
+    from scripts.inference import worldmodel_inference as wm
     
     # Setup GCS
     client, bucket = _setup_gcs()

@@ -624,6 +624,8 @@ SimpleScaler = _DimSafeScaler
     
     accts = ctx["acct"]
     ya = ctx["y_anchor"]
+    y_levels = ya[:, None, None] + np.cumsum(deltas, axis=2)  # [N, S, H] log-space
+
     # ─── 4.5 POST-HOC PIT CALIBRATION (Stage 1) ───
     print(f"\n[{ts()}] ── Post-hoc PIT Calibration ──")
     from sklearn.isotonic import IsotonicRegression
