@@ -653,6 +653,12 @@ SimpleScaler = _DimSafeScaler
     calib_save_path = os.path.join(calib_dir, f"calibrators_{version_tag}_{jurisdiction}_o{origin}.pkl")
     
     calib_models = {}
+    # Reload Volume to pick up calibrators saved by previous origin's container
+    try:
+        vol = modal.Volume.lookup("properlytic-checkpoints")
+        vol.reload()
+    except Exception as ve:
+        print(f"[{ts()}] \u26a0\ufe0f Volume reload failed: {ve}")
     if os.path.exists(calib_load_path):
         try:
             with open(calib_load_path, "rb") as f:
@@ -706,6 +712,13 @@ SimpleScaler = _DimSafeScaler
         with open(calib_save_path, "wb") as f:
             pickle.dump(new_calib_models, f)
         print(f"[{ts()}] \U0001f3c6 Saved {len(new_calib_models)} calibrators to {calib_save_path}")
+        # Flush to Modal Volume so next container can load these calibrators
+        try:
+            vol = modal.Volume.lookup("properlytic-checkpoints")
+            vol.commit()
+            print(f"[{ts()}] \U0001f4be Volume committed — calibrators visible to next origin")
+        except Exception as ve:
+            print(f"[{ts()}] \u26a0\ufe0f Volume commit failed: {ve}")
     except Exception as e:
         print(f"[{ts()}] \u26a0\ufe0f Failed to save calibrators: {e}")
 
@@ -1700,19 +1713,23 @@ def main(
     print(f"   Jurisdiction: {jurisdiction}")
     print(f"   Origins: {origin_list}")
     
-    params = []
-    # Sort origins! To enforce chronological testing sequentially
-    for origin in sorted(origin_list):
-        for _eta in etas:
-            for _steps in steps_list:
-                for _tau in taus:
-                    params.append((jurisdiction, bucket_name, origin, sample_size, scenarios, version_tag, _eta, _steps, _tau))
-    
     results = []
-    # Use sequential execution for OOT dependent state loading
-    for param in params:
-        res = evaluate_checkpoints.remote(*param)
-        results.append(res)
+    # Outer loop: hyperparameter combos. Inner loop: origins in chronological order.
+    # This ensures each (eta, steps, tau) config gets a proper OOT calibration chain:
+    # 2021 → fit calibrator → 2022 (apply 2021 calibrator) → fit → 2023 (apply 2022 calibrator)
+    for _eta in etas:
+        for _steps in steps_list:
+            for _tau in taus:
+                print(f"\n{'='*60}")
+                print(f"  Sweep config: eta={_eta}, steps={_steps}, tau={_tau}")
+                print(f"  Origins (sequential): {sorted(origin_list)}")
+                print(f"{'='*60}")
+                for origin in sorted(origin_list):
+                    res = evaluate_checkpoints.remote(
+                        jurisdiction, bucket_name, origin, sample_size,
+                        scenarios, version_tag, _eta, _steps, _tau
+                    )
+                    results.append(res)
 
     # ─── A2: Cross-origin scaler integrity comparison ───
     scaler_data = [r for r in results if r is not None and isinstance(r, dict)]
