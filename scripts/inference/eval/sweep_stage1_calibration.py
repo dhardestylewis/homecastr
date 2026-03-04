@@ -1704,10 +1704,12 @@ def main(
 ):
     origin_list = [int(o.strip()) for o in origins.split(",")]
     
-    # Grid search parameters focusing on Stage 1.5 Calibration bounds
-    etas = [0.0, 0.1]
-    steps_list = [20, 40]
-    taus = [1.0, 1.1, 1.2, 1.25]
+    # Grid search parameters — Stage 3: fix under-dispersion via eta
+    # eta controls DDIM stochasticity (0=deterministic, 1=full DDPM)
+    # Stage 2 showed eta=0.0 gives VarRatio 0.007-0.175 [narrow]
+    etas = [0.3, 0.5, 0.8, 1.0]
+    steps_list = [20]
+    taus = [1.0]
     
     print(f"\U0001f680 Launching sweep {version_tag} on Modal across {len(origin_list)} origins and {len(etas)*len(steps_list)*len(taus)} hyperparams")
     print(f"   Jurisdiction: {jurisdiction}")
