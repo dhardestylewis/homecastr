@@ -481,7 +481,7 @@ export function ForecastMap({
                 // Debounce: wait 800ms after last move before fetching
                 if (studentFetchRef.current) clearTimeout(studentFetchRef.current)
                 studentFetchRef.current = setTimeout(async () => {
-                    // Abort any in-flight request
+                    // Abort any in-flight Phase 1 request (Phase 2 is never aborted)
                     if (studentAbortRef.current) studentAbortRef.current.abort()
                     const ac = new AbortController()
                     studentAbortRef.current = ac
@@ -514,15 +514,13 @@ export function ForecastMap({
                         }
 
                         // ─── Phase 2: Fetch real forecasts (slow ~4min) ───
-                        // Fire and forget — don't block the loading indicator
-                        const ac2 = new AbortController()
-                        studentAbortRef.current = ac2  // allow aborting Phase 2 if user pans again
-
+                        // NO abort controller — Phase 2 runs to completion even if user pans
+                        const phase2Bbox = [...bbox]  // capture bbox at this point
                         fetch('/api/student-inference', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ bbox, year, include_forecast: true }),
-                            signal: ac2.signal,
+                            body: JSON.stringify({ bbox: phase2Bbox, year, include_forecast: true }),
+                            // No signal — intentionally non-cancellable
                         })
                             .then(res2 => {
                                 if (!res2.ok) throw new Error(`HTTP ${res2.status}`)
@@ -537,9 +535,7 @@ export function ForecastMap({
                                 setStudentLoading(false)
                             })
                             .catch(err => {
-                                if (err.name !== 'AbortError') {
-                                    console.error('[STUDENT] Phase 2 error:', err.message)
-                                }
+                                console.error('[STUDENT] Phase 2 error:', err.message)
                                 setStudentLoading(false)
                             })
 
@@ -1103,124 +1099,161 @@ export function ForecastMap({
             if (hoverDetailTimerRef.current) { clearTimeout(hoverDetailTimerRef.current); hoverDetailTimerRef.current = null }
             detailFetchRef.current = null // allow click to re-fetch even if same id
 
-            if (features.length === 0) {
-                // Check if user clicked a student building layer
-                const studentFeatures = map.getLayer('student-buildings-fill')
-                    ? map.queryRenderedFeatures(e.point, { layers: ['student-buildings-fill'] })
-                    : []
+            // Always check student buildings when the layer exists
+            const hasStudentLayer = !!map.getLayer('student-buildings-fill')
+            const studentFeatures = hasStudentLayer
+                ? map.queryRenderedFeatures(e.point, { layers: ['student-buildings-fill'] })
+                : []
 
-                if (studentFeatures.length > 0) {
-                    const sf = studentFeatures[0]
-                    const id = `student-${sf.id || Math.random()}`
+            console.log(`[CLICK DEBUG] zoom=${zoom.toFixed(1)} mvtFeatures=${features.length} studentFeatures=${studentFeatures.length} hasStudentLayer=${hasStudentLayer}`)
 
-                    // Toggle selection logic for student building
-                    if (selectedIdRef.current === id) {
-                        selectedIdRef.current = null
-                        setSelectedId(null)
-                        setSelectedProps(null)
-                        setFixedTooltipPos(null)
-                        userDraggedRef.current = false
-                        setSelectedCoords(null)
-                        setComparisonData(null)
-                        setComparisonHistoricalValues(undefined)
-                        comparisonFetchRef.current = null
-                        onFeatureSelect(null)
-                        return
-                    }
+            // Prioritize student buildings when we have them and no MVT features
+            if (features.length === 0 && studentFeatures.length > 0) {
+                const sf = studentFeatures[0]
+                const id = `student-${sf.id || Math.random()}`
 
-                    selectedIdRef.current = id
-                    selectedSourceLayerRef.current = "student"
-                    setSelectedId(id)
-                    const p = sf.properties
-                    const enhancedProps = {
-                        ...p,
-                        id,
-                        p50: p?.p50,
-                        p10: p?.p10,
-                        p90: p?.p90,
-                        _isStudent: true,
-                    }
-                    setSelectedProps(enhancedProps)
-                    setComparisonData(null)
-                    setComparisonHistoricalValues(undefined)
-                    comparisonFetchRef.current = null
-                    onFeatureSelect(id)
-
-                    // Synthesize FanChartData from student model full trajectory
-                    if (p.p50_arr) {
-                        try {
-                            const p10Arr = typeof p.p10_arr === 'string' ? JSON.parse(p.p10_arr) : p.p10_arr;
-                            const p50Arr = typeof p.p50_arr === 'string' ? JSON.parse(p.p50_arr) : p.p50_arr;
-                            const p90Arr = typeof p.p90_arr === 'string' ? JSON.parse(p.p90_arr) : p.p90_arr;
-
-                            if (Array.isArray(p50Arr) && p50Arr.length > 0) {
-                                const len = Math.min(5, p50Arr.length)
-                                const synthYears = [2026, 2027, 2028, 2029, 2030].slice(0, len)
-
-                                setFanChartData({
-                                    years: synthYears,
-                                    p10: p10Arr.slice(0, len),
-                                    p50: p50Arr.slice(0, len),
-                                    p90: p90Arr.slice(0, len),
-                                    y_med: p50Arr.slice(0, len)
-                                })
-                                setHistoricalValues(undefined)
-                            } else {
-                                setFanChartData(null)
-                                setHistoricalValues(undefined)
-                            }
-                        } catch (err) {
-                            console.error('Failed to parse student fan arrays:', err)
-                            setFanChartData(null)
-                            setHistoricalValues(undefined)
-                        }
-                    } else {
-                        setFanChartData(null)
-                        setHistoricalValues(undefined)
-                    }
-
-                    // Tooltip positioning
-                    const smartPos = getSmartTooltipPos(
-                        e.originalEvent.clientX,
-                        e.originalEvent.clientY,
-                        window.innerWidth,
-                        window.innerHeight
-                    )
-                    if (!userDraggedRef.current) {
-                        setFixedTooltipPos({ globalX: smartPos.x, globalY: smartPos.y })
-                    }
-                    setTooltipData({
-                        globalX: smartPos.x,
-                        globalY: smartPos.y,
-                        properties: enhancedProps,
-                    })
-                    setTooltipCoords([e.lngLat.lat, e.lngLat.lng])
-                    setSelectedCoords([e.lngLat.lat, e.lngLat.lng])
-                    return
-                }
-
-                // Normal clear selection
-                if (selectedIdRef.current) {
-                    ;["forecast-a", "forecast-b"].forEach((s) => {
-                        try {
-                            map.removeFeatureState({ source: s, sourceLayer })
-                        } catch (err) {
-                            /* ignore */
-                        }
-                    })
+                // Toggle selection logic for student building
+                if (selectedIdRef.current === id) {
                     selectedIdRef.current = null
                     setSelectedId(null)
                     setSelectedProps(null)
                     setFixedTooltipPos(null)
-                    userDraggedRef.current = false // reset for next lock
+                    userDraggedRef.current = false
                     setSelectedCoords(null)
                     setComparisonData(null)
                     setComparisonHistoricalValues(undefined)
                     comparisonFetchRef.current = null
                     onFeatureSelect(null)
+                    return
                 }
+
+                selectedIdRef.current = id
+                selectedSourceLayerRef.current = "student"
+                setSelectedId(id)
+                const p = sf.properties
+                const enhancedProps = {
+                    ...p,
+                    id,
+                    p50: p?.p50,
+                    p10: p?.p10,
+                    p90: p?.p90,
+                    _isStudent: true,
+                }
+                setSelectedProps(enhancedProps)
+                setComparisonData(null)
+                setComparisonHistoricalValues(undefined)
+                comparisonFetchRef.current = null
+                onFeatureSelect(id)
+
+                // Synthesize FanChartData from student model full trajectory
+                console.log('[STUDENT CLICK] Properties:', JSON.stringify({
+                    p50: p.p50,
+                    p50_arr_type: typeof p.p50_arr,
+                    p50_arr_sample: typeof p.p50_arr === 'string' ? p.p50_arr.slice(0, 100) : p.p50_arr,
+                    p10_arr_type: typeof p.p10_arr,
+                    p90_arr_type: typeof p.p90_arr,
+                }))
+
+                // Helper to robustly parse arrays from MapLibre properties
+                const parseArr = (val: any): number[] => {
+                    if (Array.isArray(val)) return val
+                    if (typeof val === 'string') {
+                        try {
+                            const parsed = JSON.parse(val)
+                            if (Array.isArray(parsed)) return parsed
+                        } catch {
+                            // MapLibre might store as comma-separated values
+                            const nums = val.split(',').map(Number).filter(n => !isNaN(n))
+                            if (nums.length > 0) return nums
+                        }
+                    }
+                    return []
+                }
+
+                if (p.p50_arr) {
+                    try {
+                        const p10Arr = parseArr(p.p10_arr)
+                        const p50Arr = parseArr(p.p50_arr)
+                        const p90Arr = parseArr(p.p90_arr)
+
+                        console.log('[STUDENT CLICK] Parsed arrays:', {
+                            p10: p10Arr.slice(0, 3),
+                            p50: p50Arr.slice(0, 3),
+                            p90: p90Arr.slice(0, 3),
+                            len: p50Arr.length,
+                        })
+
+                        if (Array.isArray(p50Arr) && p50Arr.length > 0) {
+                            const len = Math.min(5, p50Arr.length)
+                            const synthYears = [2026, 2027, 2028, 2029, 2030].slice(0, len)
+
+                            setFanChartData({
+                                years: synthYears,
+                                p10: p10Arr.slice(0, len),
+                                p50: p50Arr.slice(0, len),
+                                p90: p90Arr.slice(0, len),
+                                y_med: p50Arr.slice(0, len)
+                            })
+                            setHistoricalValues(undefined)
+                            console.log('[STUDENT CLICK] ✅ setFanChartData called with', len, 'years')
+                        } else {
+                            console.log('[STUDENT CLICK] ⚠️ p50Arr empty or not array')
+                            setFanChartData(null)
+                            setHistoricalValues(undefined)
+                        }
+                    } catch (err) {
+                        console.error('[STUDENT CLICK] Failed to parse student fan arrays:', err)
+                        setFanChartData(null)
+                        setHistoricalValues(undefined)
+                    }
+                } else {
+                    console.log('[STUDENT CLICK] ⚠️ No p50_arr property found')
+                    setFanChartData(null)
+                    setHistoricalValues(undefined)
+                }
+
+                // Tooltip positioning
+                const smartPos = getSmartTooltipPos(
+                    e.originalEvent.clientX,
+                    e.originalEvent.clientY,
+                    window.innerWidth,
+                    window.innerHeight
+                )
+                if (!userDraggedRef.current) {
+                    setFixedTooltipPos({ globalX: smartPos.x, globalY: smartPos.y })
+                }
+                setTooltipData({
+                    globalX: smartPos.x,
+                    globalY: smartPos.y,
+                    properties: enhancedProps,
+                })
+                setTooltipCoords([e.lngLat.lat, e.lngLat.lng])
+                setSelectedCoords([e.lngLat.lat, e.lngLat.lng])
                 return
             }
+
+            // Normal clear selection
+            if (selectedIdRef.current) {
+                ;["forecast-a", "forecast-b"].forEach((s) => {
+                    try {
+                        map.removeFeatureState({ source: s, sourceLayer })
+                    } catch (err) {
+                        /* ignore */
+                    }
+                })
+                selectedIdRef.current = null
+                setSelectedId(null)
+                setSelectedProps(null)
+                setFixedTooltipPos(null)
+                userDraggedRef.current = false // reset for next lock
+                setSelectedCoords(null)
+                setComparisonData(null)
+                setComparisonHistoricalValues(undefined)
+                comparisonFetchRef.current = null
+                onFeatureSelect(null)
+            }
+            return
+        } else if (features.length > 0) {
 
             const feature = features[0]
             const id = (feature.properties?.id || feature.id) as string
@@ -1304,294 +1337,244 @@ export function ForecastMap({
             })
             setTooltipCoords([e.lngLat.lat, e.lngLat.lng])
             setSelectedCoords([e.lngLat.lat, e.lngLat.lng])
-        })
-
-            // Store refs
-            ; (map as any)._activeSuffix = "a"
-            ; (map as any)._isLoaded = true
-        mapRef.current = map
-
-        return () => {
-            map.remove()
         }
-    }, []) // Init once
+    })
 
-    // ESC key handler to clear selection
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === "Escape" && selectedIdRef.current) {
-                const map = mapRef.current
-                if (map) {
-                    const zoom = map.getZoom()
-                    const sourceLayer = getSourceLayer(zoom)
-                        ;["forecast-a", "forecast-b"].forEach((s) => {
-                            try {
-                                map.setFeatureState(
-                                    { source: s, sourceLayer, id: selectedIdRef.current! },
-                                    { selected: false }
-                                )
-                            } catch (err) { /* ignore */ }
-                        })
-                }
-                if (hoverDetailTimerRef.current) { clearTimeout(hoverDetailTimerRef.current); hoverDetailTimerRef.current = null }
-                selectedIdRef.current = null
-                setSelectedId(null)
-                setSelectedProps(null)
-                setFixedTooltipPos(null)
-                setFanChartData(null)
-                setHistoricalValues(undefined)
-                setComparisonData(null)
-                setComparisonHistoricalValues(undefined)
-                comparisonFetchRef.current = null
-                detailFetchRef.current = null
-                onFeatureSelect(null)
-            }
-        }
-        window.addEventListener("keydown", handleKeyDown)
-        return () => window.removeEventListener("keydown", handleKeyDown)
-    }, [onFeatureSelect])
+        // Store refs
+        ; (map as any)._activeSuffix = "a"
+        ; (map as any)._isLoaded = true
+    mapRef.current = map
 
-    // Dynamic hover outline color: amber (primary) when nothing selected,
-    // lime (comparison) when a feature is locked
-    useEffect(() => {
-        const map = mapRef.current
-        if (!map || !isLoaded) return
-        const hoverColor = selectedId ? "#a3e635" : "#fbbf24"
-        for (const suffix of ["a", "b"]) {
-            for (const lvl of GEO_LEVELS) {
-                const layerId = `forecast-outline-${lvl.name}-${suffix}`
-                if (!map.getLayer(layerId)) continue
-                try {
-                    map.setPaintProperty(layerId, "line-color", [
-                        "case",
-                        ["boolean", ["feature-state", "selected"], false],
-                        "#fbbf24",   // amber — always for locked selection
-                        ["boolean", ["feature-state", "hover"], false],
-                        hoverColor,  // amber when previewing, lime when comparing
-                        "rgba(0,0,0,0)",
-                    ])
-                } catch { /* layer may not exist yet */ }
-            }
-        }
-    }, [selectedId, isLoaded])
+    return () => {
+        map.remove()
+    }
+}, []) // Init once
 
-    // Tavus map-action handler: clear_selection, fly_to_location
-    useEffect(() => {
-        const handleTavusAction = (e: Event) => {
-            const { action, params } = (e as CustomEvent).detail || {}
-            if (action === "clear_selection") {
-                const map = mapRef.current
-                if (map && selectedIdRef.current) {
-                    const zoom = map.getZoom()
-                    const sourceLayer = getSourceLayer(zoom)
-                        ;["forecast-a", "forecast-b"].forEach((s) => {
-                            try {
-                                map.setFeatureState(
-                                    { source: s, sourceLayer, id: selectedIdRef.current! },
-                                    { selected: false }
-                                )
-                            } catch (err) { /* ignore */ }
-                        })
-                }
-                selectedIdRef.current = null
-                hoveredIdRef.current = null
-                setSelectedId(null)
-                setSelectedProps(null)
-                setTooltipData(null)
-                setFixedTooltipPos(null)
-                setSelectedCoords(null)
-                setFanChartData(null)
-                setHistoricalValues(undefined)
-                setComparisonData(null)
-                setComparisonHistoricalValues(undefined)
-                comparisonFetchRef.current = null
-                detailFetchRef.current = null
-                onFeatureSelect(null)
-            } else if (action === "clear_comparison") {
-                // Clear only the comparison overlay, keep primary selection
-                console.log('[ForecastMap] clear_comparison')
-                setComparisonData(null)
-                setComparisonHistoricalValues(undefined)
-                comparisonFetchRef.current = null
-            } else if (action === "fly_to_location" && params) {
-                const map = mapRef.current
-                if (map && params.lat && params.lng) {
-                    const targetZoom = params.zoom || 14
-                    map.flyTo({
-                        center: [params.lng, params.lat],
-                        zoom: targetZoom,
-                        duration: 2000,
+// ESC key handler to clear selection
+useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === "Escape" && selectedIdRef.current) {
+            const map = mapRef.current
+            if (map) {
+                const zoom = map.getZoom()
+                const sourceLayer = getSourceLayer(zoom)
+                    ;["forecast-a", "forecast-b"].forEach((s) => {
+                        try {
+                            map.setFeatureState(
+                                { source: s, sourceLayer, id: selectedIdRef.current! },
+                                { selected: false }
+                            )
+                        } catch (err) { /* ignore */ }
                     })
-                    // Only auto-select if there's no existing selection
-                    // fly_to_location is purely pan/zoom when a feature is already selected
-                    if (!selectedIdRef.current) {
-                        const attemptSelect = (retries: number) => {
-                            const activeSuffix = (map as any)._activeSuffix || "a"
-                            const center = map.project(map.getCenter())
-                            const allFillLayers = getAllFillLayerIds(activeSuffix).filter(id => map.getLayer(id))
-                            let features = map.queryRenderedFeatures(center, { layers: allFillLayers })
-                            if (features.length === 0) {
-                                const bbox: [maplibregl.PointLike, maplibregl.PointLike] = [
-                                    [center.x - 10, center.y - 10],
-                                    [center.x + 10, center.y + 10],
-                                ]
-                                features = map.queryRenderedFeatures(bbox, { layers: allFillLayers })
-                            }
-                            if (features.length > 0) {
-                                const feature = features[0]
-                                const sourceLayer = feature.sourceLayer || getSourceLayer(map.getZoom())
-                                const id = (feature.properties?.id || feature.id) as string
-                                if (id) {
-                                    selectedIdRef.current = id
-                                    setSelectedId(id)
-                                    setSelectedProps(feature.properties)
-                                    setSelectedCoords([params.lat, params.lng])
-                                    setTooltipCoords([params.lat, params.lng])
-                                    onFeatureSelect(id)
-                                    const centerScreen = map.project(map.getCenter())
-                                    const rect = map.getCanvas().getBoundingClientRect()
-                                    const screenX = rect.left + centerScreen.x
-                                    const screenY = rect.top + centerScreen.y
-                                    const smartPos = getSmartTooltipPos(screenX, screenY, window.innerWidth, window.innerHeight)
-                                    setFixedTooltipPos({ globalX: smartPos.x, globalY: smartPos.y })
-                                    setTooltipData({ globalX: smartPos.x, globalY: smartPos.y, properties: feature.properties })
-                                    userDraggedRef.current = false
-                                        ;["forecast-a", "forecast-b"].forEach((s) => {
-                                            try { map.setFeatureState({ source: s, sourceLayer, id }, { selected: true }) } catch { }
-                                        })
-                                    fetchForecastDetail(id, sourceLayer)
-                                }
-                            } else if (retries > 0) {
-                                console.log(`[ForecastMap] fly_to_location: No features at center, retrying... (${retries} left)`)
-                                setTimeout(() => attemptSelect(retries - 1), 1200)
-                            }
+            }
+            if (hoverDetailTimerRef.current) { clearTimeout(hoverDetailTimerRef.current); hoverDetailTimerRef.current = null }
+            selectedIdRef.current = null
+            setSelectedId(null)
+            setSelectedProps(null)
+            setFixedTooltipPos(null)
+            setFanChartData(null)
+            setHistoricalValues(undefined)
+            setComparisonData(null)
+            setComparisonHistoricalValues(undefined)
+            comparisonFetchRef.current = null
+            detailFetchRef.current = null
+            onFeatureSelect(null)
+        }
+    }
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+}, [onFeatureSelect])
+
+// Dynamic hover outline color: amber (primary) when nothing selected,
+// lime (comparison) when a feature is locked
+useEffect(() => {
+    const map = mapRef.current
+    if (!map || !isLoaded) return
+    const hoverColor = selectedId ? "#a3e635" : "#fbbf24"
+    for (const suffix of ["a", "b"]) {
+        for (const lvl of GEO_LEVELS) {
+            const layerId = `forecast-outline-${lvl.name}-${suffix}`
+            if (!map.getLayer(layerId)) continue
+            try {
+                map.setPaintProperty(layerId, "line-color", [
+                    "case",
+                    ["boolean", ["feature-state", "selected"], false],
+                    "#fbbf24",   // amber — always for locked selection
+                    ["boolean", ["feature-state", "hover"], false],
+                    hoverColor,  // amber when previewing, lime when comparing
+                    "rgba(0,0,0,0)",
+                ])
+            } catch { /* layer may not exist yet */ }
+        }
+    }
+}, [selectedId, isLoaded])
+
+// Tavus map-action handler: clear_selection, fly_to_location
+useEffect(() => {
+    const handleTavusAction = (e: Event) => {
+        const { action, params } = (e as CustomEvent).detail || {}
+        if (action === "clear_selection") {
+            const map = mapRef.current
+            if (map && selectedIdRef.current) {
+                const zoom = map.getZoom()
+                const sourceLayer = getSourceLayer(zoom)
+                    ;["forecast-a", "forecast-b"].forEach((s) => {
+                        try {
+                            map.setFeatureState(
+                                { source: s, sourceLayer, id: selectedIdRef.current! },
+                                { selected: false }
+                            )
+                        } catch (err) { /* ignore */ }
+                    })
+            }
+            selectedIdRef.current = null
+            hoveredIdRef.current = null
+            setSelectedId(null)
+            setSelectedProps(null)
+            setTooltipData(null)
+            setFixedTooltipPos(null)
+            setSelectedCoords(null)
+            setFanChartData(null)
+            setHistoricalValues(undefined)
+            setComparisonData(null)
+            setComparisonHistoricalValues(undefined)
+            comparisonFetchRef.current = null
+            detailFetchRef.current = null
+            onFeatureSelect(null)
+        } else if (action === "clear_comparison") {
+            // Clear only the comparison overlay, keep primary selection
+            console.log('[ForecastMap] clear_comparison')
+            setComparisonData(null)
+            setComparisonHistoricalValues(undefined)
+            comparisonFetchRef.current = null
+        } else if (action === "fly_to_location" && params) {
+            const map = mapRef.current
+            if (map && params.lat && params.lng) {
+                const targetZoom = params.zoom || 14
+                map.flyTo({
+                    center: [params.lng, params.lat],
+                    zoom: targetZoom,
+                    duration: 2000,
+                })
+                // Only auto-select if there's no existing selection
+                // fly_to_location is purely pan/zoom when a feature is already selected
+                if (!selectedIdRef.current) {
+                    const attemptSelect = (retries: number) => {
+                        const activeSuffix = (map as any)._activeSuffix || "a"
+                        const center = map.project(map.getCenter())
+                        const allFillLayers = getAllFillLayerIds(activeSuffix).filter(id => map.getLayer(id))
+                        let features = map.queryRenderedFeatures(center, { layers: allFillLayers })
+                        if (features.length === 0) {
+                            const bbox: [maplibregl.PointLike, maplibregl.PointLike] = [
+                                [center.x - 10, center.y - 10],
+                                [center.x + 10, center.y + 10],
+                            ]
+                            features = map.queryRenderedFeatures(bbox, { layers: allFillLayers })
                         }
-                        map.once("idle", () => attemptSelect(8))
+                        if (features.length > 0) {
+                            const feature = features[0]
+                            const sourceLayer = feature.sourceLayer || getSourceLayer(map.getZoom())
+                            const id = (feature.properties?.id || feature.id) as string
+                            if (id) {
+                                selectedIdRef.current = id
+                                setSelectedId(id)
+                                setSelectedProps(feature.properties)
+                                setSelectedCoords([params.lat, params.lng])
+                                setTooltipCoords([params.lat, params.lng])
+                                onFeatureSelect(id)
+                                const centerScreen = map.project(map.getCenter())
+                                const rect = map.getCanvas().getBoundingClientRect()
+                                const screenX = rect.left + centerScreen.x
+                                const screenY = rect.top + centerScreen.y
+                                const smartPos = getSmartTooltipPos(screenX, screenY, window.innerWidth, window.innerHeight)
+                                setFixedTooltipPos({ globalX: smartPos.x, globalY: smartPos.y })
+                                setTooltipData({ globalX: smartPos.x, globalY: smartPos.y, properties: feature.properties })
+                                userDraggedRef.current = false
+                                    ;["forecast-a", "forecast-b"].forEach((s) => {
+                                        try { map.setFeatureState({ source: s, sourceLayer, id }, { selected: true }) } catch { }
+                                    })
+                                fetchForecastDetail(id, sourceLayer)
+                            }
+                        } else if (retries > 0) {
+                            console.log(`[ForecastMap] fly_to_location: No features at center, retrying... (${retries} left)`)
+                            setTimeout(() => attemptSelect(retries - 1), 1200)
+                        }
                     }
+                    map.once("idle", () => attemptSelect(8))
                 }
-            } else if (action === "add_location_to_selection") {
-                // COMPARISON: keep primary selection, zoom to fit both, overlay comparison data
-                const result = (e as CustomEvent).detail?.result || params
-                const newLat = result?.chosen?.lat || result?.location?.lat || result?.area?.location?.lat || params?.lat
-                const newLng = result?.chosen?.lng || result?.location?.lng || result?.area?.location?.lng || params?.lng
-                const map = mapRef.current
-                if (map && newLat && newLng) {
-                    if (selectedIdRef.current && selectedCoordsRef.current) {
-                        // Primary is locked — zoom to fit both areas
-                        const [selLat, selLng] = selectedCoordsRef.current!
-                        const latMin = Math.min(selLat, newLat)
-                        const latMax = Math.max(selLat, newLat)
-                        const lngMin = Math.min(selLng, newLng)
-                        const lngMax = Math.max(selLng, newLng)
-                        const latSpan = latMax - latMin
-                        const lngSpan = lngMax - lngMin
-                        const padding = 0.3 // 30% padding
-                        // Preserve current zoom — never zoom OUT for comparison
-                        const currentZoom = map.getZoom()
-                        map.fitBounds(
-                            [
-                                [lngMin - lngSpan * padding, latMin - latSpan * padding],
-                                [lngMax + lngSpan * padding, latMax + latSpan * padding],
-                            ],
-                            { duration: 2000, maxZoom: currentZoom, minZoom: Math.max(currentZoom - 3, 9) }
-                        )
-                        // After flight, query new location and set as comparison (hover)
-                        const attemptComparison = (retries: number) => {
-                            const activeSuffix = (map as any)._activeSuffix || "a"
-                            const newPoint = map.project([newLng, newLat])
-                            // Query ALL fill layers, not just the one for current zoom
-                            const allFillLayers = getAllFillLayerIds(activeSuffix).filter(id => map.getLayer(id))
-                            let features = map.queryRenderedFeatures(newPoint, { layers: allFillLayers })
-                            if (features.length === 0) {
-                                // Try a 10px bbox around the point
-                                const bbox: [maplibregl.PointLike, maplibregl.PointLike] = [
-                                    [newPoint.x - 10, newPoint.y - 10],
-                                    [newPoint.x + 10, newPoint.y + 10],
-                                ]
-                                features = map.queryRenderedFeatures(bbox, { layers: allFillLayers })
-                            }
-                            if (features.length > 0) {
-                                const feature = features[0]
-                                const sourceLayer = feature.sourceLayer || getSourceLayer(map.getZoom())
-                                const id = (feature.properties?.id || feature.id) as string
-                                if (id && id !== selectedIdRef.current) {
-                                    // Set hover state on comparison feature
-                                    hoveredIdRef.current = id
-                                    onFeatureHover(id)
-                                        ;["forecast-a", "forecast-b"].forEach((s) => {
-                                            try { map.setFeatureState({ source: s, sourceLayer, id }, { hover: true }) } catch { }
-                                        })
-                                    // Update tooltipData.properties to trigger comparison useEffect
-                                    setTooltipData(prev => prev ? { ...prev, properties: feature.properties } : prev)
-                                    console.log(`[ForecastMap] add_location_to_selection: comparison set to ${id}`)
-                                }
-                            } else if (retries > 0) {
-                                console.log(`[ForecastMap] add_location_to_selection: No features at comparison point, retrying... (${retries} left)`)
-                                setTimeout(() => attemptComparison(retries - 1), 1200)
-                            } else {
-                                console.warn(`[ForecastMap] add_location_to_selection: Exhausted retries, no comparison features found`)
-                            }
+            }
+        } else if (action === "add_location_to_selection") {
+            // COMPARISON: keep primary selection, zoom to fit both, overlay comparison data
+            const result = (e as CustomEvent).detail?.result || params
+            const newLat = result?.chosen?.lat || result?.location?.lat || result?.area?.location?.lat || params?.lat
+            const newLng = result?.chosen?.lng || result?.location?.lng || result?.area?.location?.lng || params?.lng
+            const map = mapRef.current
+            if (map && newLat && newLng) {
+                if (selectedIdRef.current && selectedCoordsRef.current) {
+                    // Primary is locked — zoom to fit both areas
+                    const [selLat, selLng] = selectedCoordsRef.current!
+                    const latMin = Math.min(selLat, newLat)
+                    const latMax = Math.max(selLat, newLat)
+                    const lngMin = Math.min(selLng, newLng)
+                    const lngMax = Math.max(selLng, newLng)
+                    const latSpan = latMax - latMin
+                    const lngSpan = lngMax - lngMin
+                    const padding = 0.3 // 30% padding
+                    // Preserve current zoom — never zoom OUT for comparison
+                    const currentZoom = map.getZoom()
+                    map.fitBounds(
+                        [
+                            [lngMin - lngSpan * padding, latMin - latSpan * padding],
+                            [lngMax + lngSpan * padding, latMax + latSpan * padding],
+                        ],
+                        { duration: 2000, maxZoom: currentZoom, minZoom: Math.max(currentZoom - 3, 9) }
+                    )
+                    // After flight, query new location and set as comparison (hover)
+                    const attemptComparison = (retries: number) => {
+                        const activeSuffix = (map as any)._activeSuffix || "a"
+                        const newPoint = map.project([newLng, newLat])
+                        // Query ALL fill layers, not just the one for current zoom
+                        const allFillLayers = getAllFillLayerIds(activeSuffix).filter(id => map.getLayer(id))
+                        let features = map.queryRenderedFeatures(newPoint, { layers: allFillLayers })
+                        if (features.length === 0) {
+                            // Try a 10px bbox around the point
+                            const bbox: [maplibregl.PointLike, maplibregl.PointLike] = [
+                                [newPoint.x - 10, newPoint.y - 10],
+                                [newPoint.x + 10, newPoint.y + 10],
+                            ]
+                            features = map.queryRenderedFeatures(bbox, { layers: allFillLayers })
                         }
-                        map.once("idle", () => attemptComparison(8))
-                    } else {
-                        // No primary selection yet — treat as normal select
-                        map.flyTo({
-                            center: [newLng, newLat],
-                            zoom: Math.max(map.getZoom(), 13),
-                            duration: 2000,
-                        })
-                        const attemptFirst = (retries: number) => {
-                            const zoom = map.getZoom()
-                            const sourceLayer = getSourceLayer(zoom)
-                            const activeSuffix = (map as any)._activeSuffix || "a"
-                            const fillLayerId = `forecast-fill-${sourceLayer}-${activeSuffix}`
-                            const center = map.project(map.getCenter())
-                            const features = map.getLayer(fillLayerId)
-                                ? map.queryRenderedFeatures(center, { layers: [fillLayerId] })
-                                : []
-                            if (features.length > 0) {
-                                const feature = features[0]
-                                const id = (feature.properties?.id || feature.id) as string
-                                if (id) {
-                                    selectedIdRef.current = id
-                                    setSelectedId(id)
-                                    setSelectedProps(feature.properties)
-                                    setSelectedCoords([newLat, newLng])
-                                    setTooltipCoords([newLat, newLng])
-                                    onFeatureSelect(id)
-                                    const centerScreen = map.project(map.getCenter())
-                                    const rect = map.getCanvas().getBoundingClientRect()
-                                    const screenX = rect.left + centerScreen.x
-                                    const screenY = rect.top + centerScreen.y
-                                    const smartPos = getSmartTooltipPos(screenX, screenY, window.innerWidth, window.innerHeight)
-                                    setFixedTooltipPos({ globalX: smartPos.x, globalY: smartPos.y })
-                                    setTooltipData({ globalX: smartPos.x, globalY: smartPos.y, properties: feature.properties })
-                                    userDraggedRef.current = false
-                                        ;["forecast-a", "forecast-b"].forEach((s) => {
-                                            try { map.setFeatureState({ source: s, sourceLayer, id }, { selected: true }) } catch { }
-                                        })
-                                    fetchForecastDetail(id, sourceLayer)
-                                }
-                            } else if (retries > 0) {
-                                setTimeout(() => attemptFirst(retries - 1), 800)
+                        if (features.length > 0) {
+                            const feature = features[0]
+                            const sourceLayer = feature.sourceLayer || getSourceLayer(map.getZoom())
+                            const id = (feature.properties?.id || feature.id) as string
+                            if (id && id !== selectedIdRef.current) {
+                                // Set hover state on comparison feature
+                                hoveredIdRef.current = id
+                                onFeatureHover(id)
+                                    ;["forecast-a", "forecast-b"].forEach((s) => {
+                                        try { map.setFeatureState({ source: s, sourceLayer, id }, { hover: true }) } catch { }
+                                    })
+                                // Update tooltipData.properties to trigger comparison useEffect
+                                setTooltipData(prev => prev ? { ...prev, properties: feature.properties } : prev)
+                                console.log(`[ForecastMap] add_location_to_selection: comparison set to ${id}`)
                             }
+                        } else if (retries > 0) {
+                            console.log(`[ForecastMap] add_location_to_selection: No features at comparison point, retrying... (${retries} left)`)
+                            setTimeout(() => attemptComparison(retries - 1), 1200)
+                        } else {
+                            console.warn(`[ForecastMap] add_location_to_selection: Exhausted retries, no comparison features found`)
                         }
-                        map.once("idle", () => attemptFirst(8))
                     }
-                }
-            } else if (action === "location_to_area" || action === "resolve_place" || action === "get_forecast_area") {
-                // All these return lat/lng — fly to it and auto-select the center feature
-                const result = (e as CustomEvent).detail?.result || params
-                const lat = result?.chosen?.lat || result?.location?.lat || result?.area?.location?.lat || params?.lat
-                const lng = result?.chosen?.lng || result?.location?.lng || result?.area?.location?.lng || params?.lng
-                const map = mapRef.current
-                if (map && lat && lng) {
+                    map.once("idle", () => attemptComparison(8))
+                } else {
+                    // No primary selection yet — treat as normal select
                     map.flyTo({
-                        center: [lng, lat],
+                        center: [newLng, newLat],
                         zoom: Math.max(map.getZoom(), 13),
                         duration: 2000,
                     })
-                    const attemptLocSelect = (retries: number) => {
+                    const attemptFirst = (retries: number) => {
                         const zoom = map.getZoom()
                         const sourceLayer = getSourceLayer(zoom)
                         const activeSuffix = (map as any)._activeSuffix || "a"
@@ -1604,19 +1587,12 @@ export function ForecastMap({
                             const feature = features[0]
                             const id = (feature.properties?.id || feature.id) as string
                             if (id) {
-                                if (selectedIdRef.current) {
-                                    ;["forecast-a", "forecast-b"].forEach((s) => {
-                                        try { map.setFeatureState({ source: s, sourceLayer, id: selectedIdRef.current! }, { selected: false }) } catch { }
-                                    })
-                                }
                                 selectedIdRef.current = id
                                 setSelectedId(id)
                                 setSelectedProps(feature.properties)
-                                setSelectedCoords([lat, lng])
-                                setTooltipCoords([lat, lng])
+                                setSelectedCoords([newLat, newLng])
+                                setTooltipCoords([newLat, newLng])
                                 onFeatureSelect(id)
-
-                                // Position tooltip at center of viewport
                                 const centerScreen = map.project(map.getCenter())
                                 const rect = map.getCanvas().getBoundingClientRect()
                                 const screenX = rect.left + centerScreen.x
@@ -1625,671 +1601,729 @@ export function ForecastMap({
                                 setFixedTooltipPos({ globalX: smartPos.x, globalY: smartPos.y })
                                 setTooltipData({ globalX: smartPos.x, globalY: smartPos.y, properties: feature.properties })
                                 userDraggedRef.current = false
-
                                     ;["forecast-a", "forecast-b"].forEach((s) => {
                                         try { map.setFeatureState({ source: s, sourceLayer, id }, { selected: true }) } catch { }
                                     })
                                 fetchForecastDetail(id, sourceLayer)
                             }
                         } else if (retries > 0) {
-                            console.log(`[ForecastMap] location_to_area: No features at center, retrying... (${retries} left)`)
-                            setTimeout(() => attemptLocSelect(retries - 1), 800)
+                            setTimeout(() => attemptFirst(retries - 1), 800)
                         }
                     }
-                    map.once("idle", () => attemptLocSelect(8))
+                    map.once("idle", () => attemptFirst(8))
                 }
             }
-        }
-        window.addEventListener("tavus-map-action", handleTavusAction)
-        return () => window.removeEventListener("tavus-map-action", handleTavusAction)
-    }, [onFeatureSelect])
-
-    // UPDATE MODE — reactive fill-color paint
-    useEffect(() => {
-        if (!isLoaded || !mapRef.current) return
-        const map = mapRef.current
-        const newColor = buildFillColor(filters.colorMode)
-        for (const lvl of GEO_LEVELS) {
-            for (const suffix of ["a", "b"]) {
-                const layerId = `forecast-fill-${lvl.name}-${suffix}`
-                if (map.getLayer(layerId)) {
-                    map.setPaintProperty(layerId, "fill-color", newColor)
-                }
-            }
-        }
-    }, [filters.colorMode, isLoaded])
-
-    // UPDATE YEAR — Seamless A/B swap (same pattern as vector-map.tsx)
-    useEffect(() => {
-        if (!isLoaded || !mapRef.current) return
-        const map = mapRef.current
-
-        const currentSuffix = (map as any)._activeSuffix || "a"
-        const nextSuffix = currentSuffix === "a" ? "b" : "a"
-        const nextSource = `forecast-${nextSuffix}`
-        const currentSource = `forecast-${currentSuffix}`
-
-        // Update NEXT source tiles
-        const source = map.getSource(nextSource)
-        if (source && source.type === "vector") {
-            ; (source as any).setTiles([
-                `${window.location.origin}/api/forecast-tiles/{z}/{x}/{y}?originYear=${originYear}&horizonM=${horizonM}&v=6`,
-            ])
-        }
-
-        // Apply color logic to all fill layers
-        const fillColor = buildFillColor(filters.colorMode)
-
-        for (const lvl of GEO_LEVELS) {
-            ;["a", "b"].forEach((s) => {
-                const layerId = `forecast-fill-${lvl.name}-${s}`
-                if (map.getLayer(layerId)) {
-                    map.setPaintProperty(layerId, "fill-color", fillColor)
-                }
-            })
-        }
-
-        // Seamless swap
-        let swapCompleted = false
-
-        const performSwap = () => {
-            if (swapCompleted) return
-            swapCompleted = true
-
-            const latestTarget = (map as any)._targetYear
-            if (latestTarget !== year) return
-
-            // Show next, hide current — for all geo levels
-            if (!map.getStyle?.()) return // guard against hot-reload race
-            for (const lvl of GEO_LEVELS) {
-                const fillNext = `forecast-fill-${lvl.name}-${nextSuffix}`
-                const outlineNext = `forecast-outline-${lvl.name}-${nextSuffix}`
-                const fillCur = `forecast-fill-${lvl.name}-${currentSuffix}`
-                const outlineCur = `forecast-outline-${lvl.name}-${currentSuffix}`
-
-                if (map.getLayer(fillNext)) map.setLayoutProperty(fillNext, "visibility", "visible")
-                if (map.getLayer(outlineNext)) map.setLayoutProperty(outlineNext, "visibility", "visible")
-                if (map.getLayer(fillCur)) map.setLayoutProperty(fillCur, "visibility", "none")
-                if (map.getLayer(outlineCur)) map.setLayoutProperty(outlineCur, "visibility", "none")
-            }
-
-            ; (map as any)._activeSuffix = nextSuffix
-
-            // Clear the old source's tile cache to free memory
-            const oldSource = map.getSource(currentSource)
-            if (oldSource && typeof (oldSource as any).clearTiles === "function") {
-                (oldSource as any).clearTiles()
-            }
-        }
-
-        const onSourceData = (e: any) => {
-            if (
-                e.sourceId === nextSource &&
-                map.isSourceLoaded(nextSource) &&
-                e.isSourceLoaded
-            ) {
-                map.off("sourcedata", onSourceData)
-                map.once("idle", () => {
-                    requestAnimationFrame(() => {
-                        requestAnimationFrame(performSwap)
-                    })
-                })
-                setTimeout(performSwap, 600)
-            }
-        }
-
-            ; (map as any)._targetYear = year
-        map.on("sourcedata", onSourceData)
-    }, [year, isLoaded, filters.colorMode, originYear, horizonM])
-
-    // SYNC VIEWPORT
-    useEffect(() => {
-        if (!mapRef.current || !isLoaded) return
-        const map = mapRef.current
-
-        try {
-            if (map.getStyle()) {
-                const center = map.getCenter()
-                const zoom = map.getZoom()
-                if (
-                    Math.abs(center.lng - mapState.center[0]) > 0.001 ||
-                    Math.abs(center.lat - mapState.center[1]) > 0.001 ||
-                    Math.abs(zoom - mapState.zoom) > 0.1
-                ) {
-                    map.flyTo({
-                        center: [mapState.center[0], mapState.center[1]],
-                        zoom: mapState.zoom,
-                        speed: 0.8,
-                        curve: 1.42,
-                        easing: (t: number) =>
-                            t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2,
-                    })
-                }
-            }
-        } catch (e) {
-            /* map might be in transition */
-        }
-    }, [mapState.center, mapState.zoom, isLoaded])
-
-    // Determine display tooltip info
-    const displayPos = selectedId && fixedTooltipPos ? fixedTooltipPos : tooltipData
-    // When locked, show the SELECTED feature's properties (not hover)
-    const displayProps = selectedId && selectedProps ? selectedProps : tooltipData?.properties
-
-    // Effective y-domain: extend viewport range ONLY when selected/hovered
-    // feature's P50 median or historical values fall outside. P10/P90 uncertainty
-    // bands are allowed to clip — they shouldn't drive the axis scale.
-    const effectiveYDomain = useMemo<[number, number] | null>(() => {
-        if (!viewportYDomain) return null
-        const [lo, hi] = viewportYDomain
-        // Only gather P50 (median) and historical — NOT P10/P90 extremes
-        const vals: number[] = []
-        if (fanChartData?.p50) vals.push(...fanChartData.p50.filter(v => Number.isFinite(v)))
-        if (historicalValues) vals.push(...historicalValues.filter(v => Number.isFinite(v)))
-        if (comparisonData?.p50) vals.push(...comparisonData.p50.filter(v => Number.isFinite(v)))
-        if (comparisonHistoricalValues) vals.push(...comparisonHistoricalValues.filter(v => Number.isFinite(v)))
-        if (vals.length === 0) return viewportYDomain
-        const dataMin = Math.min(...vals)
-        const dataMax = Math.max(...vals)
-        // Only extend, never shrink from viewport range
-        if (dataMin >= lo && dataMax <= hi) return viewportYDomain // no extension needed
-        return [Math.min(lo, dataMin), Math.max(hi, dataMax)]
-    }, [viewportYDomain, fanChartData, historicalValues, comparisonData, comparisonHistoricalValues])
-
-    // Comparison: when locked, fetch comparison detail for hovered feature
-    // Skip updates when Shift is held (freeze current comparison)
-    useEffect(() => {
-        if (isShiftHeld) return // freeze comparison
-        if (!selectedId || !tooltipData?.properties) {
-            setComparisonData(null)
-            setComparisonHistoricalValues(undefined)
-            comparisonFetchRef.current = null
-            return
-        }
-        const hoveredId = tooltipData.properties.id as string
-        if (!hoveredId || hoveredId === selectedId) {
-            setComparisonData(null)
-            setComparisonHistoricalValues(undefined)
-            comparisonFetchRef.current = null
-            return
-        }
-        // Debounce comparison fetch
-        if (comparisonTimerRef.current) clearTimeout(comparisonTimerRef.current)
-        comparisonTimerRef.current = setTimeout(async () => {
+        } else if (action === "location_to_area" || action === "resolve_place" || action === "get_forecast_area") {
+            // All these return lat/lng — fly to it and auto-select the center feature
+            const result = (e as CustomEvent).detail?.result || params
+            const lat = result?.chosen?.lat || result?.location?.lat || result?.area?.location?.lat || params?.lat
+            const lng = result?.chosen?.lng || result?.location?.lng || result?.area?.location?.lng || params?.lng
             const map = mapRef.current
-            if (!map) return
-            const zoom = map.getZoom()
-            const level = getSourceLayer(zoom)
-            const cacheKey = `${level}:${hoveredId}`
-            if (comparisonFetchRef.current === cacheKey) return
-            comparisonFetchRef.current = cacheKey
-            // Check shared cache first
-            const cached = detailCacheRef.current.get(cacheKey)
-            if (cached) {
-                detailCacheRef.current.delete(cacheKey)
-                detailCacheRef.current.set(cacheKey, cached)
-                setComparisonData(cached.fanChart)
-                setComparisonHistoricalValues(cached.historicalValues)
-                return
-            }
-            try {
-                const res = await fetch(`/api/forecast-detail?level=${level}&id=${encodeURIComponent(hoveredId)}&originYear=${originYear}`)
-                if (!res.ok) return
-                const json = await res.json()
-                const fanChart = json.years?.length > 0 ? (json as FanChartData) : null
-                const histVals = json.historicalValues?.some((v: any) => v != null) ? json.historicalValues : undefined
-                setComparisonData(fanChart)
-                setComparisonHistoricalValues(histVals)
-                // Store in shared cache
-                detailCacheRef.current.set(cacheKey, { fanChart, historicalValues: histVals })
-                if (detailCacheRef.current.size > DETAIL_CACHE_MAX) {
-                    const oldest = detailCacheRef.current.keys().next().value
-                    if (oldest) detailCacheRef.current.delete(oldest)
-                }
-            } catch {
-                setComparisonData(null)
-                setComparisonHistoricalValues(undefined)
-            }
-        }, 200)
-        return () => {
-            if (comparisonTimerRef.current) clearTimeout(comparisonTimerRef.current)
-        }
-    }, [selectedId, tooltipData?.properties?.id, originYear, isShiftHeld])
-
-    // Viewport Y domain: compute from visible features on moveend + after initial tile load
-    useEffect(() => {
-        if (!mapRef.current || !isLoaded) return
-        const map = mapRef.current
-        const computeYDomain = () => {
-            // Freeze y-range while tooltip is locked — prevents jumps on pan
-            if (selectedIdRef.current) return false
-            const zoom = map.getZoom()
-            const sourceLayer = getSourceLayer(zoom)
-            const activeSuffix = (map as any)._activeSuffix || 'a'
-            const layerId = `forecast-fill-${sourceLayer}-${activeSuffix}`
-            if (!map.getLayer(layerId)) return false
-            const features = map.queryRenderedFeatures(undefined, { layers: [layerId] })
-            if (features.length === 0) return false
-            const allVals: number[] = []
-            for (const f of features) {
-                const p = f.properties
-                if (p?.value != null && Number.isFinite(p.value)) allVals.push(p.value)
-                if (p?.p10 != null && Number.isFinite(p.p10)) allVals.push(p.p10)
-                if (p?.p90 != null && Number.isFinite(p.p90)) allVals.push(p.p90)
-            }
-            if (allVals.length < 2) return false
-            allVals.sort((a, b) => a - b)
-            // Use P10/P90 of visible values to exclude outliers
-            const lo = allVals[Math.floor(allVals.length * 0.1)]
-            const hi = allVals[Math.ceil(allVals.length * 0.9) - 1]
-            if (lo < hi) {
-                setViewportYDomain([lo, hi])
-                return true
-            }
-            return false
-        }
-
-        map.on('moveend', computeYDomain)
-
-        // Initial tile load: tiles may not be rendered when isLoaded fires.
-        // Listen for 'idle' (fires after all tiles painted) to catch initial load.
-        let initialDone = computeYDomain()
-        if (!initialDone) {
-            const onIdle = () => {
-                if (computeYDomain()) {
-                    map.off('idle', onIdle) // success — stop listening
-                }
-            }
-            map.on('idle', onIdle)
-            // Safety: remove after 10s to avoid leaking
-            const safetyTimer = setTimeout(() => map.off('idle', onIdle), 10000)
-            return () => {
-                map.off('moveend', computeYDomain)
-                map.off('idle', onIdle)
-                clearTimeout(safetyTimer)
-            }
-        }
-
-        return () => { map.off('moveend', computeYDomain) }
-    }, [isLoaded])
-
-    return (
-        <div className={cn("relative w-full h-full", className)}>
-            <div ref={mapContainerRef} className="w-full h-full" />
-
-            {!isLoaded && (
-                <div className="absolute inset-0 flex items-center justify-center bg-background/50 backdrop-blur-sm z-50">
-                    <div className="flex flex-col items-center gap-2">
-                        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-                        <span className="text-sm font-medium">
-                            Initializing Forecast Engine...
-                        </span>
-                    </div>
-                </div>
-            )}
-
-            {studentLoading && (
-                <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 bg-black/70 backdrop-blur-sm text-white text-xs font-medium px-3 py-1.5 rounded-full flex items-center gap-2">
-                    <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Loading building forecasts…
-                </div>
-            )}
-
-            {/* Forecast Tooltip — portal-based, responsive for mobile + desktop */}
-            {isLoaded && displayPos && displayProps && createPortal(
-                <div
-                    className={cn(
-                        "z-[9999] glass-panel shadow-2xl overflow-hidden flex flex-col",
-                        isMobile
-                            ? `fixed left-0 right-0 w-full rounded-t-xl rounded-b-none border-t border-x-0 border-b-0 pointer-events-auto`
-                            : "fixed rounded-xl w-[320px]",
-                        !isMobile && (selectedId ? "pointer-events-auto cursor-move" : "pointer-events-none")
-                    )}
-                    style={isMobile ? {
-                        transform: `translateY(calc(${mobileMinimized ? '100% - 24px' : '0px'} + ${swipeDragOffset}px))`,
-                        transition: swipeTouchStart === null ? 'transform 0.3s ease-out' : 'none',
-                        height: '25vh',
-                        maxHeight: '25vh',
-                        bottom: (isChatOpen || isTavusOpen) ? '25vh' : '0px',
-                        overflowY: 'hidden',
-                    } : {
-                        left: displayPos.globalX,
-                        top: displayPos.globalY,
-                        overflow: 'hidden',
-                    }}
-                    onMouseDown={!isMobile && selectedId ? (e) => {
-                        // Don't drag when clicking interactive elements
-                        const tag = (e.target as HTMLElement)?.tagName?.toLowerCase()
-                        if (tag === 'button' || tag === 'a' || tag === 'input' || tag === 'select') return
-                        e.preventDefault()
-                        // Fall back to displayPos if fixedTooltipPos hasn't been set yet
-                        const origin = fixedTooltipPos ?? displayPos
-                        if (origin) {
-                            dragRef.current = { startX: e.clientX, startY: e.clientY, origX: origin.globalX, origY: origin.globalY }
-                        }
-                    } : undefined}
-                    onTouchStart={isMobile ? (e) => {
-                        // Skip swipe tracking if touch is on the header bar
-                        const target = e.target as HTMLElement
-                        if (target.closest('[data-tooltip-header]')) return
-                        setSwipeTouchStart(e.touches[0].clientY)
-                    } : undefined}
-                    onTouchMove={isMobile ? (e) => {
-                        if (swipeTouchStart === null) return
-                        const delta = e.touches[0].clientY - swipeTouchStart
-                        if (mobileMinimized) { if (delta < 0) setSwipeDragOffset(delta) }
-                        else { if (delta > 0) setSwipeDragOffset(delta) }
-                    } : undefined}
-                    onTouchEnd={isMobile ? () => {
-                        if (mobileMinimized) {
-                            if (swipeDragOffset < -50) setMobileMinimized(false)
-                        } else {
-                            if (swipeDragOffset > 150) {
-                                // Dismiss completely
-                                onFeatureSelect(null)
-                            } else if (swipeDragOffset > 50) {
-                                setMobileMinimized(true)
+            if (map && lat && lng) {
+                map.flyTo({
+                    center: [lng, lat],
+                    zoom: Math.max(map.getZoom(), 13),
+                    duration: 2000,
+                })
+                const attemptLocSelect = (retries: number) => {
+                    const zoom = map.getZoom()
+                    const sourceLayer = getSourceLayer(zoom)
+                    const activeSuffix = (map as any)._activeSuffix || "a"
+                    const fillLayerId = `forecast-fill-${sourceLayer}-${activeSuffix}`
+                    const center = map.project(map.getCenter())
+                    const features = map.getLayer(fillLayerId)
+                        ? map.queryRenderedFeatures(center, { layers: [fillLayerId] })
+                        : []
+                    if (features.length > 0) {
+                        const feature = features[0]
+                        const id = (feature.properties?.id || feature.id) as string
+                        if (id) {
+                            if (selectedIdRef.current) {
+                                ;["forecast-a", "forecast-b"].forEach((s) => {
+                                    try { map.setFeatureState({ source: s, sourceLayer, id: selectedIdRef.current! }, { selected: false }) } catch { }
+                                })
                             }
+                            selectedIdRef.current = id
+                            setSelectedId(id)
+                            setSelectedProps(feature.properties)
+                            setSelectedCoords([lat, lng])
+                            setTooltipCoords([lat, lng])
+                            onFeatureSelect(id)
+
+                            // Position tooltip at center of viewport
+                            const centerScreen = map.project(map.getCenter())
+                            const rect = map.getCanvas().getBoundingClientRect()
+                            const screenX = rect.left + centerScreen.x
+                            const screenY = rect.top + centerScreen.y
+                            const smartPos = getSmartTooltipPos(screenX, screenY, window.innerWidth, window.innerHeight)
+                            setFixedTooltipPos({ globalX: smartPos.x, globalY: smartPos.y })
+                            setTooltipData({ globalX: smartPos.x, globalY: smartPos.y, properties: feature.properties })
+                            userDraggedRef.current = false
+
+                                ;["forecast-a", "forecast-b"].forEach((s) => {
+                                    try { map.setFeatureState({ source: s, sourceLayer, id }, { selected: true }) } catch { }
+                                })
+                            fetchForecastDetail(id, sourceLayer)
                         }
-                        setSwipeDragOffset(0)
-                        setSwipeTouchStart(null)
-                    } : undefined}
-                >
-                    {/* Mobile Header — compact, at top of tooltip */}
-                    {isMobile && (
-                        <div
-                            className="w-full flex items-center justify-between px-2 pt-1 h-8 bg-muted/40 backdrop-blur-md border-b border-border/50 shrink-0"
-                            data-tooltip-header="true"
+                    } else if (retries > 0) {
+                        console.log(`[ForecastMap] location_to_area: No features at center, retrying... (${retries} left)`)
+                        setTimeout(() => attemptLocSelect(retries - 1), 800)
+                    }
+                }
+                map.once("idle", () => attemptLocSelect(8))
+            }
+        }
+    }
+    window.addEventListener("tavus-map-action", handleTavusAction)
+    return () => window.removeEventListener("tavus-map-action", handleTavusAction)
+}, [onFeatureSelect])
+
+// UPDATE MODE — reactive fill-color paint
+useEffect(() => {
+    if (!isLoaded || !mapRef.current) return
+    const map = mapRef.current
+    const newColor = buildFillColor(filters.colorMode)
+    for (const lvl of GEO_LEVELS) {
+        for (const suffix of ["a", "b"]) {
+            const layerId = `forecast-fill-${lvl.name}-${suffix}`
+            if (map.getLayer(layerId)) {
+                map.setPaintProperty(layerId, "fill-color", newColor)
+            }
+        }
+    }
+}, [filters.colorMode, isLoaded])
+
+// UPDATE YEAR — Seamless A/B swap (same pattern as vector-map.tsx)
+useEffect(() => {
+    if (!isLoaded || !mapRef.current) return
+    const map = mapRef.current
+
+    const currentSuffix = (map as any)._activeSuffix || "a"
+    const nextSuffix = currentSuffix === "a" ? "b" : "a"
+    const nextSource = `forecast-${nextSuffix}`
+    const currentSource = `forecast-${currentSuffix}`
+
+    // Update NEXT source tiles
+    const source = map.getSource(nextSource)
+    if (source && source.type === "vector") {
+        ; (source as any).setTiles([
+            `${window.location.origin}/api/forecast-tiles/{z}/{x}/{y}?originYear=${originYear}&horizonM=${horizonM}&v=6`,
+        ])
+    }
+
+    // Apply color logic to all fill layers
+    const fillColor = buildFillColor(filters.colorMode)
+
+    for (const lvl of GEO_LEVELS) {
+        ;["a", "b"].forEach((s) => {
+            const layerId = `forecast-fill-${lvl.name}-${s}`
+            if (map.getLayer(layerId)) {
+                map.setPaintProperty(layerId, "fill-color", fillColor)
+            }
+        })
+    }
+
+    // Seamless swap
+    let swapCompleted = false
+
+    const performSwap = () => {
+        if (swapCompleted) return
+        swapCompleted = true
+
+        const latestTarget = (map as any)._targetYear
+        if (latestTarget !== year) return
+
+        // Show next, hide current — for all geo levels
+        if (!map.getStyle?.()) return // guard against hot-reload race
+        for (const lvl of GEO_LEVELS) {
+            const fillNext = `forecast-fill-${lvl.name}-${nextSuffix}`
+            const outlineNext = `forecast-outline-${lvl.name}-${nextSuffix}`
+            const fillCur = `forecast-fill-${lvl.name}-${currentSuffix}`
+            const outlineCur = `forecast-outline-${lvl.name}-${currentSuffix}`
+
+            if (map.getLayer(fillNext)) map.setLayoutProperty(fillNext, "visibility", "visible")
+            if (map.getLayer(outlineNext)) map.setLayoutProperty(outlineNext, "visibility", "visible")
+            if (map.getLayer(fillCur)) map.setLayoutProperty(fillCur, "visibility", "none")
+            if (map.getLayer(outlineCur)) map.setLayoutProperty(outlineCur, "visibility", "none")
+        }
+
+        ; (map as any)._activeSuffix = nextSuffix
+
+        // Clear the old source's tile cache to free memory
+        const oldSource = map.getSource(currentSource)
+        if (oldSource && typeof (oldSource as any).clearTiles === "function") {
+            (oldSource as any).clearTiles()
+        }
+    }
+
+    const onSourceData = (e: any) => {
+        if (
+            e.sourceId === nextSource &&
+            map.isSourceLoaded(nextSource) &&
+            e.isSourceLoaded
+        ) {
+            map.off("sourcedata", onSourceData)
+            map.once("idle", () => {
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(performSwap)
+                })
+            })
+            setTimeout(performSwap, 600)
+        }
+    }
+
+        ; (map as any)._targetYear = year
+    map.on("sourcedata", onSourceData)
+}, [year, isLoaded, filters.colorMode, originYear, horizonM])
+
+// SYNC VIEWPORT
+useEffect(() => {
+    if (!mapRef.current || !isLoaded) return
+    const map = mapRef.current
+
+    try {
+        if (map.getStyle()) {
+            const center = map.getCenter()
+            const zoom = map.getZoom()
+            if (
+                Math.abs(center.lng - mapState.center[0]) > 0.001 ||
+                Math.abs(center.lat - mapState.center[1]) > 0.001 ||
+                Math.abs(zoom - mapState.zoom) > 0.1
+            ) {
+                map.flyTo({
+                    center: [mapState.center[0], mapState.center[1]],
+                    zoom: mapState.zoom,
+                    speed: 0.8,
+                    curve: 1.42,
+                    easing: (t: number) =>
+                        t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2,
+                })
+            }
+        }
+    } catch (e) {
+        /* map might be in transition */
+    }
+}, [mapState.center, mapState.zoom, isLoaded])
+
+// Determine display tooltip info
+const displayPos = selectedId && fixedTooltipPos ? fixedTooltipPos : tooltipData
+// When locked, show the SELECTED feature's properties (not hover)
+const displayProps = selectedId && selectedProps ? selectedProps : tooltipData?.properties
+
+// Effective y-domain: extend viewport range ONLY when selected/hovered
+// feature's P50 median or historical values fall outside. P10/P90 uncertainty
+// bands are allowed to clip — they shouldn't drive the axis scale.
+const effectiveYDomain = useMemo<[number, number] | null>(() => {
+    if (!viewportYDomain) return null
+    const [lo, hi] = viewportYDomain
+    // Only gather P50 (median) and historical — NOT P10/P90 extremes
+    const vals: number[] = []
+    if (fanChartData?.p50) vals.push(...fanChartData.p50.filter(v => Number.isFinite(v)))
+    if (historicalValues) vals.push(...historicalValues.filter(v => Number.isFinite(v)))
+    if (comparisonData?.p50) vals.push(...comparisonData.p50.filter(v => Number.isFinite(v)))
+    if (comparisonHistoricalValues) vals.push(...comparisonHistoricalValues.filter(v => Number.isFinite(v)))
+    if (vals.length === 0) return viewportYDomain
+    const dataMin = Math.min(...vals)
+    const dataMax = Math.max(...vals)
+    // Only extend, never shrink from viewport range
+    if (dataMin >= lo && dataMax <= hi) return viewportYDomain // no extension needed
+    return [Math.min(lo, dataMin), Math.max(hi, dataMax)]
+}, [viewportYDomain, fanChartData, historicalValues, comparisonData, comparisonHistoricalValues])
+
+// Comparison: when locked, fetch comparison detail for hovered feature
+// Skip updates when Shift is held (freeze current comparison)
+useEffect(() => {
+    if (isShiftHeld) return // freeze comparison
+    if (!selectedId || !tooltipData?.properties) {
+        setComparisonData(null)
+        setComparisonHistoricalValues(undefined)
+        comparisonFetchRef.current = null
+        return
+    }
+    const hoveredId = tooltipData.properties.id as string
+    if (!hoveredId || hoveredId === selectedId) {
+        setComparisonData(null)
+        setComparisonHistoricalValues(undefined)
+        comparisonFetchRef.current = null
+        return
+    }
+    // Debounce comparison fetch
+    if (comparisonTimerRef.current) clearTimeout(comparisonTimerRef.current)
+    comparisonTimerRef.current = setTimeout(async () => {
+        const map = mapRef.current
+        if (!map) return
+        const zoom = map.getZoom()
+        const level = getSourceLayer(zoom)
+        const cacheKey = `${level}:${hoveredId}`
+        if (comparisonFetchRef.current === cacheKey) return
+        comparisonFetchRef.current = cacheKey
+        // Check shared cache first
+        const cached = detailCacheRef.current.get(cacheKey)
+        if (cached) {
+            detailCacheRef.current.delete(cacheKey)
+            detailCacheRef.current.set(cacheKey, cached)
+            setComparisonData(cached.fanChart)
+            setComparisonHistoricalValues(cached.historicalValues)
+            return
+        }
+        try {
+            const res = await fetch(`/api/forecast-detail?level=${level}&id=${encodeURIComponent(hoveredId)}&originYear=${originYear}`)
+            if (!res.ok) return
+            const json = await res.json()
+            const fanChart = json.years?.length > 0 ? (json as FanChartData) : null
+            const histVals = json.historicalValues?.some((v: any) => v != null) ? json.historicalValues : undefined
+            setComparisonData(fanChart)
+            setComparisonHistoricalValues(histVals)
+            // Store in shared cache
+            detailCacheRef.current.set(cacheKey, { fanChart, historicalValues: histVals })
+            if (detailCacheRef.current.size > DETAIL_CACHE_MAX) {
+                const oldest = detailCacheRef.current.keys().next().value
+                if (oldest) detailCacheRef.current.delete(oldest)
+            }
+        } catch {
+            setComparisonData(null)
+            setComparisonHistoricalValues(undefined)
+        }
+    }, 200)
+    return () => {
+        if (comparisonTimerRef.current) clearTimeout(comparisonTimerRef.current)
+    }
+}, [selectedId, tooltipData?.properties?.id, originYear, isShiftHeld])
+
+// Viewport Y domain: compute from visible features on moveend + after initial tile load
+useEffect(() => {
+    if (!mapRef.current || !isLoaded) return
+    const map = mapRef.current
+    const computeYDomain = () => {
+        // Freeze y-range while tooltip is locked — prevents jumps on pan
+        if (selectedIdRef.current) return false
+        const zoom = map.getZoom()
+        const sourceLayer = getSourceLayer(zoom)
+        const activeSuffix = (map as any)._activeSuffix || 'a'
+        const layerId = `forecast-fill-${sourceLayer}-${activeSuffix}`
+        if (!map.getLayer(layerId)) return false
+        const features = map.queryRenderedFeatures(undefined, { layers: [layerId] })
+        if (features.length === 0) return false
+        const allVals: number[] = []
+        for (const f of features) {
+            const p = f.properties
+            if (p?.value != null && Number.isFinite(p.value)) allVals.push(p.value)
+            if (p?.p10 != null && Number.isFinite(p.p10)) allVals.push(p.p10)
+            if (p?.p90 != null && Number.isFinite(p.p90)) allVals.push(p.p90)
+        }
+        if (allVals.length < 2) return false
+        allVals.sort((a, b) => a - b)
+        // Use P10/P90 of visible values to exclude outliers
+        const lo = allVals[Math.floor(allVals.length * 0.1)]
+        const hi = allVals[Math.ceil(allVals.length * 0.9) - 1]
+        if (lo < hi) {
+            setViewportYDomain([lo, hi])
+            return true
+        }
+        return false
+    }
+
+    map.on('moveend', computeYDomain)
+
+    // Initial tile load: tiles may not be rendered when isLoaded fires.
+    // Listen for 'idle' (fires after all tiles painted) to catch initial load.
+    let initialDone = computeYDomain()
+    if (!initialDone) {
+        const onIdle = () => {
+            if (computeYDomain()) {
+                map.off('idle', onIdle) // success — stop listening
+            }
+        }
+        map.on('idle', onIdle)
+        // Safety: remove after 10s to avoid leaking
+        const safetyTimer = setTimeout(() => map.off('idle', onIdle), 10000)
+        return () => {
+            map.off('moveend', computeYDomain)
+            map.off('idle', onIdle)
+            clearTimeout(safetyTimer)
+        }
+    }
+
+    return () => { map.off('moveend', computeYDomain) }
+}, [isLoaded])
+
+return (
+    <div className={cn("relative w-full h-full", className)}>
+        <div ref={mapContainerRef} className="w-full h-full" />
+
+        {!isLoaded && (
+            <div className="absolute inset-0 flex items-center justify-center bg-background/50 backdrop-blur-sm z-50">
+                <div className="flex flex-col items-center gap-2">
+                    <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+                    <span className="text-sm font-medium">
+                        Initializing Forecast Engine...
+                    </span>
+                </div>
+            </div>
+        )}
+
+        {studentLoading && (
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 bg-black/70 backdrop-blur-sm text-white text-xs font-medium px-3 py-1.5 rounded-full flex items-center gap-2">
+                <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                Loading building forecasts…
+            </div>
+        )}
+
+        {/* Forecast Tooltip — portal-based, responsive for mobile + desktop */}
+        {isLoaded && displayPos && displayProps && createPortal(
+            <div
+                className={cn(
+                    "z-[9999] glass-panel shadow-2xl overflow-hidden flex flex-col",
+                    isMobile
+                        ? `fixed left-0 right-0 w-full rounded-t-xl rounded-b-none border-t border-x-0 border-b-0 pointer-events-auto`
+                        : "fixed rounded-xl w-[320px]",
+                    !isMobile && (selectedId ? "pointer-events-auto cursor-move" : "pointer-events-none")
+                )}
+                style={isMobile ? {
+                    transform: `translateY(calc(${mobileMinimized ? '100% - 24px' : '0px'} + ${swipeDragOffset}px))`,
+                    transition: swipeTouchStart === null ? 'transform 0.3s ease-out' : 'none',
+                    height: '25vh',
+                    maxHeight: '25vh',
+                    bottom: (isChatOpen || isTavusOpen) ? '25vh' : '0px',
+                    overflowY: 'hidden',
+                } : {
+                    left: displayPos.globalX,
+                    top: displayPos.globalY,
+                    overflow: 'hidden',
+                }}
+                onMouseDown={!isMobile && selectedId ? (e) => {
+                    // Don't drag when clicking interactive elements
+                    const tag = (e.target as HTMLElement)?.tagName?.toLowerCase()
+                    if (tag === 'button' || tag === 'a' || tag === 'input' || tag === 'select') return
+                    e.preventDefault()
+                    // Fall back to displayPos if fixedTooltipPos hasn't been set yet
+                    const origin = fixedTooltipPos ?? displayPos
+                    if (origin) {
+                        dragRef.current = { startX: e.clientX, startY: e.clientY, origX: origin.globalX, origY: origin.globalY }
+                    }
+                } : undefined}
+                onTouchStart={isMobile ? (e) => {
+                    // Skip swipe tracking if touch is on the header bar
+                    const target = e.target as HTMLElement
+                    if (target.closest('[data-tooltip-header]')) return
+                    setSwipeTouchStart(e.touches[0].clientY)
+                } : undefined}
+                onTouchMove={isMobile ? (e) => {
+                    if (swipeTouchStart === null) return
+                    const delta = e.touches[0].clientY - swipeTouchStart
+                    if (mobileMinimized) { if (delta < 0) setSwipeDragOffset(delta) }
+                    else { if (delta > 0) setSwipeDragOffset(delta) }
+                } : undefined}
+                onTouchEnd={isMobile ? () => {
+                    if (mobileMinimized) {
+                        if (swipeDragOffset < -50) setMobileMinimized(false)
+                    } else {
+                        if (swipeDragOffset > 150) {
+                            // Dismiss completely
+                            onFeatureSelect(null)
+                        } else if (swipeDragOffset > 50) {
+                            setMobileMinimized(true)
+                        }
+                    }
+                    setSwipeDragOffset(0)
+                    setSwipeTouchStart(null)
+                } : undefined}
+            >
+                {/* Mobile Header — compact, at top of tooltip */}
+                {isMobile && (
+                    <div
+                        className="w-full flex items-center justify-between px-2 pt-1 h-8 bg-muted/40 backdrop-blur-md border-b border-border/50 shrink-0"
+                        data-tooltip-header="true"
+                    >
+                        <div className="flex items-center gap-1.5">
+                            <HomecastrLogo variant="horizontal" size={14} />
+                            <span className="px-1 py-0.5 bg-violet-500/20 text-violet-400 text-[7px] font-semibold uppercase tracking-wider rounded">Forecast</span>
+                        </div>
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                e.preventDefault();
+                                selectedIdRef.current = null;
+                                setSelectedId(null);
+                                hoveredIdRef.current = null;
+                                setTooltipData(null);
+                                setFixedTooltipPos(null);
+                                setSelectedCoords(null);
+                                onFeatureSelect(null);
+                            }}
+                            className="w-6 h-6 flex items-center justify-center rounded-full active:bg-muted/60 text-muted-foreground"
+                            aria-label="Close tooltip"
+                            style={{ touchAction: 'manipulation' }}
                         >
+                            <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ pointerEvents: 'none' }}>
+                                <line x1="2" y1="2" x2="10" y2="10" /><line x1="10" y1="2" x2="2" y2="10" />
+                            </svg>
+                        </button>
+                    </div>
+                )}
+
+                {/* Header - matching MapTooltip (hidden on mobile) */}
+                {!isMobile && (
+                    <>
+                        <div
+                            className="flex items-center justify-between px-3 py-2 border-b border-border/50 bg-muted/40 backdrop-blur-md select-none"
+                        >
+                            <div className="flex items-center gap-2">
+                                <HomecastrLogo variant="horizontal" size={18} />
+                                <span className={cn(
+                                    "px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wider rounded",
+                                    year > 2026
+                                        ? "bg-violet-500/20 text-violet-400"
+                                        : "bg-sky-500/20 text-sky-400"
+                                )}>{year > 2026 ? "Forecast" : "Historical"}</span>
+                                {selectedId && (
+                                    <span className="px-1.5 py-0.5 bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 text-[8px] font-semibold uppercase tracking-wider rounded">Locked</span>
+                                )}
+                            </div>
                             <div className="flex items-center gap-1.5">
-                                <HomecastrLogo variant="horizontal" size={14} />
-                                <span className="px-1 py-0.5 bg-violet-500/20 text-violet-400 text-[7px] font-semibold uppercase tracking-wider rounded">Forecast</span>
-                            </div>
-                            <button
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    e.preventDefault();
-                                    selectedIdRef.current = null;
-                                    setSelectedId(null);
-                                    hoveredIdRef.current = null;
-                                    setTooltipData(null);
-                                    setFixedTooltipPos(null);
-                                    setSelectedCoords(null);
-                                    onFeatureSelect(null);
-                                }}
-                                className="w-6 h-6 flex items-center justify-center rounded-full active:bg-muted/60 text-muted-foreground"
-                                aria-label="Close tooltip"
-                                style={{ touchAction: 'manipulation' }}
-                            >
-                                <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ pointerEvents: 'none' }}>
-                                    <line x1="2" y1="2" x2="10" y2="10" /><line x1="10" y1="2" x2="2" y2="10" />
-                                </svg>
-                            </button>
-                        </div>
-                    )}
-
-                    {/* Header - matching MapTooltip (hidden on mobile) */}
-                    {!isMobile && (
-                        <>
-                            <div
-                                className="flex items-center justify-between px-3 py-2 border-b border-border/50 bg-muted/40 backdrop-blur-md select-none"
-                            >
-                                <div className="flex items-center gap-2">
-                                    <HomecastrLogo variant="horizontal" size={18} />
-                                    <span className={cn(
-                                        "px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wider rounded",
-                                        year > 2026
-                                            ? "bg-violet-500/20 text-violet-400"
-                                            : "bg-sky-500/20 text-sky-400"
-                                    )}>{year > 2026 ? "Forecast" : "Historical"}</span>
-                                    {selectedId && (
-                                        <span className="px-1.5 py-0.5 bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 text-[8px] font-semibold uppercase tracking-wider rounded">Locked</span>
-                                    )}
-                                </div>
-                                <div className="flex items-center gap-1.5">
-                                    {selectedId && selectedCoordsRef.current && (
-                                        <button
-                                            title="Re-center on selection"
-                                            onClick={() => {
-                                                const coords = selectedCoordsRef.current
-                                                if (coords && mapRef.current) {
-                                                    mapRef.current.flyTo({ center: [coords[1], coords[0]], speed: 1.2 })
-                                                }
-                                            }}
-                                            className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium text-primary bg-primary/10 hover:bg-primary/20 transition-colors"
-                                        >
-                                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><line x1="12" y1="2" x2="12" y2="6" /><line x1="12" y1="18" x2="12" y2="22" /><line x1="2" y1="12" x2="6" y2="12" /><line x1="18" y1="12" x2="22" y2="12" /></svg>
-                                            Find
-                                        </button>
-                                    )}
-                                    {selectedId && <span className="text-[9px] text-muted-foreground">ESC to exit</span>}
-                                </div>
-                            </div>
-
-                            {/* Subheader - geography level */}
-                            <div className="p-3 border-b border-border/50 bg-muted/30">
-                                <div className="flex justify-between items-start">
-                                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">
-                                        {getLevelLabel(mapRef.current?.getZoom() || 10)} Scale
-                                    </div>
-                                    <div className="text-[9px] px-1.5 py-0.5 bg-primary/10 text-primary rounded-full font-bold">
-                                        {displayProps.n != null ? `${displayProps.n} Prop` : ""}
-                                    </div>
-                                </div>
-                                <div className="font-semibold text-xs text-foreground truncate">
-                                    {geocodedName || displayProps.id}
-                                </div>
-                                {geocodedName && !geocodedName.startsWith('ZIP') && (
-                                    <div className="font-mono text-[9px] text-muted-foreground/60 truncate">
-                                        {displayProps.id}
-                                    </div>
+                                {selectedId && selectedCoordsRef.current && (
+                                    <button
+                                        title="Re-center on selection"
+                                        onClick={() => {
+                                            const coords = selectedCoordsRef.current
+                                            if (coords && mapRef.current) {
+                                                mapRef.current.flyTo({ center: [coords[1], coords[0]], speed: 1.2 })
+                                            }
+                                        }}
+                                        className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium text-primary bg-primary/10 hover:bg-primary/20 transition-colors"
+                                    >
+                                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><line x1="12" y1="2" x2="12" y2="6" /><line x1="12" y1="18" x2="12" y2="22" /><line x1="2" y1="12" x2="6" y2="12" /><line x1="18" y1="12" x2="22" y2="12" /></svg>
+                                        Find
+                                    </button>
                                 )}
-                                {comparisonData && tooltipData?.properties?.id && tooltipData.properties.id !== selectedId && (
-                                    <div className="mt-1 flex items-center gap-1">
-                                        <span className="px-1.5 py-0.5 bg-lime-500/20 text-lime-400 text-[8px] font-semibold uppercase tracking-wider rounded">
-                                            vs {comparisonGeocodedName && comparisonGeocodedName !== geocodedName ? comparisonGeocodedName : tooltipData.properties.id}
-                                        </span>
-                                    </div>
-                                )}
-                            </div>
-                        </>
-                    )}
-
-                    {/* Street View Carousel — hidden when keyboard is open on mobile */}
-                    {isMobile && !(isKeyboardOpen) ? (
-                        /* Mobile: Side-by-side — StreetView left, Chart right */
-                        <div className="flex flex-row flex-1 min-h-0 overflow-hidden">
-                            {/* StreetView — left half (always visible, shows loading placeholder) */}
-                            <div className="w-1/2 h-full overflow-hidden">
-                                {process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY && (selectedId ? selectedCoords : (hoverDwell ? tooltipCoords : null)) ? (
-                                    <StreetViewCarousel
-                                        h3Ids={[]}
-                                        apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY}
-                                        coordinates={(selectedId ? selectedCoords : tooltipCoords)!}
-                                    />
-                                ) : (
-                                    /* Loading placeholder while dwell timer is active */
-                                    <div className="w-full h-full bg-zinc-900/80 flex flex-col items-center justify-center gap-2">
-                                        <div className="w-6 h-6 border-2 border-white/20 border-t-white/60 rounded-full animate-spin" />
-                                        <span className="text-[10px] text-white/40 uppercase tracking-wider">Street View</span>
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Chart — right half */}
-                            <div className="w-1/2 h-full overflow-hidden flex flex-col">
-                                {(() => {
-                                    const currentVal = historicalValues?.[historicalValues.length - 1] ?? null
-                                    const forecastVal = displayProps.p50 ?? displayProps.value ?? null
-                                    const isPast = year < originYear + 1
-                                    const isPresent = year === originYear + 1 // 2026 = "now"
-                                    const leftLabel = isPresent ? "Now" : isPast ? String(year) : "Now"
-                                    const leftVal = isPresent ? currentVal : isPast ? forecastVal : currentVal
-                                    const rightLabel = isPresent ? String(year) : isPast ? "Now" : String(year)
-                                    const rightVal = isPresent ? currentVal : isPast ? currentVal : forecastVal
-                                    const pctBase = isPresent ? null : isPast ? forecastVal : currentVal
-                                    const pctTarget = isPresent ? null : isPast ? currentVal : forecastVal
-                                    const pctChange = pctBase && pctTarget ? ((pctTarget - pctBase) / pctBase * 100) : null
-                                    return (
-                                        <div className="relative w-full flex-1 h-full">
-                                            {/* Full-width chart */}
-                                            <div className="w-full h-full">
-                                                {fanChartData ? (
-                                                    <FanChart data={fanChartData} currentYear={year} height={200} historicalValues={historicalValues} comparisonData={comparisonData} comparisonHistoricalValues={comparisonHistoricalValues} yDomain={effectiveYDomain} />
-                                                ) : isLoadingDetail ? (
-                                                    <div className="h-full flex items-center justify-center">
-                                                        <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-                                                    </div>
-                                                ) : null}
-                                                {/* Overlaid stat badges */}
-                                                <div className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-background/80 backdrop-blur-sm border border-border/30">
-                                                    <div className="text-[7px] uppercase tracking-wider text-muted-foreground font-semibold">{leftLabel}</div>
-                                                    <div className="text-[10px] font-bold text-foreground">{formatValue(leftVal)}</div>
-                                                </div>
-                                                {!isPresent && (
-                                                    <div className="absolute top-1 right-1 px-1.5 py-0.5 rounded bg-background/80 backdrop-blur-sm border border-border/30 text-right">
-                                                        <div className="text-[7px] uppercase tracking-wider text-muted-foreground font-semibold">{rightLabel}</div>
-                                                        <div className="text-[10px] font-bold text-foreground">{formatValue(rightVal)}</div>
-                                                        {pctChange != null && (
-                                                            <div className={`text-[8px] font-bold ${pctChange >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                                                                {pctChange >= 0 ? '▲' : '▼'} {Math.abs(pctChange).toFixed(1)}%
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    )
-                                })()}
+                                {selectedId && <span className="text-[9px] text-muted-foreground">ESC to exit</span>}
                             </div>
                         </div>
-                    ) : (
-                        <>
-                            {/* Desktop: StreetView above chart */}
-                            {!(isMobile && isKeyboardOpen) && process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY && (selectedId ? selectedCoords : (hoverDwell ? tooltipCoords : null)) && (
+
+                        {/* Subheader - geography level */}
+                        <div className="p-3 border-b border-border/50 bg-muted/30">
+                            <div className="flex justify-between items-start">
+                                <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">
+                                    {getLevelLabel(mapRef.current?.getZoom() || 10)} Scale
+                                </div>
+                                <div className="text-[9px] px-1.5 py-0.5 bg-primary/10 text-primary rounded-full font-bold">
+                                    {displayProps.n != null ? `${displayProps.n} Prop` : ""}
+                                </div>
+                            </div>
+                            <div className="font-semibold text-xs text-foreground truncate">
+                                {geocodedName || displayProps.id}
+                            </div>
+                            {geocodedName && !geocodedName.startsWith('ZIP') && (
+                                <div className="font-mono text-[9px] text-muted-foreground/60 truncate">
+                                    {displayProps.id}
+                                </div>
+                            )}
+                            {comparisonData && tooltipData?.properties?.id && tooltipData.properties.id !== selectedId && (
+                                <div className="mt-1 flex items-center gap-1">
+                                    <span className="px-1.5 py-0.5 bg-lime-500/20 text-lime-400 text-[8px] font-semibold uppercase tracking-wider rounded">
+                                        vs {comparisonGeocodedName && comparisonGeocodedName !== geocodedName ? comparisonGeocodedName : tooltipData.properties.id}
+                                    </span>
+                                </div>
+                            )}
+                        </div>
+                    </>
+                )}
+
+                {/* Street View Carousel — hidden when keyboard is open on mobile */}
+                {isMobile && !(isKeyboardOpen) ? (
+                    /* Mobile: Side-by-side — StreetView left, Chart right */
+                    <div className="flex flex-row flex-1 min-h-0 overflow-hidden">
+                        {/* StreetView — left half (always visible, shows loading placeholder) */}
+                        <div className="w-1/2 h-full overflow-hidden">
+                            {process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY && (selectedId ? selectedCoords : (hoverDwell ? tooltipCoords : null)) ? (
                                 <StreetViewCarousel
                                     h3Ids={[]}
                                     apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY}
                                     coordinates={(selectedId ? selectedCoords : tooltipCoords)!}
                                 />
+                            ) : (
+                                /* Loading placeholder while dwell timer is active */
+                                <div className="w-full h-full bg-zinc-900/80 flex flex-col items-center justify-center gap-2">
+                                    <div className="w-6 h-6 border-2 border-white/20 border-t-white/60 rounded-full animate-spin" />
+                                    <span className="text-[10px] text-white/40 uppercase tracking-wider">Street View</span>
+                                </div>
                             )}
-                            {/* Desktop Layout: Values above, full-width chart below */}
-                            <div className="p-4 space-y-3">
-                                {/* Current → Forecast header with % change */}
-                                {(() => {
-                                    const currentVal = historicalValues?.[historicalValues.length - 1] ?? null
-                                    // At zcta/tract/block zoom levels the tile stores the area median as p50.
-                                    // At parcel level, value is the individual estimate; p50 may not exist.
-                                    const forecastVal = displayProps.p50 ?? displayProps.value ?? null
-                                    const isPast = year < originYear + 1
-                                    const isPresent = year === originYear + 1 // 2026 = "now"
-                                    const leftLabel = isPresent ? "Now" : isPast ? String(year) : "Now"
-                                    const leftVal = isPresent ? currentVal : isPast ? forecastVal : currentVal
-                                    const rightLabel = isPresent ? String(year) : isPast ? "Now" : String(year)
-                                    const rightVal = isPresent ? currentVal : isPast ? currentVal : forecastVal
-                                    const pctBase = isPresent ? null : isPast ? forecastVal : currentVal
-                                    const pctTarget = isPresent ? null : isPast ? currentVal : forecastVal
-                                    const pctChange = pctBase && pctTarget ? ((pctTarget - pctBase) / pctBase * 100) : null
-                                    return (
-                                        <div className="flex items-center justify-between gap-3">
-                                            <div className="text-center flex-1">
-                                                <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">{leftLabel}</div>
-                                                <div className="text-lg font-bold text-foreground tracking-tight">{formatValue(leftVal)}</div>
-                                            </div>
-                                            <div className="text-center shrink-0">
-                                                {pctChange != null && (
-                                                    <div className={`text-sm font-bold ${pctChange >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                                                        {pctChange >= 0 ? '▲' : '▼'} {Math.abs(pctChange).toFixed(1)}%
-                                                    </div>
-                                                )}
-                                                <div className="text-[9px] text-muted-foreground">→ {rightLabel}</div>
-                                            </div>
-                                            <div className="text-center flex-1">
-                                                <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">{rightLabel}</div>
-                                                <div className="text-lg font-bold text-foreground tracking-tight">{formatValue(rightVal)}</div>
-                                            </div>
-                                        </div>
-                                    )
-                                })()}
+                        </div>
 
-                                {/* Fan Chart full-width with P-values overlaid top-right */}
-                                <div className="relative h-52 -mx-2">
-                                    {fanChartData ? (
-                                        <FanChart
-                                            data={fanChartData}
-                                            currentYear={year}
-                                            height={200}
-                                            historicalValues={historicalValues}
-                                            comparisonData={comparisonData}
-                                            comparisonHistoricalValues={comparisonHistoricalValues}
-                                            yDomain={effectiveYDomain}
-                                        />
-                                    ) : isLoadingDetail ? (
-                                        <div className="h-full flex items-center justify-center">
-                                            <div className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                        {/* Chart — right half */}
+                        <div className="w-1/2 h-full overflow-hidden flex flex-col">
+                            {(() => {
+                                const currentVal = historicalValues?.[historicalValues.length - 1] ?? null
+                                const forecastVal = displayProps.p50 ?? displayProps.value ?? null
+                                const isPast = year < originYear + 1
+                                const isPresent = year === originYear + 1 // 2026 = "now"
+                                const leftLabel = isPresent ? "Now" : isPast ? String(year) : "Now"
+                                const leftVal = isPresent ? currentVal : isPast ? forecastVal : currentVal
+                                const rightLabel = isPresent ? String(year) : isPast ? "Now" : String(year)
+                                const rightVal = isPresent ? currentVal : isPast ? currentVal : forecastVal
+                                const pctBase = isPresent ? null : isPast ? forecastVal : currentVal
+                                const pctTarget = isPresent ? null : isPast ? currentVal : forecastVal
+                                const pctChange = pctBase && pctTarget ? ((pctTarget - pctBase) / pctBase * 100) : null
+                                return (
+                                    <div className="relative w-full flex-1 h-full">
+                                        {/* Full-width chart */}
+                                        <div className="w-full h-full">
+                                            {fanChartData ? (
+                                                <FanChart data={fanChartData} currentYear={year} height={200} historicalValues={historicalValues} comparisonData={comparisonData} comparisonHistoricalValues={comparisonHistoricalValues} yDomain={effectiveYDomain} />
+                                            ) : isLoadingDetail ? (
+                                                <div className="h-full flex items-center justify-center">
+                                                    <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                                                </div>
+                                            ) : null}
+                                            {/* Overlaid stat badges */}
+                                            <div className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-background/80 backdrop-blur-sm border border-border/30">
+                                                <div className="text-[7px] uppercase tracking-wider text-muted-foreground font-semibold">{leftLabel}</div>
+                                                <div className="text-[10px] font-bold text-foreground">{formatValue(leftVal)}</div>
+                                            </div>
+                                            {!isPresent && (
+                                                <div className="absolute top-1 right-1 px-1.5 py-0.5 rounded bg-background/80 backdrop-blur-sm border border-border/30 text-right">
+                                                    <div className="text-[7px] uppercase tracking-wider text-muted-foreground font-semibold">{rightLabel}</div>
+                                                    <div className="text-[10px] font-bold text-foreground">{formatValue(rightVal)}</div>
+                                                    {pctChange != null && (
+                                                        <div className={`text-[8px] font-bold ${pctChange >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                                                            {pctChange >= 0 ? '▲' : '▼'} {Math.abs(pctChange).toFixed(1)}%
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
                                         </div>
-                                    ) : null}
-
-                                    {/* P-values overlay — top-right corner */}
-                                    {(displayProps.p10 != null || displayProps.p90 != null) && (
-                                        <div className="absolute top-5 right-4 text-[8px] leading-snug rounded px-1 py-0.5" style={{ textShadow: '0 0 3px var(--background), 0 0 3px var(--background)' }}>
-                                            <div className="flex items-baseline gap-1">
-                                                <span className="font-medium text-[9px]">{formatValue(displayProps.p90)}</span>
-                                                <span className="text-muted-foreground/50">P90</span>
-                                            </div>
-                                            <div className="flex items-baseline gap-1">
-                                                <span className="font-medium text-[9px]">{formatValue(displayProps.p75)}</span>
-                                                <span className="text-muted-foreground/50">P75</span>
-                                            </div>
-                                            <div className="flex items-baseline gap-1 bg-primary/10 rounded px-0.5">
-                                                <span className="font-bold text-[9px] text-primary">{formatValue(displayProps.p50 ?? displayProps.value)}</span>
-                                                <span className="text-primary/70">P50</span>
-                                            </div>
-                                            <div className="flex items-baseline gap-1">
-                                                <span className="font-medium text-[9px]">{formatValue(displayProps.p25)}</span>
-                                                <span className="text-muted-foreground/50">P25</span>
-                                            </div>
-                                            <div className="flex items-baseline gap-1">
-                                                <span className="font-medium text-[9px]">{formatValue(displayProps.p10)}</span>
-                                                <span className="text-muted-foreground/50">P10</span>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-
-                                <div className="pt-1 mt-0 border-t border-border/50 text-center">
-                                    <div className="text-[9px] text-muted-foreground flex justify-center items-center gap-1.5">
-                                        <Bot className="w-3 h-3 text-primary/50" />
-                                        <span>AI Forecast</span>
                                     </div>
-                                </div>
+                                )
+                            })()}
+                        </div>
+                    </div>
+                ) : (
+                    <>
+                        {/* Desktop: StreetView above chart */}
+                        {!(isMobile && isKeyboardOpen) && process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY && (selectedId ? selectedCoords : (hoverDwell ? tooltipCoords : null)) && (
+                            <StreetViewCarousel
+                                h3Ids={[]}
+                                apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY}
+                                coordinates={(selectedId ? selectedCoords : tooltipCoords)!}
+                            />
+                        )}
+                        {/* Desktop Layout: Values above, full-width chart below */}
+                        <div className="p-4 space-y-3">
+                            {/* Current → Forecast header with % change */}
+                            {(() => {
+                                const currentVal = historicalValues?.[historicalValues.length - 1] ?? null
+                                // At zcta/tract/block zoom levels the tile stores the area median as p50.
+                                // At parcel level, value is the individual estimate; p50 may not exist.
+                                const forecastVal = displayProps.p50 ?? displayProps.value ?? null
+                                const isPast = year < originYear + 1
+                                const isPresent = year === originYear + 1 // 2026 = "now"
+                                const leftLabel = isPresent ? "Now" : isPast ? String(year) : "Now"
+                                const leftVal = isPresent ? currentVal : isPast ? forecastVal : currentVal
+                                const rightLabel = isPresent ? String(year) : isPast ? "Now" : String(year)
+                                const rightVal = isPresent ? currentVal : isPast ? currentVal : forecastVal
+                                const pctBase = isPresent ? null : isPast ? forecastVal : currentVal
+                                const pctTarget = isPresent ? null : isPast ? currentVal : forecastVal
+                                const pctChange = pctBase && pctTarget ? ((pctTarget - pctBase) / pctBase * 100) : null
+                                return (
+                                    <div className="flex items-center justify-between gap-3">
+                                        <div className="text-center flex-1">
+                                            <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">{leftLabel}</div>
+                                            <div className="text-lg font-bold text-foreground tracking-tight">{formatValue(leftVal)}</div>
+                                        </div>
+                                        <div className="text-center shrink-0">
+                                            {pctChange != null && (
+                                                <div className={`text-sm font-bold ${pctChange >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                                                    {pctChange >= 0 ? '▲' : '▼'} {Math.abs(pctChange).toFixed(1)}%
+                                                </div>
+                                            )}
+                                            <div className="text-[9px] text-muted-foreground">→ {rightLabel}</div>
+                                        </div>
+                                        <div className="text-center flex-1">
+                                            <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">{rightLabel}</div>
+                                            <div className="text-lg font-bold text-foreground tracking-tight">{formatValue(rightVal)}</div>
+                                        </div>
+                                    </div>
+                                )
+                            })()}
 
-                                {/* Talk to Homecastr button — only when selected */}
-                                {selectedId && onConsultAI && (
-                                    <div className="pt-2 mt-1 border-t border-border/50">
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation()
-                                                onConsultAI({
-                                                    predictedValue: displayProps.p50 ?? displayProps.value ?? null,
-                                                    opportunityScore: null,
-                                                    capRate: null,
-                                                })
-                                            }}
-                                            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-primary/15 hover:bg-primary/25 border border-primary/30 text-primary text-xs font-semibold transition-all hover:scale-[1.02] active:scale-[0.98]"
-                                        >
-                                            <HomecastrLogo variant="horizontal" size={14} />
-                                            <span>Talk to live agent</span>
-                                        </button>
+                            {/* Fan Chart full-width with P-values overlaid top-right */}
+                            <div className="relative h-52 -mx-2">
+                                {fanChartData ? (
+                                    <FanChart
+                                        data={fanChartData}
+                                        currentYear={year}
+                                        height={200}
+                                        historicalValues={historicalValues}
+                                        comparisonData={comparisonData}
+                                        comparisonHistoricalValues={comparisonHistoricalValues}
+                                        yDomain={effectiveYDomain}
+                                    />
+                                ) : isLoadingDetail ? (
+                                    <div className="h-full flex items-center justify-center">
+                                        <div className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                                    </div>
+                                ) : null}
+
+                                {/* P-values overlay — top-right corner */}
+                                {(displayProps.p10 != null || displayProps.p90 != null) && (
+                                    <div className="absolute top-5 right-4 text-[8px] leading-snug rounded px-1 py-0.5" style={{ textShadow: '0 0 3px var(--background), 0 0 3px var(--background)' }}>
+                                        <div className="flex items-baseline gap-1">
+                                            <span className="font-medium text-[9px]">{formatValue(displayProps.p90)}</span>
+                                            <span className="text-muted-foreground/50">P90</span>
+                                        </div>
+                                        <div className="flex items-baseline gap-1">
+                                            <span className="font-medium text-[9px]">{formatValue(displayProps.p75)}</span>
+                                            <span className="text-muted-foreground/50">P75</span>
+                                        </div>
+                                        <div className="flex items-baseline gap-1 bg-primary/10 rounded px-0.5">
+                                            <span className="font-bold text-[9px] text-primary">{formatValue(displayProps.p50 ?? displayProps.value)}</span>
+                                            <span className="text-primary/70">P50</span>
+                                        </div>
+                                        <div className="flex items-baseline gap-1">
+                                            <span className="font-medium text-[9px]">{formatValue(displayProps.p25)}</span>
+                                            <span className="text-muted-foreground/50">P25</span>
+                                        </div>
+                                        <div className="flex items-baseline gap-1">
+                                            <span className="font-medium text-[9px]">{formatValue(displayProps.p10)}</span>
+                                            <span className="text-muted-foreground/50">P10</span>
+                                        </div>
                                     </div>
                                 )}
                             </div>
-                        </>
-                    )}
-                </div>,
-                document.body
-            )}
 
-        </div>
-    )
+                            <div className="pt-1 mt-0 border-t border-border/50 text-center">
+                                <div className="text-[9px] text-muted-foreground flex justify-center items-center gap-1.5">
+                                    <Bot className="w-3 h-3 text-primary/50" />
+                                    <span>AI Forecast</span>
+                                </div>
+                            </div>
+
+                            {/* Talk to Homecastr button — only when selected */}
+                            {selectedId && onConsultAI && (
+                                <div className="pt-2 mt-1 border-t border-border/50">
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation()
+                                            onConsultAI({
+                                                predictedValue: displayProps.p50 ?? displayProps.value ?? null,
+                                                opportunityScore: null,
+                                                capRate: null,
+                                            })
+                                        }}
+                                        className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-primary/15 hover:bg-primary/25 border border-primary/30 text-primary text-xs font-semibold transition-all hover:scale-[1.02] active:scale-[0.98]"
+                                    >
+                                        <HomecastrLogo variant="horizontal" size={14} />
+                                        <span>Talk to live agent</span>
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </>
+                )}
+            </div>,
+            document.body
+        )}
+
+    </div>
+)
 }

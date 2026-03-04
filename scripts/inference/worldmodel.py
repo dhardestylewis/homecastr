@@ -3,6 +3,21 @@
 #
 # Full-panel capability:
 # - Account-chunked materialization to on-disk NPZ shards (no giant in-RAM collect)
+#
+# ============================================================================
+# AB1: FT-Transformer mu backbone + residual diffusion
+# ============================================================================
+# When AB1_ENABLED=True (default):
+#   1. An FTTransformerBackbone predicts deterministic mean trajectory mu_hat [B,H]
+#   2. Diffusion models the residual r = y - mu_hat (same standardized space)
+#   3. Sampling returns y_sample = mu_hat + r_sample
+#   The FT-Transformer is OUTSIDE the denoiser (produces conditioning + mean).
+#   The denoiser remains a separate Conv1d/MLP eps-hat network.
+#
+# To disable AB1 and revert to pure v11 diffusion:
+#   Set AB1_ENABLED=False (or env var WM_AB1_ENABLED=0)
+#   Old v11 checkpoints load safely (missing mu_backbone -> AB1 auto-disabled)
+# ============================================================================
 # - Shard-based diffusion training (batches copied to GPU per-step)
 # - Chunked inference context builder (optional cap)
 #
@@ -187,8 +202,21 @@ PHI_INIT = 0.80      # initial AR(1) persistence (per-token, learned via TokenPe
 GATING_HIDDEN = 64   # hidden dim of parcel gating network
 S_BLOCK = 9999       # process all scenarios in one pass (A100 40GB has headroom); was 16
 
+# AB1: FT-Transformer mu backbone + residual diffusion
+AB1_ENABLED = bool(int(os.environ.get("WM_AB1_ENABLED", "1")))  # toggle via env or globals
+FT_D_MODEL = 128          # FT-Transformer hidden dim per token
+FT_N_HEADS = 4            # attention heads
+FT_N_LAYERS = 2           # transformer encoder blocks
+FT_DROPOUT = 0.1          # dropout in transformer
+LAMBDA_MU = 1.0               # weight for mu Huber loss
+LAMBDA_EPS = 1.0              # weight for residual noise MSE
+MU_BACKBONE_CHUNK = 4096      # sub-batch size for FT-Transformer (CUDA kernel limit)
+
 # Training config
+# AB1: auto-halve batch size to fit mu_backbone activations on A100-40GB
 DIFF_BATCH = 131072  # v11 uses more VRAM per batch (gating + tokens); was 524288 for v10.2
+if AB1_ENABLED:
+    DIFF_BATCH = DIFF_BATCH // 4  # 32768 — leaves headroom for mu_backbone on A100-40GB
 DIFF_LR = 4e-4
 DIFF_EPOCHS = 60
 DIFF_EPOCHS_WARMSTART = 20
@@ -239,9 +267,11 @@ print(f"[{ts()}] K_TOKENS={K_TOKENS} K_ACTIVE={K_ACTIVE} PHI_INIT={PHI_INIT}")
 print(f"[{ts()}] DIFF_BATCH={DIFF_BATCH} DIFF_LR={DIFF_LR} DIFF_EPOCHS={DIFF_EPOCHS} DIFF_EPOCHS_WARMSTART={DIFF_EPOCHS_WARMSTART}")
 print(f"[{ts()}] SCALE_FLOOR_Y={SCALE_FLOOR_Y} SCALE_FLOOR_NUM={SCALE_FLOOR_NUM} SCALE_FLOOR_TGT={SCALE_FLOOR_TGT}")
 print(f"[{ts()}] SAMPLER_DISABLE_AUTOCAST={SAMPLER_DISABLE_AUTOCAST} SAMPLER_Z_CLIP={SAMPLER_Z_CLIP}")
+print(f"[{ts()}] AB1_ENABLED={AB1_ENABLED} FT_D_MODEL={FT_D_MODEL} FT_N_HEADS={FT_N_HEADS} FT_N_LAYERS={FT_N_LAYERS}")
 
 cfg = {
-    "version": "v11.0_inducing_token_diffusion",
+    "version": "ab1_ft_residual_diffusion" if AB1_ENABLED else "v11.0_inducing_token_diffusion",
+    "AB1_ENABLED": bool(AB1_ENABLED),
     "FULL_PANEL_MODE": bool(FULL_PANEL_MODE),
     "FULL_HORIZON_ONLY": bool(FULL_HORIZON_ONLY),
     "MIN_YEAR": int(MIN_YEAR),
@@ -1512,6 +1542,179 @@ class CoherenceScale(nn.Module):
             return float(2.0 * torch.sigmoid(self.logit).item())
 
 # -----------------------------
+# 10b) AB1: FT-Transformer mu backbone (deterministic mean predictor)
+# -----------------------------
+class FTTransformerBackbone(nn.Module):
+    """
+    AB1 deterministic backbone: predicts mean trajectory mu_hat [B, H]
+    and a context embedding ctx_emb [B, denoiser_hidden] for residual diffusion.
+
+    Architecture:
+      - Per-feature linear embeddings for numeric features
+      - Per-category embeddings for categoricals
+      - History summary token, region token, origin year token
+      - Learnable CLS token
+      - Stack of TransformerEncoder layers
+      - CLS output -> mu_head (mean trajectory) + ctx_proj (denoiser conditioning)
+    """
+    def __init__(self, hist_len: int, num_dim: int, n_cat: int, H: int,
+                 d_model: int = FT_D_MODEL, n_heads: int = FT_N_HEADS,
+                 n_layers: int = FT_N_LAYERS, dropout: float = FT_DROPOUT,
+                 denoiser_hidden: int = DENOISER_HIDDEN):
+        super().__init__()
+        self.H = int(H)
+        self.d_model = int(d_model)
+        self.num_dim = max(1, int(num_dim))
+        self.n_cat = max(1, int(n_cat))
+        self._diag_printed = False
+
+        # Per-feature numeric embeddings: each numeric feature gets its own linear
+        self.num_projs = nn.ModuleList([
+            nn.Linear(1, d_model) for _ in range(self.num_dim)
+        ])
+
+        # Per-category embeddings
+        self.cat_emb_dim = 16
+        self.cat_embs = nn.ModuleList([
+            nn.Embedding(HASH_BUCKET_SIZE, self.cat_emb_dim)
+            for _ in range(self.n_cat)
+        ])
+        self.cat_projs = nn.ModuleList([
+            nn.Linear(self.cat_emb_dim, d_model)
+            for _ in range(self.n_cat)
+        ])
+
+        # History summary token: full history vector -> single d_model token
+        self.hist_proj = nn.Linear(int(hist_len), d_model)
+
+        # Region token
+        self.region_emb = nn.Embedding(GEO_BUCKETS, REGION_EMB_DIM)
+        self.region_proj = nn.Linear(REGION_EMB_DIM, d_model)
+
+        # Origin year token
+        self.year_emb = nn.Embedding(100, d_model)
+
+        # Learnable CLS token
+        self.cls_token = nn.Parameter(torch.randn(1, 1, d_model) * 0.02)
+
+        # Transformer encoder
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=d_model, nhead=n_heads, dim_feedforward=d_model * 4,
+            dropout=dropout, activation='gelu', batch_first=True,
+            norm_first=True,
+        )
+        self.transformer = nn.TransformerEncoder(
+            encoder_layer, num_layers=n_layers,
+            norm=nn.LayerNorm(d_model),
+        )
+
+        # Output heads
+        self.mu_head = nn.Sequential(
+            nn.Linear(d_model, d_model),
+            nn.GELU(),
+            nn.Linear(d_model, H),
+        )
+        self.ctx_proj = nn.Linear(d_model, denoiser_hidden)
+
+    def _build_tokens(self, hist_y: torch.Tensor, cur_num: torch.Tensor,
+                      cur_cat: torch.Tensor, region_id: torch.Tensor,
+                      origin_year: Optional[torch.Tensor] = None) -> torch.Tensor:
+        """Build token sequence [B, T, d_model] from all inputs."""
+        B = hist_y.shape[0]
+        tokens = []
+
+        # CLS token (expanded to batch)
+        cls = self.cls_token.expand(B, -1, -1)  # [B, 1, d_model]
+        tokens.append(cls)
+
+        # History summary token
+        h_hist = self.hist_proj(hist_y).unsqueeze(1)  # [B, 1, d_model]
+        tokens.append(h_hist)
+
+        # Per-feature numeric tokens
+        if cur_num.shape[1] > 0:
+            for j in range(min(cur_num.shape[1], len(self.num_projs))):
+                feat_j = cur_num[:, j:j+1]  # [B, 1]
+                tok_j = self.num_projs[j](feat_j).unsqueeze(1)  # [B, 1, d_model]
+                tokens.append(tok_j)
+        else:
+            # Single zero-feature token
+            z = torch.zeros((B, 1), device=hist_y.device, dtype=hist_y.dtype)
+            tokens.append(self.num_projs[0](z).unsqueeze(1))
+
+        # Per-category tokens
+        if cur_cat.shape[1] > 0:
+            for j in range(min(cur_cat.shape[1], len(self.cat_embs))):
+                v = cur_cat[:, j].clamp(0, HASH_BUCKET_SIZE - 1).long()
+                emb_j = self.cat_embs[j](v)  # [B, cat_emb_dim]
+                tok_j = self.cat_projs[j](emb_j).unsqueeze(1)  # [B, 1, d_model]
+                tokens.append(tok_j)
+        else:
+            z = torch.zeros((B, self.cat_emb_dim), device=hist_y.device, dtype=hist_y.dtype)
+            tokens.append(self.cat_projs[0](z).unsqueeze(1))
+
+        # Region token
+        region_vec = self.region_emb(region_id.clamp(0, GEO_BUCKETS - 1).long())  # [B, REGION_EMB_DIM]
+        tokens.append(self.region_proj(region_vec).unsqueeze(1))  # [B, 1, d_model]
+
+        # Origin year token
+        if origin_year is not None:
+            yr_idx = (origin_year - 2000).clamp(0, 99).long()
+            tokens.append(self.year_emb(yr_idx).unsqueeze(1))  # [B, 1, d_model]
+
+        seq = torch.cat(tokens, dim=1)  # [B, T, d_model]
+        if not self._diag_printed:
+            print(f"  [DIAG] FTTransformerBackbone: n_tokens={seq.shape[1]} d_model={self.d_model}")
+            self._diag_printed = True
+        return seq
+
+    def forward(self, hist_y: torch.Tensor, cur_num: torch.Tensor,
+                cur_cat: torch.Tensor, region_id: torch.Tensor,
+                origin_year: Optional[torch.Tensor] = None
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Returns:
+            mu_hat: [B, H] deterministic mean trajectory (same space as diffusion targets)
+            ctx_emb: [B, denoiser_hidden] context embedding for denoiser conditioning
+        """
+        seq = self._build_tokens(hist_y, cur_num, cur_cat, region_id, origin_year)
+        out = self.transformer(seq)  # [B, T, d_model]
+        cls_out = out[:, 0, :]  # [B, d_model] — CLS token output
+
+        mu_hat = self.mu_head(cls_out)  # [B, H]
+        ctx_emb = self.ctx_proj(cls_out)  # [B, denoiser_hidden]
+        return mu_hat, ctx_emb
+
+def _chunked_mu_forward(
+    mu_backbone: nn.Module,
+    hist_y: torch.Tensor,
+    cur_num: torch.Tensor,
+    cur_cat: torch.Tensor,
+    region_id: torch.Tensor,
+    origin_year: Optional[torch.Tensor] = None,
+    chunk_size: int = MU_BACKBONE_CHUNK,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Chunked forward pass for FT-Transformer.
+    Runs with torch.no_grad() to avoid storing activation memory.
+    For training, L_mu gradients are computed via a separate small subsample."""
+    B = hist_y.shape[0]
+    if B <= chunk_size:
+        with torch.no_grad():
+            return mu_backbone(hist_y, cur_num, cur_cat, region_id, origin_year=origin_year)
+    mu_parts, ctx_parts = [], []
+    with torch.no_grad():
+        for i in range(0, B, chunk_size):
+            j = min(i + chunk_size, B)
+            oy_chunk = origin_year[i:j] if origin_year is not None else None
+            mu_c, ctx_c = mu_backbone(
+                hist_y[i:j], cur_num[i:j], cur_cat[i:j], region_id[i:j],
+                origin_year=oy_chunk,
+            )
+            mu_parts.append(mu_c)
+            ctx_parts.append(ctx_c)
+    return torch.cat(mu_parts, dim=0), torch.cat(ctx_parts, dim=0)
+
+# -----------------------------
 # 11) Denoiser with token conditioning
 # -----------------------------
 class SinTime(nn.Module):
@@ -1589,7 +1792,7 @@ class Conv1dDenoiserV11(nn.Module):
         self._n_scaler = None
         self._t_scaler = None
 
-    def forward(self, x_t, t, hist_y, cur_num, cur_cat, region_id, u_i):
+    def forward(self, x_t, t, hist_y, cur_num, cur_cat, region_id, u_i, ctx_emb=None):
         """
         x_t: [B, H] noised target
         t: [B] diffusion timestep
@@ -1624,6 +1827,9 @@ class Conv1dDenoiserV11(nn.Module):
         h_token = self.token_cond_enc(u_i)
 
         h_cond = h_hist + h_num + h_cat + h_region + h_token + h_t
+        # AB1: add FT-Transformer context embedding if provided
+        if ctx_emb is not None:
+            h_cond = h_cond + ctx_emb
 
         x = self.input_proj(x_t.unsqueeze(1))
         for conv, film in zip(self.conv_blocks, self.film_layers):
@@ -1649,6 +1855,15 @@ def create_token_persistence() -> TokenPersistence:
 
 def create_coherence_scale() -> CoherenceScale:
     return CoherenceScale(init_logit=0.0)  # sigma_u ≈ 1.0 at init
+
+def create_mu_backbone(hist_len: int, num_dim: int, n_cat: int, H: int = H) -> nn.Module:
+    """Create AB1 FT-Transformer mu backbone."""
+    return FTTransformerBackbone(
+        hist_len=int(hist_len),
+        num_dim=int(num_dim),
+        n_cat=int(n_cat),
+        H=int(H),
+    )
 
 # Legacy compat aliases (keep imports working in backtest scripts)
 GlobalProjection = None
@@ -1692,6 +1907,7 @@ def train_diffusion_v11(
     num_dim: int,
     n_cat: int,
     work_dirs: Dict[str, str],
+    mu_backbone: Optional[nn.Module] = None,  # AB1: FT-Transformer mu backbone
 ) -> Tuple[SimpleScaler, SimpleScaler, SimpleScaler, List[float], List[str]]:
     if not shard_paths:
         raise ValueError(f"No shards for origin {origin}")
@@ -1700,6 +1916,8 @@ def train_diffusion_v11(
     sigma_init = coh_scale.get_sigma()
     print(f"[{ts()}] train_diffusion_v11 origin={origin} shards={len(shard_paths)} epochs={epochs} K={K_TOKENS} k={K_ACTIVE}")
     print(f"[{ts()}] initial phi_k = {[f'{p:.3f}' for p in phi_init]}  sigma_u={sigma_init:.3f}")
+    _ab1_active = (mu_backbone is not None) and AB1_ENABLED
+    print(f"[{ts()}] AB1_ENABLED={AB1_ENABLED} mu_backbone={'present' if mu_backbone is not None else 'None'} ab1_active={_ab1_active}")
 
     # v11.2: relaxed floor — 0.25 was too aggressive and crushed parcel-level
     # conditioning signal (ρ ≈ 0).  assert_y_scaler_contract + SAMPLER_Z_CLIP
@@ -1751,8 +1969,12 @@ def train_diffusion_v11(
         {"params": list(token_persistence.parameters()), "lr": DIFF_LR * 10},
         {"params": list(coh_scale.parameters()), "lr": DIFF_LR * 5},
     ]
+    # AB1: add mu_backbone parameters
+    if _ab1_active:
+        param_groups.append({"params": list(mu_backbone.parameters()), "lr": DIFF_LR})
     n_params = sum(len(pg["params"]) for pg in param_groups)
-    print(f"[{ts()}] Creating optimizer ({n_params} params, 4 groups, phi_lr={DIFF_LR*10:.1e})..."); sys.stdout.flush()
+    _n_groups = len(param_groups)
+    print(f"[{ts()}] Creating optimizer ({n_params} params, {_n_groups} groups, phi_lr={DIFF_LR*10:.1e})..."); sys.stdout.flush()
     try:
         opt = torch.optim.AdamW(param_groups, weight_decay=1e-4, fused=True)
     except TypeError:
@@ -1764,6 +1986,8 @@ def train_diffusion_v11(
     gating_net.train()
     token_persistence.train()
     coh_scale.train()
+    if _ab1_active:
+        mu_backbone.train()
     print(f"[{ts()}] Models set to train mode"); sys.stdout.flush()
 
     autocast_ctx = get_autocast_ctx(device)
@@ -1865,8 +2089,22 @@ def train_diffusion_v11(
                         noise = u_i_scaled * h_scale + eps_idio
 
                         t_idx = torch.randint(0, int(DIFF_STEPS_TRAIN), (B,), device=device)
-                        xt = sched.q(x0, t_idx, noise)
-                        noise_hat = model(xt, t_idx.float(), hy.float(), xn.float(), xc, rid, u_i_scaled)
+
+                        # AB1: compute mu_hat and train on residual
+                        if _ab1_active:
+                            # Phase 1: no_grad forward for conditioning (zero activation cost)
+                            mu_hat, ctx_emb = _chunked_mu_forward(
+                                mu_backbone, hy.float(), xn.float(), xc, rid, origin_year=oy,
+                            )
+                            # Residual target: what diffusion models
+                            r0 = x0 - mu_hat  # [B, H] — detached, no grad to backbone
+                            # Forward diffusion on residual
+                            rt = sched.q(r0, t_idx, noise)
+                            noise_hat = model(rt, t_idx.float(), hy.float(), xn.float(), xc, rid, u_i_scaled, ctx_emb=ctx_emb)
+                        else:
+                            # Pure v11: diffusion on full target
+                            xt = sched.q(x0, t_idx, noise)
+                            noise_hat = model(xt, t_idx.float(), hy.float(), xn.float(), xc, rid, u_i_scaled)
 
                         # v11.2: min-SNR weighted MSE (Hang et al. 2023)
                         # Flat MSE lets low-noise timesteps dominate → model learns
@@ -1885,7 +2123,24 @@ def train_diffusion_v11(
                         _per_h_count = m.sum(dim=0).clamp(min=1.0)  # [H]
                         _per_h_mse = _per_h_sq.sum(dim=0) / _per_h_count  # [H]
                         _n_active_h = (m.sum(dim=0) > 0).sum().clamp(min=1)
-                        loss = _per_h_mse.sum() / _n_active_h
+                        loss_eps = _per_h_mse.sum() / _n_active_h
+
+                        # AB1: combined loss = lambda_mu * L_mu + lambda_eps * L_eps
+                        if _ab1_active:
+                            # Phase 2: small subsample WITH gradients for L_mu
+                            _mu_sub = min(2048, B)
+                            mu_hat_grad, _ = mu_backbone(
+                                hy[:_mu_sub].float(), xn[:_mu_sub].float(),
+                                xc[:_mu_sub], rid[:_mu_sub], origin_year=oy[:_mu_sub],
+                            )
+                            _mu_err = torch.nn.functional.huber_loss(
+                                mu_hat_grad, x0[:_mu_sub], reduction='none',
+                            ) * m[:_mu_sub]  # [sub, H]
+                            _mu_count = m[:_mu_sub].sum(dim=0).clamp(min=1.0)
+                            loss_mu = (_mu_err.sum(dim=0) / _mu_count).sum() / _n_active_h
+                            loss = float(LAMBDA_MU) * loss_mu + float(LAMBDA_EPS) * loss_eps
+                        else:
+                            loss = loss_eps
 
                     opt.zero_grad(set_to_none=True)
                     loss.backward()
@@ -2115,6 +2370,7 @@ def sample_ddim_v11(
     anchor_year: int = 2021,   # explicitly pass anchor year for macro embedding
     coh_scale: CoherenceScale = None,  # optional: if None, sigma_u=1.0
     tau: float = 1.0,           # optional: temperature scaling for idiosyncratic noise
+    mu_backbone: Optional[nn.Module] = None,  # AB1: FT-Transformer mu backbone
 ) -> np.ndarray:
     """
     v11 DDIM sampler with inducing-token coherence and S-block chunking.
@@ -2123,6 +2379,9 @@ def sample_ddim_v11(
     """
     model.eval()
     gating_net.eval()
+    _ab1_active = (mu_backbone is not None) and AB1_ENABLED
+    if _ab1_active:
+        mu_backbone.eval()
 
     N = int(hist_y_b.shape[0])
     S = int(Z_tokens.shape[0])
@@ -2162,6 +2421,16 @@ def sample_ddim_v11(
     # Compute per-parcel gating weights ONCE (shared across all scenarios)
     oy = torch.full((N,), int(anchor_year), dtype=torch.long, device=device)
     alpha = gating_net(hy.float(), xn.float(), xc, rid, origin_year=oy)  # [N, K]
+
+    # AB1: compute mu_hat and ctx_emb ONCE for all parcels
+    _mu_hat_t = None
+    _ctx_emb_t = None
+    if _ab1_active:
+        _mu_hat_t, _ctx_emb_t = _chunked_mu_forward(
+            mu_backbone, hy.float(), xn.float(), xc, rid, origin_year=oy,
+        )
+        _mu_absmax = float(_mu_hat_t.abs().max().item())
+        print(f"[{ts()}] AB1 mu_backbone: mu_absmax={_mu_absmax:.3f} mu_shape={list(_mu_hat_t.shape)}")
 
     # Move Z_tokens to device
     if Z_tokens.device != torch.device(device):
@@ -2215,9 +2484,17 @@ def sample_ddim_v11(
             t = torch.full((N * sb_actual,), float(t_idx), device=device, dtype=torch.float32)
 
             with autocast_ctx:
-                noise_hat = model(
-                    x, t, hy_exp, xn_exp, xc_exp, rid_exp, u_i_flat,
-                ).to(dtype=torch.float32)
+                # AB1: pass ctx_emb to denoiser for richer conditioning
+                if _ab1_active:
+                    ctx_emb_exp = _ctx_emb_t.repeat_interleave(sb_actual, dim=0)
+                    noise_hat = model(
+                        x, t, hy_exp, xn_exp, xc_exp, rid_exp, u_i_flat,
+                        ctx_emb=ctx_emb_exp,
+                    ).to(dtype=torch.float32)
+                else:
+                    noise_hat = model(
+                        x, t, hy_exp, xn_exp, xc_exp, rid_exp, u_i_flat,
+                    ).to(dtype=torch.float32)
 
             # Finite guards and clipping
             noise_hat = torch.nan_to_num(noise_hat, nan=0.0, posinf=0.0, neginf=0.0)
@@ -2268,7 +2545,16 @@ def sample_ddim_v11(
                     print(f"[{ts()}] SAMPLER step={i_step}/{len(idx)} t_idx={int(t_idx)} bad_frac={bad_frac:.4f} x_absmax={x_absmax:.3f}")
 
         # Write this block's results to output buffer
-        x_blk = model._t_scaler.inverse_transform(x.detach().cpu().numpy().astype(np.float32))
+        # AB1: x is in residual space (r_sample); add mu_hat back to get y_sample
+        x_out = x.detach()
+        if _ab1_active:
+            # mu_hat_exp: [N, H] -> [N*sb_actual, H]
+            mu_hat_exp = _mu_hat_t.repeat_interleave(sb_actual, dim=0)  # [N*sb_actual, H]
+            x_out = x_out + mu_hat_exp
+            if s0 == 0:
+                _resid_absmax = float(x.abs().max().item())
+                print(f"[{ts()}] AB1 sampler: resid_absmax={_resid_absmax:.3f}")
+        x_blk = model._t_scaler.inverse_transform(x_out.cpu().numpy().astype(np.float32))
         out[:, s0:s0 + sb_actual, :] = x_blk.reshape(N, sb_actual, H)
 
         # Free GPU memory for this block

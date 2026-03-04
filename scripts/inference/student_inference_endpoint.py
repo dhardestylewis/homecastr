@@ -133,10 +133,50 @@ def _bbox_to_quadkeys(min_lat, min_lng, max_lat, max_lng, zoom=9):
     return quadkeys
 
 
-def _fetch_buildings_for_bbox(min_lat, min_lng, max_lat, max_lng):
+# GCS cache path prefixes
+_GCS_TILE_CACHE_PREFIX = "cache/ms_buildings_tiles/"
+_GCS_INFERENCE_CACHE_PREFIX = "cache/student_inference/"
+
+
+def _get_gcs_tile_cache(bucket, qk):
+    """Check if MS Buildings tile is cached on GCS. Returns bytes or None."""
+    blob = bucket.blob(f"{_GCS_TILE_CACHE_PREFIX}{qk}.csv.gz")
+    if blob.exists():
+        print(f"    ✅ GCS tile cache HIT for QK={qk}")
+        return blob.download_as_bytes()
+    return None
+
+
+def _put_gcs_tile_cache(bucket, qk, content_bytes):
+    """Store MS Buildings tile on GCS for future requests."""
+    blob = bucket.blob(f"{_GCS_TILE_CACHE_PREFIX}{qk}.csv.gz")
+    blob.upload_from_string(content_bytes, content_type="application/gzip")
+    print(f"    📤 Cached tile QK={qk} on GCS ({len(content_bytes)/1e6:.1f}MB)")
+
+
+def _get_gcs_inference_cache(bucket, cache_key, year):
+    """Check if inference result is cached on GCS. Returns dict or None."""
+    import json
+    blob = bucket.blob(f"{_GCS_INFERENCE_CACHE_PREFIX}{cache_key}_y{year}.json")
+    if blob.exists():
+        print(f"  ✅ GCS inference cache HIT for {cache_key}")
+        return json.loads(blob.download_as_text())
+    return None
+
+
+def _put_gcs_inference_cache(bucket, cache_key, year, result):
+    """Store inference result on GCS for future requests."""
+    import json
+    blob = bucket.blob(f"{_GCS_INFERENCE_CACHE_PREFIX}{cache_key}_y{year}.json")
+    blob.upload_from_string(json.dumps(result), content_type="application/json")
+    n = result.get("metadata", {}).get("n_buildings", "?")
+    print(f"  📤 Cached inference result for {cache_key} ({n} buildings) on GCS")
+
+
+def _fetch_buildings_for_bbox(min_lat, min_lng, max_lat, max_lng, bucket=None):
     """
     Fetch building footprints with POLYGON geometries within bbox using MS Buildings v3 dataset.
-    This replaces OSM Overpass and downloads regional CSV.GZ quadkey tiles on the fly.
+    Checks GCS cache first; downloads from Azure and caches if not found.
     """
     import csv, gzip, io, json
     import requests
@@ -167,7 +207,7 @@ def _fetch_buildings_for_bbox(min_lat, min_lng, max_lat, max_lng):
     
     all_buildings = []
     
-    # 3. Download and parse CSV.GZ tiles
+    # 3. Download and parse CSV.GZ tiles (with GCS cache)
     for i, tile in enumerate(matching_tiles):
         url = tile.get("Url", "")
         qk = tile.get("QuadKey", "")
@@ -175,13 +215,27 @@ def _fetch_buildings_for_bbox(min_lat, min_lng, max_lat, max_lng):
         print(f"  Downloading tile {i+1}/{len(matching_tiles)} (QK={qk}, {size})...")
         
         try:
-            r = requests.get(url, timeout=120)
-            if r.status_code != 200:
-                print(f"    Skipped: HTTP {r.status_code}")
-                continue
+            # Check GCS cache first
+            raw_bytes = None
+            if bucket:
+                raw_bytes = _get_gcs_tile_cache(bucket, qk)
+            
+            if raw_bytes is None:
+                # Download from Azure
+                r = requests.get(url, timeout=120)
+                if r.status_code != 200:
+                    print(f"    Skipped: HTTP {r.status_code}")
+                    continue
+                raw_bytes = r.content
+                # Cache on GCS for future requests
+                if bucket:
+                    try:
+                        _put_gcs_tile_cache(bucket, qk, raw_bytes)
+                    except Exception as ce:
+                        print(f"    ⚠️ Failed to cache tile on GCS: {ce}")
                 
             # Parse CSV.GZ line-by-line streaming
-            for line in gzip.open(io.BytesIO(r.content)):
+            for line in gzip.open(io.BytesIO(raw_bytes)):
                 try:
                     feat = json.loads(line)
                     geom = shape(feat["geometry"])
@@ -557,7 +611,7 @@ def predict(data: dict):
             # Step 1: Fetch buildings with polygon geometries
             print(f"[{ts()}] Step 1: Fetching buildings...")
             t_bldg_start = time.time()
-            buildings, geometries = _fetch_buildings_for_bbox(min_lat, min_lng, max_lat, max_lng)
+            buildings, geometries = _fetch_buildings_for_bbox(min_lat, min_lng, max_lat, max_lng, bucket=bucket)
             t_bldg = time.time() - t_bldg_start
             
             if not buildings:
@@ -603,6 +657,15 @@ def predict(data: dict):
             return result
         
         # ─── Phase 2: Run diffusion inference ─────────────────────────
+        # Check GCS inference cache first (previous user may have already computed this)
+        gcs_cached = _get_gcs_inference_cache(bucket, cache_key, year)
+        if gcs_cached:
+            dt = time.time() - t0
+            gcs_cached["metadata"]["latency_s"] = round(dt, 3)
+            gcs_cached["metadata"]["cache_source"] = "gcs"
+            print(f"[{ts()}] ✅ GCS inference cache hit: {gcs_cached.get('metadata', {}).get('n_buildings', '?')} buildings in {dt:.1f}s")
+            return gcs_cached
+        
         print(f"[{ts()}] Step 3: Running student inference...")
         t_infer_start = time.time()
         
@@ -630,6 +693,12 @@ def predict(data: dict):
         }
         print(f"[{ts()}] ✅ Phase 2 complete: {len(result['features'])} buildings in {dt:.1f}s")
         print(f"  Inference: {t_infer:.1f}s ({result['metadata']['timing_breakdown']['ms_per_building_inference']}ms/bldg)")
+        
+        # Save to GCS inference cache for future visitors
+        try:
+            _put_gcs_inference_cache(bucket, cache_key, year, result)
+        except Exception as ce:
+            print(f"  ⚠️ Failed to cache inference result: {ce}")
         
         return result
 

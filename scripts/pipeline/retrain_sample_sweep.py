@@ -56,6 +56,7 @@ _required = [
     "train_diffusion_v11", "create_denoiser_v11",
     "create_gating_network", "create_token_persistence",
     "create_coherence_scale", "copy_small_artifacts_to_drive",
+    "create_mu_backbone", "AB1_ENABLED",
 ]
 _missing = [r for r in _required if r not in dir() and r not in globals()]
 if _missing:
@@ -342,6 +343,19 @@ for variant_tag, sample_size, strat_above, strat_pct in SWEEP_VARIANTS:
         token_persistence = create_token_persistence().to(_device)
         coh_scale = create_coherence_scale().to(_device)
 
+        # AB1: create mu_backbone if enabled
+        _ab1_enabled = bool(globals().get("AB1_ENABLED", False))
+        mu_backbone = None
+        if _ab1_enabled:
+            mu_backbone = create_mu_backbone(
+                hist_len=_hist_len,
+                num_dim=_num_dim,
+                n_cat=_n_cat,
+                H=_H,
+            ).to(_device)
+            _bb_params = sum(p.numel() for p in mu_backbone.parameters())
+            print(f"  AB1: mu_backbone created ({_bb_params:,} params)")
+
         # ── Initialize W&B for this variant ──
         try:
             init_wandb(
@@ -374,6 +388,7 @@ for variant_tag, sample_size, strat_above, strat_pct in SWEEP_VARIANTS:
             num_dim=_num_dim,
             n_cat=_n_cat,
             work_dirs=variant_work_dirs,
+            mu_backbone=mu_backbone,
         )
 
         # ── Train Challenger Baseline ──
@@ -443,7 +458,9 @@ for variant_tag, sample_size, strat_above, strat_pct in SWEEP_VARIANTS:
             "t_scaler_scale": t_scaler.scale_.tolist(),
             "global_medians": _global_medians,
             "cfg": _cfg,
-            "arch": "v11",
+            "arch": "ab1" if _ab1_enabled else "v11",
+            # AB1: mu backbone state dict (None if not enabled)
+            "mu_backbone_state_dict": mu_backbone.state_dict() if mu_backbone is not None else None,
             # Feature lists: critical for eval-time alignment
             "num_use": list(_num_use),
             "cat_use": list(_cat_use),
@@ -478,6 +495,8 @@ for variant_tag, sample_size, strat_above, strat_pct in SWEEP_VARIANTS:
 
         # Free GPU memory
         del model, gating_net, token_persistence, coh_scale
+        if mu_backbone is not None:
+            del mu_backbone
         if _device == "cuda":
             torch.cuda.empty_cache()
 
