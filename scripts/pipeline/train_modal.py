@@ -36,6 +36,7 @@ training_image = (
         "scikit-learn>=1.3",
         "huggingface_hub>=0.20",
     )
+    .add_local_dir("scripts", remote_path="/scripts")
 )
 
 # GCS credentials as Modal secret (set via: modal secret create gcs-creds ...)
@@ -405,43 +406,48 @@ def train_worldmodel(
     with open(wm_local, "r") as f:
         wm_source = f.read()
 
-    # Replace hardcoded paths and config
-    wm_source = wm_source.replace(
-        'PANEL_PATH_DRIVE = "/content/drive/MyDrive/HCAD_Archive_Aggregates/hcad_master_panel_2005_2025_leakage_strict_FIXEDYR_WITHGIS.parquet"',
-        f'PANEL_PATH_DRIVE = "{adapted_path}"'
-    )
-    wm_source = wm_source.replace(
-        'PANEL_PATH_LOCAL = "/content/local_panel.parquet"',
-        f'PANEL_PATH_LOCAL = "{adapted_path}"'
-    )
-    wm_source = wm_source.replace(
-        'OUT_DIR = "/content/drive/MyDrive/data_backups/world_model_v10_2_fullpanel"',
-        f'OUT_DIR = "{out_dir}"'
-    )
-    wm_source = wm_source.replace(
-        f'MIN_YEAR = 2005', f'MIN_YEAR = {yr_min}'
-    )
-    wm_source = wm_source.replace(
-        f'MAX_YEAR = 2025', f'MAX_YEAR = {yr_max}'
-    )
-    wm_source = wm_source.replace(
-        f'SEAM_YEAR = 2025', f'SEAM_YEAR = {yr_max}'
-    )
-
-    # Remove Drive mount attempt
+    # Remove Drive mount attempt (safety — prevents ImportError on Modal)
     wm_source = wm_source.replace(
         'from google.colab import drive',
         '# from google.colab import drive  # patched out for Modal'
     )
 
+    # ─── PRE-SET globals BEFORE exec ───
+    # worldmodel.py reads PANEL_PATH, MIN_YEAR, MAX_YEAR during execution
+    # (line ~299-303 loads the panel). These MUST be set before exec().
+    globals()['PANEL_PATH'] = adapted_path
+    globals()['PANEL_PATH_DRIVE'] = adapted_path
+    globals()['PANEL_PATH_LOCAL'] = adapted_path
+    globals()['MIN_YEAR'] = yr_min
+    globals()['MAX_YEAR'] = yr_max
+    globals()['SEAM_YEAR'] = yr_max
+    print(f"[{ts()}] PRE-EXEC: PANEL_PATH={adapted_path} MIN_YEAR={yr_min} MAX_YEAR={yr_max}")
+
     print(f"[{ts()}] Executing worldmodel.py (Cell 1)...")
     exec(wm_source, globals())
+
+    # ─── FORCE-SET globals after exec (for retrain_sample_sweep.py) ───
+    # OUT_DIR and work_dirs are only used by retrain_sample_sweep.py,
+    # which runs AFTER worldmodel.py exec completes.
+    globals()['OUT_DIR'] = out_dir
+    # Fix work_dirs to use Modal-compatible scratch paths
+    globals()['work_dirs'] = {
+        'OUT_DIR_DRIVE': out_dir,
+        'SCRATCH_ROOT': '/tmp/wm_scratch',
+        'RAW_SHARD_ROOT': '/tmp/wm_scratch/train_shards_raw',
+        'SCALED_SHARD_ROOT': '/tmp/wm_scratch/train_shards_scaled',
+    }
+    os.makedirs('/tmp/wm_scratch/train_shards_raw', exist_ok=True)
+    os.makedirs('/tmp/wm_scratch/train_shards_scaled', exist_ok=True)
+    print(f"[{ts()}] FORCED OUT_DIR={out_dir}")
+    print(f"[{ts()}] FORCED work_dirs scratch → /tmp/wm_scratch")
 
     # ─── Diagnostic: verify globals after exec ───
     _g = globals()
     print(f"[{ts()}] POST-EXEC DIAGNOSTICS:")
     print(f"  MIN_YEAR={_g.get('MIN_YEAR')} MAX_YEAR={_g.get('MAX_YEAR')} H={_g.get('H')} SEAM_YEAR={_g.get('SEAM_YEAR')}")
     print(f"  FULL_HIST_LEN={_g.get('FULL_HIST_LEN')} FULL_HORIZON_ONLY={_g.get('FULL_HORIZON_ONLY')}")
+    print(f"  OUT_DIR={_g.get('OUT_DIR')}")
     print(f"  train_accts count={len(_g.get('train_accts', []))}")
     print(f"  num_use count={len(_g.get('num_use', []))}")
     print(f"  cat_use count={len(_g.get('cat_use', []))}")
@@ -454,7 +460,6 @@ def train_worldmodel(
         print(f"  lf=None (PROBLEM!)")
 
     # ─── Fix EVAL_ORIGINS for our year range ───
-    # Default EVAL_ORIGINS=[2021,2022,2023,2024] is wrong for origin=2019
     globals()['EVAL_ORIGINS'] = [origin - 3, origin - 2, origin - 1, origin]
     print(f"  Patched EVAL_ORIGINS={globals()['EVAL_ORIGINS']}")
 

@@ -1207,17 +1207,34 @@ def _load_ckpt_into_live_objects(ckpt_path: str):
             _coh_scale.load_state_dict(ckpt["coh_scale_state_dict"])
         _coh_scale.eval()
 
+        # AB1: load mu_backbone if checkpoint contains it
+        _mu_backbone = None
+        if ckpt.get("mu_backbone_state_dict") is not None and _arch in ("ab1", "v11"):
+            try:
+                _mu_backbone = create_mu_backbone(
+                    hist_len=_hist_len, num_dim=_num_dim, n_cat=_n_cat, H=_H
+                ).to(_device)
+                _mu_backbone.load_state_dict(ckpt["mu_backbone_state_dict"])
+                _mu_backbone.eval()
+                _bb_params = sum(p.numel() for p in _mu_backbone.parameters())
+                print(f"[{_ts()}] AB1 mu_backbone loaded ({_bb_params:,} params)")
+            except Exception as _bb_err:
+                print(f"[{_ts()}] ⚠️ AB1 mu_backbone failed to load (non-fatal): {_bb_err}")
+                _mu_backbone = None
+
         # Publish v11 modules into globals
         globals()["model"] = _model
         globals()["gating_net"] = _gating_net
         globals()["token_persistence"] = _token_persistence
         globals()["coh_scale"] = _coh_scale
+        globals()["mu_backbone"] = _mu_backbone  # None if not AB1
 
         _phi_k = _token_persistence.get_phi_list()
         _sigma_u = _coh_scale.get_sigma()
-        print(f"[{_ts()}] Loaded v11 checkpoint: {os.path.basename(ckpt_path)} "
+        _ab1_str = f" AB1=True" if _mu_backbone is not None else ""
+        print(f"[{_ts()}] Loaded {'ab1' if _mu_backbone else 'v11'} checkpoint: {os.path.basename(ckpt_path)} "
               f"| H={_H} hist_len={_hist_len} num_dim={_num_dim} n_cat={_n_cat} "
-              f"| phi_k={[f'{p:.3f}' for p in _phi_k]} sigma_u={_sigma_u:.3f} "
+              f"| phi_k={[f'{p:.3f}' for p in _phi_k]} sigma_u={_sigma_u:.3f}{_ab1_str} "
               f"| device={_device}")
 
     else:
@@ -1431,6 +1448,7 @@ def _sample_scenarios_for_inference_context(ctx, H: int, S: int, origin: int, pr
             anchor_year=origin,
             coh_scale=_coh_scale_ref,
             tau=SAMPLER_TAU,
+            mu_backbone=globals().get("mu_backbone"),  # AB1: None if not loaded
         )  # (end-start, S, H) numpy
 
         # Conversion
