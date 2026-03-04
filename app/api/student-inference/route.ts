@@ -74,12 +74,13 @@ export async function POST(request: Request) {
 
         console.log(`[STUDENT-INFERENCE] Requesting: bbox=${bbox} year=${year}`)
 
-        // Forward to Modal endpoint
+        // Forward to Modal endpoint, using request.signal so we drop the connection
+        // immediately if the user moves the map quickly and the client aborts.
         const response = await fetch(MODAL_ENDPOINT_URL, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ bbox, year }),
-            signal: AbortSignal.timeout(60000), // 60s timeout
+            signal: request.signal,
         })
 
         if (!response.ok) {
@@ -114,9 +115,18 @@ export async function POST(request: Request) {
         })
 
     } catch (error: any) {
+        // Suppress logging noise if the user just panned the map and aborted the request
+        if (error.name === "AbortError" || request.signal.aborted) {
+            console.log("[STUDENT-INFERENCE] Request aborted by client map movement.")
+            return NextResponse.json(
+                { error: "Aborted by client" },
+                { status: 499 } // 499 Client Closed Request
+            )
+        }
+
         console.error("[STUDENT-INFERENCE] Error:", error.message)
 
-        if (error.name === "TimeoutError" || error.name === "AbortError") {
+        if (error.name === "TimeoutError") {
             return NextResponse.json(
                 { error: "Inference timed out. Try a smaller viewport." },
                 { status: 504 }

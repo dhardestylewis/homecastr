@@ -388,22 +388,18 @@ def train_worldmodel(
     print(f"[{ts()}] Training config: origin={origin}, epochs={epochs}, sample={sample_size:,}")
     print(f"[{ts()}] GPU: {os.popen('nvidia-smi --query-gpu=name,memory.total --format=csv,noheader').read().strip()}")
 
-    # ─── Upload worldmodel.py + retrain to GCS for exec ───
-    # For the full training, we need the complete worldmodel.py
-    # Check if it exists in GCS
-    wm_blob = bucket.blob("code/worldmodel.py")
-    retrain_blob = bucket.blob("code/retrain_sample_sweep.py")
-
-    if not wm_blob.exists():
-        print(f"[{ts()}] worldmodel.py not found in GCS. Please upload it first:")
-        print(f"  gsutil cp scripts/inference/worldmodel.py gs://{bucket_name}/code/worldmodel.py")
-        print(f"  gsutil cp scripts/retrain_sample_sweep.py gs://{bucket_name}/code/retrain_sample_sweep.py")
-        raise FileNotFoundError("Upload worldmodel.py to GCS first")
-
+    # ─── Use locally mounted scripts for exec ───
+    print(f"[{ts()}] Getting worldmodel logic from local mount /scripts...")
     wm_local = "/tmp/worldmodel.py"
     retrain_local = "/tmp/retrain_sample_sweep.py"
-    wm_blob.download_to_filename(wm_local)
-    retrain_blob.download_to_filename(retrain_local)
+    import shutil
+    try:
+        shutil.copy("/scripts/inference/worldmodel.py", wm_local)
+        shutil.copy("/scripts/pipeline/retrain_sample_sweep.py", retrain_local)
+        print(f"[{ts()}] Successfully copied source files to /tmp/")
+    except FileNotFoundError as e:
+        print(f"[{ts()}] Error: Could not find scripts at /scripts mount. Did you mount the 'scripts' directory correctly? {e}")
+        raise
 
     # Patch worldmodel.py constants before exec
     with open(wm_local, "r") as f:

@@ -34,6 +34,7 @@ inference_image = (
         "properscoring",
         "diptest",
     )
+    .add_local_dir("scripts", remote_path="/scripts")
 )
 
 gcs_secret = modal.Secret.from_name("gcs-creds", required_keys=["GOOGLE_APPLICATION_CREDENTIALS_JSON"])
@@ -78,13 +79,15 @@ def evaluate_checkpoints(
     client = storage.Client()
     bucket = client.bucket(bucket_name)
 
-    # ─── 1. Download WorldModel Code ───
-    print(f"[{ts()}] Downloading worldmodel logic...")
-    wm_blob = bucket.blob("code/worldmodel.py")
-    if not wm_blob.exists():
-        raise FileNotFoundError("code/worldmodel.py not found in GCS. Run training first to upload.")
-    
-    wm_blob.download_to_filename("/tmp/worldmodel.py")
+    # ─── 1. Access WorldModel Code from Local Mount ───
+    print(f"[{ts()}] Getting worldmodel logic from local mount /scripts...")
+    import shutil
+    try:
+        shutil.copy("/scripts/inference/worldmodel.py", "/tmp/worldmodel.py")
+        print(f"[{ts()}] Successfully copied source files to /tmp/")
+    except FileNotFoundError as e:
+        print(f"[{ts()}] Error: Could not find script. {e}")
+        raise
     
     # ─── 2. Inject Runtime Global Overrides ───
     # We patch constants to point to local Modal paths
@@ -461,11 +464,17 @@ SimpleScaler = _DimSafeScaler
     model = model.to(_device).eval()
     
     # v11 Token Diffusion Components
-    gating_net = create_gating_network(hist_len=hist_len, num_dim=num_dim, n_cat=n_cat)
+    gating_sd = None
     if "gating_state_dict" in ckpt:
-        gating_net.load_state_dict(_strip(ckpt["gating_state_dict"]))
+        gating_sd = _strip(ckpt["gating_state_dict"])
     elif "gating_net_state_dict" in ckpt:
-        gating_net.load_state_dict(_strip(ckpt["gating_net_state_dict"]))
+        gating_sd = _strip(ckpt["gating_net_state_dict"])
+        
+    has_macro = gating_sd is not None and "year_emb.weight" in gating_sd
+    
+    gating_net = create_gating_network(hist_len=hist_len, num_dim=num_dim, n_cat=n_cat, use_macro=has_macro)
+    if gating_sd is not None:
+        gating_net.load_state_dict(gating_sd)
     gating_net = gating_net.to(_device).eval()
     
     token_persistence = create_token_persistence()
@@ -626,30 +635,46 @@ SimpleScaler = _DimSafeScaler
     ya = ctx["y_anchor"]
     y_levels = ya[:, None, None] + np.cumsum(deltas, axis=2)  # [N, S, H] log-space
 
-    # ─── 4.5 POST-HOC PIT CALIBRATION (Stage 1) ───
-    print(f"\n[{ts()}] ── Post-hoc PIT Calibration ──")
+    # ─── 4.5 POST-HOC PIT CALIBRATION (Stage 1 OOT) ───
+    print(f"\n[{ts()}] ── Post-hoc PIT Calibration (OOT) ──")
     from sklearn.isotonic import IsotonicRegression
+    import pickle
+    import os
+    
+    calib_dir = f"/output/{jurisdiction}_{version_tag}"
+    os.makedirs(calib_dir, exist_ok=True)
+    
+    # We will ALWAYS fit a new calibrator on the current origin's FULL dataset
+    # and save it for the next origin.
+    # We will ONLY apply calibration if a previous origin's calibrator exists.
+    
+    prev_origin = origin - 1
+    calib_load_path = os.path.join(calib_dir, f"calibrators_{version_tag}_{jurisdiction}_o{prev_origin}.pkl")
+    calib_save_path = os.path.join(calib_dir, f"calibrators_{version_tag}_{jurisdiction}_o{origin}.pkl")
+    
     calib_models = {}
-    np.random.seed(42 + origin)
-    
-    # Randomly split valid accounts into 50% Calib / 50% Test
-    n_total = len(accts)
-    shuffled_idx = np.random.permutation(n_total)
-    calib_idx = shuffled_idx[:n_total // 2]
-    test_idx = shuffled_idx[n_total // 2:]
-    
-    y_levels_test = y_levels[test_idx].copy()
-    y_levels_calib = y_levels[calib_idx].copy()
-    accts_test = accts[test_idx]
-    accts_calib = accts[calib_idx]
-    ya_test = ya[test_idx]
-    ya_calib = ya[calib_idx]
+    if os.path.exists(calib_load_path):
+        try:
+            with open(calib_load_path, "rb") as f:
+                calib_models = pickle.load(f)
+            print(f"[{ts()}] \U0001f504 Loaded {len(calib_models)} calibrators from OOT origin {prev_origin}")
+        except Exception as e:
+            print(f"[{ts()}] \u26a0\ufe0f Failed to load OOT calibrator {calib_load_path}: {e}")
+    else:
+        print(f"[{ts()}] \u26a0\ufe0f No OOT calibrator found at {calib_load_path}. Will evaluate uncalibrated.")
+
+    y_levels_calib = y_levels.copy()
+    y_levels_test = y_levels.copy()
+    accts_calib = accts
+    accts_test = accts
+    ya_calib = ya
+    ya_test = ya
     
     base_v = actual_vals.get(origin, {})
     
-    print(f"[{ts()}] Split: {len(calib_idx)} calibration, {len(test_idx)} test")
+    print(f"[{ts()}] OOT Split: Fitting on fully OOT origin {origin}")
     
-    # Fit calibrators on Calib set per (h, value_bucket)
+    new_calib_models = {}
     for h in range(1, MAX_HORIZON + 1):
         h_idx = h - 1
         eyr = origin + h
@@ -658,9 +683,9 @@ SimpleScaler = _DimSafeScaler
         future_v = actual_vals[eyr]
         
         for bkt_label, bkt_lo, bkt_hi in VALUE_BRACKETS:
-            # Collect PITs
+            # Collect PITs for fitting
             pits_calib = []
-            for i in range(len(calib_idx)):
+            for i in range(len(accts_calib)):
                 acct = str(accts_calib[i]).strip()
                 bv = base_v.get(acct, 0)
                 av = future_v.get(acct)
@@ -670,77 +695,57 @@ SimpleScaler = _DimSafeScaler
                 pits_calib.append(float(np.mean(fan_prices <= av)))
             
             if len(pits_calib) > 50:
-                # Fit Isotonic Regression: mapping uniform grid to empirical CDF
                 sorted_pits = np.sort(pits_calib)
                 empirical_cdf = np.arange(1, len(sorted_pits) + 1) / len(sorted_pits)
                 ir = IsotonicRegression(out_of_bounds='clip')
-                # We fit: input=empirical CDF, target=sorted PITs to get the inverse transform
-                # Wait, calibrator G maps p -> p_calib.
-                # If PIT=0.9 occurs at nominal CDF=0.5, the model underpredicts.
-                # To fix, p_calib for nominal 0.5 should be 0.9.
-                # So we fit f(nominal_p) = empirical_PIT 
                 ir.fit(empirical_cdf, sorted_pits)
-                calib_models[(h, bkt_label)] = ir
-                print(f"  [Calib Fit] h={h} bkt={bkt_label}: fit {len(pits_calib)} samples")
+                new_calib_models[(h, bkt_label)] = ir
+                print(f"  [Calib Fit] h={h} bkt={bkt_label}: fit {len(pits_calib)} samples for FUTURE origin")
             
-    # Serialize the calibrator dict to disk for production inference
-    import pickle
-    calib_dir = f"/output/{jurisdiction}_{version_tag}"
-    os.makedirs(calib_dir, exist_ok=True)
-    calib_save_path = os.path.join(calib_dir, f"calibrators_{version_tag}_{jurisdiction}.pkl")
     try:
         with open(calib_save_path, "wb") as f:
-            pickle.dump(calib_models, f)
-        print(f"[{ts()}] 🏆 Saved {len(calib_models)} calibrators to {calib_save_path}")
+            pickle.dump(new_calib_models, f)
+        print(f"[{ts()}] \U0001f3c6 Saved {len(new_calib_models)} calibrators to {calib_save_path}")
     except Exception as e:
-        print(f"[{ts()}] ⚠️ Failed to save calibrators: {e}")
+        print(f"[{ts()}] \u26a0\ufe0f Failed to save calibrators: {e}")
 
-    # Apply calibrators to Test set
-    scenarios_count = y_levels_test.shape[1]
-    sorted_p = (np.arange(scenarios_count) + 0.5) / scenarios_count # Empirical p-values of sorted scenarios
-    
-    for h in range(1, MAX_HORIZON + 1):
-        h_idx = h - 1
-        eyr = origin + h
-        if eyr not in actual_vals:
-            continue
-            
-        for bkt_label, bkt_lo, bkt_hi in VALUE_BRACKETS:
-            if (h, bkt_label) not in calib_models:
+    if calib_models:
+        scenarios_count = y_levels_test.shape[1]
+        sorted_p = (np.arange(scenarios_count) + 0.5) / scenarios_count 
+        
+        for h in range(1, MAX_HORIZON + 1):
+            h_idx = h - 1
+            eyr = origin + h
+            if eyr not in actual_vals:
                 continue
                 
-            calibrator = calib_models[(h, bkt_label)]
-            # Get remapped p-values
-            remapped_p = calibrator.predict(sorted_p)
-            # Clip strictly to prevent 0 or 1 edge anomalies mapping out of bounds
-            remapped_p = np.clip(remapped_p, 0.001, 0.999)
-            
-            for i in range(len(test_idx)):
-                acct = str(accts_test[i]).strip()
-                bv = base_v.get(acct, 0)
-                if bv <= 0 or not (bkt_lo <= bv < bkt_hi):
+            for bkt_label, bkt_lo, bkt_hi in VALUE_BRACKETS:
+                if (h, bkt_label) not in calib_models:
                     continue
+                    
+                calibrator = calib_models[(h, bkt_label)]
+                remapped_p = calibrator.predict(sorted_p)
+                remapped_p = np.clip(remapped_p, 0.001, 0.999)
                 
-                # Fetch scenarios and sort
-                fan = y_levels_test[i, :, h_idx]
-                sort_idx = np.argsort(fan)
-                sorted_fan = fan[sort_idx]
-                
-                # Remap: the new value at sorted position `j` takes the value
-                # from the old distribution at quantile `remapped_p[j]`.
-                # We use linear interpolation on the sorted fan.
-                new_sorted_fan = np.interp(remapped_p, sorted_p, sorted_fan)
-                
-                # Unsort back to original scenario order to preserve rank coherence
-                reverse_sort_idx = np.empty_like(sort_idx)
-                reverse_sort_idx[sort_idx] = np.arange(scenarios_count)
-                
-                # Overwrite test set scenarios with calibrated ones
-                y_levels_test[i, :, h_idx] = new_sorted_fan[reverse_sort_idx]
+                for i in range(len(accts_test)):
+                    acct = str(accts_test[i]).strip()
+                    bv = base_v.get(acct, 0)
+                    if bv <= 0 or not (bkt_lo <= bv < bkt_hi):
+                        continue
+                    
+                    fan = y_levels_test[i, :, h_idx]
+                    sort_idx = np.argsort(fan)
+                    sorted_fan = fan[sort_idx]
+                    new_sorted_fan = np.interp(remapped_p, sorted_p, sorted_fan)
+                    
+                    reverse_sort_idx = np.empty_like(sort_idx)
+                    reverse_sort_idx[sort_idx] = np.arange(scenarios_count)
+                    y_levels_test[i, :, h_idx] = new_sorted_fan[reverse_sort_idx]
 
-    # Replace the evaluation data with the CALIBRATED TEST SET
+    # Replace the evaluation data with the TEST SET (which may or may not be calibrated)
     accts = accts_test
     ya = ya_test
+    uncalibrated_medians = np.median(y_levels, axis=1) # [N, H] before overwriting y_levels
     y_levels = y_levels_test
     y_anchor = ya_test
     base_vals_arr = np.array([base_v.get(str(a).strip(), 0) for a in accts])
@@ -749,6 +754,7 @@ SimpleScaler = _DimSafeScaler
         "accts": list(accts),
         "y_anchor": ya,
         "y_levels": y_levels,
+        "uncalibrated_medians": uncalibrated_medians,
         "base_val": base_vals_arr,
         "deltas": y_levels - ya[:, None, None], # Approximate deltas
     }
@@ -760,6 +766,7 @@ SimpleScaler = _DimSafeScaler
     if key in variant_raw_results:
         res = variant_raw_results[key]
         y_levels = res["y_levels"]
+        uncalibrated_medians = res.get("uncalibrated_medians")
         y_anchor = res["y_anchor"]
         accts = res["accts"]
         base_v = actual_vals.get(origin, {})
@@ -801,7 +808,10 @@ SimpleScaler = _DimSafeScaler
                         
                     fan_prices = np.exp(fan)
                     pits.append(float(np.mean(fan_prices <= av)))
-                    pred_growth = float(np.expm1(np.nanmedian(fan) - y_anchor[i]) * 100)
+                    if uncalibrated_medians is not None:
+                        pred_growth = float(np.expm1(uncalibrated_medians[i, h_idx] - y_anchor[i]) * 100)
+                    else:
+                        pred_growth = float(np.expm1(np.nanmedian(fan) - y_anchor[i]) * 100)
                     actual_growth = float((av - bv) / bv * 100)
                     preds.append(pred_growth)
                     acts.append(actual_growth)
@@ -1092,12 +1102,12 @@ SimpleScaler = _DimSafeScaler
         try:
             samp_n = min(500, n_valid)
             with torch.no_grad():
-                alpha = gating_net(
-                    ctx["hist_y"][:samp_n].to(_device),
-                    ctx["cur_num"][:samp_n].to(_device),
-                    ctx["cur_cat"][:samp_n].to(_device),
-                    ctx["region_id"][:samp_n].to(_device)
-                )  # [N, K]
+                _h = torch.as_tensor(ctx["hist_y"][:samp_n], dtype=torch.float32, device=_device)
+                _n = torch.as_tensor(ctx["cur_num"][:samp_n], dtype=torch.float32, device=_device)
+                _c = torch.as_tensor(ctx["cur_cat"][:samp_n], dtype=torch.long, device=_device)
+                _r = torch.as_tensor(ctx["region_id"][:samp_n], dtype=torch.long, device=_device)
+                _o = torch.full((samp_n,), origin, dtype=torch.long, device=_device)
+                alpha = gating_net(_h, _n, _c, _r, _o)  # [N, K]
             alpha_np = alpha.cpu().numpy()
             alpha_mean = alpha_np.mean(axis=0)  # [K]
             alpha_std = alpha_np.std(axis=0)
@@ -1236,6 +1246,7 @@ SimpleScaler = _DimSafeScaler
         ya_cp = res["y_anchor"]          # [N]
         deltas_cp = res["deltas"]        # [N, S, H]
         base_vals_cp = res["base_val"]   # [N]
+        uncalibrated_medians_cp = res.get("uncalibrated_medians")
         accts_cp = res["accts"]
         N_cp, S_cp, H_cp = y_levels_cp.shape
 
@@ -1386,9 +1397,12 @@ SimpleScaler = _DimSafeScaler
                 if bv <= 0 or av is None or av <= 0:
                     continue
                 
-                # Model prediction (median of fan in dollar space)
+                # Model prediction (uncalibrated median in dollar space to preserve point skill)
                 fan = y_levels_cp[i, :, h-1]
-                model_pred = float(np.expm1(np.median(fan)))
+                if uncalibrated_medians_cp is not None:
+                    model_pred = float(np.expm1(uncalibrated_medians_cp[i, h-1]))
+                else:
+                    model_pred = float(np.expm1(np.median(fan)))
                 
                 # Persistence: price stays the same
                 persist_pred = bv
@@ -1423,6 +1437,15 @@ SimpleScaler = _DimSafeScaler
                     f"calibration/n_compare/o{origin}_h{h}": n_compare,
                 })
                 print(f"    h={h} model_MAE={model_mae:,.0f} persist_MAE={persist_mae:,.0f} rw_MAE={rw_mae:,.0f} wins={win_pct:.1f}% (n={n_compare})")
+                
+                # Point Accuracy Guardrail
+                ratio = model_mae / max(persist_mae, 1)
+                if ratio > 1.10:
+                    wandb.log({f"guardrail/point_accuracy_fail/o{origin}_h{h}": 1})
+                    print(f"    \u26a0\ufe0f STRICT GUARDRAIL FAILED: MAE vs Persistence ratio is {ratio:.2f} > 1.10")
+                else:
+                    wandb.log({f"guardrail/point_accuracy_fail/o{origin}_h{h}": 0})
+                    print(f"    \u2705 GUARDRAIL PASSED: MAE vs Persistence ratio {ratio:.2f} <= 1.10")
 
         # ─── CP6: MULTI-LEVEL COVERAGE ───────────────────────────────────
         # Coverage at multiple confidence levels (50%, 80%, 90%, 95%)
@@ -1668,23 +1691,28 @@ def main(
 ):
     origin_list = [int(o.strip()) for o in origins.split(",")]
     
-    # Grid search parameters
-    etas = [0.0, 0.1, 0.3]
-    steps_list = [20, 64]
-    taus = [1.0, 1.25]
+    # Grid search parameters focusing on Stage 1.5 Calibration bounds
+    etas = [0.0, 0.1]
+    steps_list = [20, 40]
+    taus = [1.0, 1.1, 1.2, 1.25]
     
     print(f"\U0001f680 Launching sweep {version_tag} on Modal across {len(origin_list)} origins and {len(etas)*len(steps_list)*len(taus)} hyperparams")
     print(f"   Jurisdiction: {jurisdiction}")
     print(f"   Origins: {origin_list}")
     
     params = []
-    for origin in origin_list:
+    # Sort origins! To enforce chronological testing sequentially
+    for origin in sorted(origin_list):
         for _eta in etas:
             for _steps in steps_list:
                 for _tau in taus:
                     params.append((jurisdiction, bucket_name, origin, sample_size, scenarios, version_tag, _eta, _steps, _tau))
     
-    results = list(evaluate_checkpoints.starmap(params))
+    results = []
+    # Use sequential execution for OOT dependent state loading
+    for param in params:
+        res = evaluate_checkpoints.remote(*param)
+        results.append(res)
 
     # ─── A2: Cross-origin scaler integrity comparison ───
     scaler_data = [r for r in results if r is not None and isinstance(r, dict)]

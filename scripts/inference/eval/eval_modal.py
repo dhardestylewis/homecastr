@@ -34,6 +34,7 @@ inference_image = (
         "properscoring",
         "diptest",
     )
+    .add_local_dir("scripts", remote_path="/scripts")
 )
 
 gcs_secret = modal.Secret.from_name("gcs-creds", required_keys=["GOOGLE_APPLICATION_CREDENTIALS_JSON"])
@@ -75,13 +76,15 @@ def evaluate_checkpoints(
     client = storage.Client()
     bucket = client.bucket(bucket_name)
 
-    # ─── 1. Download WorldModel Code ───
-    print(f"[{ts()}] Downloading worldmodel logic...")
-    wm_blob = bucket.blob("code/worldmodel.py")
-    if not wm_blob.exists():
-        raise FileNotFoundError("code/worldmodel.py not found in GCS. Run training first to upload.")
-    
-    wm_blob.download_to_filename("/tmp/worldmodel.py")
+    # ─── 1. Access WorldModel Code from Local Mount ───
+    print(f"[{ts()}] Getting worldmodel logic from local mount /scripts...")
+    import shutil
+    try:
+        shutil.copy("/scripts/inference/worldmodel.py", "/tmp/worldmodel.py")
+        print(f"[{ts()}] Successfully copied source files to /tmp/")
+    except FileNotFoundError as e:
+        print(f"[{ts()}] Error: Could not find script. {e}")
+        raise
     
     # ─── 2. Inject Runtime Global Overrides ───
     # We patch constants to point to local Modal paths
@@ -458,11 +461,17 @@ SimpleScaler = _DimSafeScaler
     model = model.to(_device).eval()
     
     # v11 Token Diffusion Components
-    gating_net = create_gating_network(hist_len=hist_len, num_dim=num_dim, n_cat=n_cat)
+    gating_sd = None
     if "gating_state_dict" in ckpt:
-        gating_net.load_state_dict(_strip(ckpt["gating_state_dict"]))
+        gating_sd = _strip(ckpt["gating_state_dict"])
     elif "gating_net_state_dict" in ckpt:
-        gating_net.load_state_dict(_strip(ckpt["gating_net_state_dict"]))
+        gating_sd = _strip(ckpt["gating_net_state_dict"])
+        
+    has_macro = gating_sd is not None and "year_emb.weight" in gating_sd
+    
+    gating_net = create_gating_network(hist_len=hist_len, num_dim=num_dim, n_cat=n_cat, use_macro=has_macro)
+    if gating_sd is not None:
+        gating_net.load_state_dict(gating_sd)
     gating_net = gating_net.to(_device).eval()
     
     token_persistence = create_token_persistence()
@@ -966,12 +975,12 @@ SimpleScaler = _DimSafeScaler
         try:
             samp_n = min(500, n_valid)
             with torch.no_grad():
-                alpha = gating_net(
-                    ctx["hist_y"][:samp_n].to(_device),
-                    ctx["cur_num"][:samp_n].to(_device),
-                    ctx["cur_cat"][:samp_n].to(_device),
-                    ctx["region_id"][:samp_n].to(_device)
-                )  # [N, K]
+                _h = torch.as_tensor(ctx["hist_y"][:samp_n], dtype=torch.float32, device=_device)
+                _n = torch.as_tensor(ctx["cur_num"][:samp_n], dtype=torch.float32, device=_device)
+                _c = torch.as_tensor(ctx["cur_cat"][:samp_n], dtype=torch.long, device=_device)
+                _r = torch.as_tensor(ctx["region_id"][:samp_n], dtype=torch.long, device=_device)
+                _o = torch.full((samp_n,), origin, dtype=torch.long, device=_device)
+                alpha = gating_net(_h, _n, _c, _r, _o)  # [N, K]
             alpha_np = alpha.cpu().numpy()
             alpha_mean = alpha_np.mean(axis=0)  # [K]
             alpha_std = alpha_np.std(axis=0)

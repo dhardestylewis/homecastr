@@ -127,116 +127,112 @@ def _bbox_to_quadkeys(min_lat, min_lng, max_lat, max_lng, zoom=9):
 
 def _fetch_buildings_for_bbox(min_lat, min_lng, max_lat, max_lng):
     """
-    Fetch building footprints with POLYGON geometries within bbox using OSM Overpass API.
-    Replaces deprecated MS Buildings dataset blob storage.
+    Fetch building footprints with POLYGON geometries within bbox using MS Buildings v3 dataset.
+    This replaces OSM Overpass and downloads regional CSV.GZ quadkey tiles on the fly.
     """
-    import json
+    import csv, gzip, io, json
     import requests
-    from shapely.geometry import Polygon
-
-    print(f"  Querying OSM buildings for bbox: [{min_lat:.4f}, {min_lng:.4f}] → [{max_lat:.4f}, {max_lng:.4f}]")
+    from shapely.geometry import Polygon, shape
     
-    # Bounding box for Overpass is (s, w, n, e) -> (min_lat, min_lng, max_lat, max_lng)
-    query = f"""[out:json][timeout:25];
-(
-  way["building"]({min_lat},{min_lng},{max_lat},{max_lng});
-);
-out geom;
-"""
+    print(f"  Querying MS Buildings for bbox: [{min_lat:.4f}, {min_lng:.4f}] → [{max_lat:.4f}, {max_lng:.4f}]")
     
-    import time
+    # 1. Find overlapping quadkeys at zoom 9 (MS Buildings index level)
+    target_qks = _bbox_to_quadkeys(min_lat, min_lng, max_lat, max_lng, zoom=9)
+    print(f"  Target QuadKeys: {target_qks}")
+    
+    # 2. Download tile index
+    try:
+        r = requests.get(MS_BUILDINGS_INDEX, timeout=30)
+        r.raise_for_status()
+        reader = csv.DictReader(io.StringIO(r.text))
+        all_tiles = [row for row in reader if row.get("Location") == "UnitedStates"]
+    except Exception as e:
+        print(f"  ⚠️ Failed to download MS Buildings index: {e}")
+        return [], []
+        
+    matching_tiles = [t for t in all_tiles if t.get("QuadKey") in target_qks]
+    if not matching_tiles:
+        print(f"  No MS Building tiles intersect this bbox")
+        return [], []
+        
+    print(f"  Matched {len(matching_tiles)} MS Building tiles to download")
     
     all_buildings = []
-    max_retries = 3
     
-    for attempt in range(max_retries):
+    # 3. Download and parse CSV.GZ tiles
+    for i, tile in enumerate(matching_tiles):
+        url = tile.get("Url", "")
+        qk = tile.get("QuadKey", "")
+        size = tile.get("Size", "?")
+        print(f"  Downloading tile {i+1}/{len(matching_tiles)} (QK={qk}, {size})...")
+        
         try:
-            resp = requests.post("https://overpass-api.de/api/interpreter", data=query, timeout=30)
-            
-            # If we hit a 504 or 429 and can retry, back off and retry
-            if resp.status_code in (504, 429) and attempt < max_retries - 1:
-                sleep_s = 2 ** (attempt + 1)
-                print(f"  ⚠️ Overpass API {resp.status_code} error. Retrying {attempt+1}/{max_retries} in {sleep_s}s...")
-                time.sleep(sleep_s)
+            r = requests.get(url, timeout=120)
+            if r.status_code != 200:
+                print(f"    Skipped: HTTP {r.status_code}")
                 continue
                 
-            resp.raise_for_status()
-            data = resp.json()
-            
-            for el in data.get("elements", []):
-                if el["type"] == "way":
-                    coords = [(pt["lon"], pt["lat"]) for pt in el.get("geometry", [])]
-                    if len(coords) < 3:
-                        continue
+            # Parse CSV.GZ line-by-line streaming
+            for line in gzip.open(io.BytesIO(r.content)):
+                try:
+                    feat = json.loads(line)
+                    geom = shape(feat["geometry"])
+                    centroid = geom.centroid
                     
-                    # Ensure closed polygon
-                    if coords[0] != coords[-1]:
-                        coords.append(coords[0])
+                    # Exact bbox filter
+                    if min_lng <= centroid.x <= max_lng and min_lat <= centroid.y <= max_lat:
+                        # Extract height if available, else assume 1 story
+                        props = feat.get("properties", {})
+                        height_m = float(props.get("height", 3.0))
+                        if height_m <= 0: height_m = 3.0
+                        stories = max(1.0, height_m / 3.0)
                         
-                    tags = el.get("tags", {})
-                    levels = tags.get("building:levels", "1")
-                    try:
-                        stories = max(1, float(levels))
-                    except:
-                        stories = 1.0
-                    
-                    try:
-                        poly = Polygon(coords)
-                        centroid = poly.centroid
-                        # Area in sq degrees → approximate sq meters → sq feet
-                        area_sqm = poly.area * (111000 ** 2)  # crude deg² to m²
-                        sqft = area_sqm * 10.764
+                        # Area in sq meters
+                        lat_rad = centroid.y * (3.14159 / 180.0)
+                        m_per_deg_lon = 111320.0 * __import__("math").cos(lat_rad)
+                        m_per_deg_lat = 110540.0
+                        area_m2 = geom.area * m_per_deg_lon * m_per_deg_lat
+                        sqft = area_m2 * 10.764
                         
-                        centroid_lat = centroid.y
-                        centroid_lng = centroid.x
-                    except:
-                        continue
-                    
-                    height_m = stories * 3.0
-                    
-                    # We need proper GeoJSON format for the geometry
-                    geojson_geom = {
-                        "type": "Polygon",
-                        "coordinates": [coords]
-                    }
-                    
-                    all_buildings.append({
-                        "geometry": geojson_geom,
-                        "lat": centroid_lat,
-                        "lon": centroid_lng,
-                        "sqft": sqft,
-                        "stories": float(stories),
-                        "height_m": height_m,
-                    })
-                    
-                    if len(all_buildings) >= MAX_BUILDINGS:
-                        break
-            
-            # If we arrive here, parsing worked completely, so break out of the retry loop
-            break
+                        # Properly oriented GeoJSON coordinates
+                        if geom.geom_type == 'Polygon':
+                            coords = list(geom.exterior.coords)
+                        else:
+                            continue # Ignore multipolygons for now
+                            
+                        geojson_geom = {
+                            "type": "Polygon",
+                            "coordinates": [coords]
+                        }
                         
-        except requests.exceptions.RequestException as e:
-            # Catch network/timeout errors specifically to allow retries
-            if attempt < max_retries - 1:
-                sleep_s = 2 ** (attempt + 1)
-                print(f"  ⚠️ Overpass connection error '{e}'. Retrying {attempt+1}/{max_retries} in {sleep_s}s...")
-                time.sleep(sleep_s)
-                continue
-            import traceback
-            print(f"  ⚠️ Failed to fetch OSM buildings after {max_retries} attempts: {e}\n{traceback.format_exc()}")
-            return [], []
-            
+                        all_buildings.append({
+                            "geometry": geojson_geom,
+                            "lat": centroid.y,
+                            "lon": centroid.x,
+                            "sqft": sqft,
+                            "stories": stories,
+                            "height_m": height_m,
+                        })
+                        
+                        if len(all_buildings) >= MAX_BUILDINGS:
+                            break
+                            
+                except (json.JSONDecodeError, KeyError, Exception):
+                    continue
+                    
+            if len(all_buildings) >= MAX_BUILDINGS:
+                print(f"    Reached max buildings ({MAX_BUILDINGS}), truncating.")
+                break
+                
         except Exception as e:
-            # Non-network error (e.g., json parsing error from a bad response)
-            import traceback
-            print(f"  ⚠️ Failed to process OSM buildings: {e}\n{traceback.format_exc()}")
-            return [], []
+            print(f"    Error processing tile {qk}: {e}")
+            continue
 
     if not all_buildings:
-        print(f"  No OSM Buildings found in bbox")
+        print(f"  No MS Buildings found inside exact bbox")
         return [], []
 
-    print(f"  ✅ {len(all_buildings):,} OSM buildings loaded with polygon geometries")
+    print(f"  ✅ {len(all_buildings):,} MS buildings loaded with polygon geometries")
     return all_buildings[:MAX_BUILDINGS], [b["geometry"] for b in all_buildings[:MAX_BUILDINGS]]
 
 
@@ -338,6 +334,11 @@ def _run_student_inference(df, ckpt_path, origin_year=2024, year=2026):
     
     denoiser = wm.create_denoiser_v11(target_dim=H_dim, hist_len=hist_len, num_dim=model_num_dim, n_cat=model_cat_dim).to(device)
     denoiser.load_state_dict(ckpt["model_state_dict"])
+    
+    denoiser._y_scaler = wm.SimpleScaler(mean=np.array(ckpt.get("y_scaler_mean", [0])), scale=np.array(ckpt.get("y_scaler_scale", [1])))
+    denoiser._n_scaler = wm.SimpleScaler(mean=np.array(ckpt.get("n_scaler_mean", [0])), scale=np.array(ckpt.get("n_scaler_scale", [1])))
+    denoiser._t_scaler = wm.SimpleScaler(mean=np.array(ckpt.get("t_scaler_mean", [0])), scale=np.array(ckpt.get("t_scaler_scale", [1])))
+    
     denoiser.eval()
     
     gating = wm.create_gating_network(hist_len=hist_len, num_dim=model_num_dim, n_cat=model_cat_dim).to(device)
