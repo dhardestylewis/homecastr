@@ -1428,6 +1428,7 @@ def _sample_scenarios_for_inference_context(ctx, H: int, S: int, origin: int, pr
             region_id_b=ctx["region_id"][start:end],
             Z_tokens=Z_tokens,
             device=_device,
+            anchor_year=origin,
             coh_scale=_coh_scale_ref,
             tau=SAMPLER_TAU,
         )  # (end-start, S, H) numpy

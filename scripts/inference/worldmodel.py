@@ -1340,7 +1340,7 @@ class GatingNetwork(nn.Module):
     Input: hist_y [B, hist_len], cur_num [B, num_dim], cur_cat [B, n_cat], region_id [B]
     Output: alpha [B, K] — sparse softmax weights (top-k active, rest zeroed)
     """
-    def __init__(self, hist_len: int, num_dim: int, n_cat: int, K: int, k: int, hidden: int = 64):
+    def __init__(self, hist_len: int, num_dim: int, n_cat: int, K: int, k: int, hidden: int = 64, use_macro: bool = True):
         super().__init__()
         self.K = int(K)
         self.k = int(k)
@@ -1348,9 +1348,14 @@ class GatingNetwork(nn.Module):
         self.cat_embs = nn.ModuleList([nn.Embedding(HASH_BUCKET_SIZE, self.cat_emb_dim) for _ in range(max(1, int(n_cat)))])
         cat_total = self.cat_emb_dim * max(1, int(n_cat))
         self.region_emb = nn.Embedding(GEO_BUCKETS, REGION_EMB_DIM)
+        
+        self.use_macro = use_macro
+        self.macro_emb_dim = 16 if use_macro else 0
+        if use_macro:
+            self.year_emb = nn.Embedding(100, self.macro_emb_dim)
 
-        in_dim = hist_len + max(1, num_dim) + cat_total + REGION_EMB_DIM
-        print(f"  [DIAG] GatingNetwork in_dim={in_dim} = hist_len({hist_len}) + num_dim({max(1,num_dim)}) + cat_total({cat_total}) + region({REGION_EMB_DIM})")
+        in_dim = hist_len + max(1, num_dim) + cat_total + REGION_EMB_DIM + self.macro_emb_dim
+        print(f"  [DIAG] GatingNetwork in_dim={in_dim} = hist_len({hist_len}) + num_dim({max(1,num_dim)}) + cat_total({cat_total}) + region({REGION_EMB_DIM}) + macro({self.macro_emb_dim})")
         self._diag_printed = False
         self.net = nn.Sequential(
             nn.Linear(in_dim, hidden),
@@ -1361,7 +1366,7 @@ class GatingNetwork(nn.Module):
         )
 
     def forward(self, hist_y: torch.Tensor, cur_num: torch.Tensor,
-                cur_cat: torch.Tensor, region_id: torch.Tensor) -> torch.Tensor:
+                cur_cat: torch.Tensor, region_id: torch.Tensor, origin_year: Optional[torch.Tensor] = None) -> torch.Tensor:
         B = hist_y.shape[0]
         # Encode categoricals
         if cur_cat.shape[1] > 0 and len(self.cat_embs) > 0:
@@ -1376,12 +1381,19 @@ class GatingNetwork(nn.Module):
         # Encode region
         region_vec = self.region_emb(region_id.clamp(0, GEO_BUCKETS - 1).long())
 
+        # Encode macro
+        if self.use_macro and origin_year is not None:
+             yr_idx = (origin_year - 2000).clamp(0, 99).long()
+             macro_vec = self.year_emb(yr_idx)
+        else:
+             macro_vec = torch.zeros((B, self.macro_emb_dim), device=hist_y.device, dtype=hist_y.dtype)
+
         # Zero-pad cur_num if empty
         if cur_num.shape[1] == 0:
             cur_num = torch.zeros((B, 1), device=hist_y.device, dtype=hist_y.dtype)
 
         # Concat all inputs
-        x = torch.cat([hist_y, cur_num, cat_vec, region_vec], dim=1)
+        x = torch.cat([hist_y, cur_num, cat_vec, region_vec, macro_vec], dim=1)
         if not self._diag_printed:
             print(f"  [DIAG] GatingNetwork.forward: hist={hist_y.shape[1]} num={cur_num.shape[1]} cat_vec={cat_vec.shape[1]} region={region_vec.shape[1]} => x={x.shape[1]} vs net expects {self.net[0].in_features}")
             self._diag_printed = True
@@ -1412,6 +1424,74 @@ def compute_shared_driver(alpha: torch.Tensor, Z_tokens: torch.Tensor) -> torch.
     else:
         # Z_tokens is [B, K, H], already expanded → produce [B, H]
         return torch.einsum("bk,bkh->bh", alpha, Z_tokens)
+
+class HeteroscedasticTokenModel(nn.Module):
+    """
+    Challenger Baseline: Direct heteroscedastic likelihood model (Student-t/Gaussian)
+    with shared token factors.
+    Out: mu (H), sigma (H), beta (H, K) per parcel.
+    """
+    def __init__(self, hist_len: int, num_dim: int, n_cat: int, K: int, H: int, hidden: int = 128, use_macro: bool = True):
+        super().__init__()
+        self.K = int(K)
+        self.H = int(H)
+        self.cat_emb_dim = 16
+        self.cat_embs = nn.ModuleList([nn.Embedding(HASH_BUCKET_SIZE, self.cat_emb_dim) for _ in range(max(1, int(n_cat)))])
+        cat_total = self.cat_emb_dim * max(1, int(n_cat))
+        self.region_emb = nn.Embedding(GEO_BUCKETS, REGION_EMB_DIM)
+        
+        self.use_macro = use_macro
+        self.macro_emb_dim = 16 if use_macro else 0
+        if use_macro:
+            self.year_emb = nn.Embedding(100, self.macro_emb_dim)
+
+        in_dim = hist_len + max(1, num_dim) + cat_total + REGION_EMB_DIM + self.macro_emb_dim
+        
+        self.net = nn.Sequential(
+            nn.Linear(in_dim, hidden),
+            nn.LayerNorm(hidden),
+            nn.GELU(),
+            nn.Linear(hidden, hidden),
+            nn.LayerNorm(hidden),
+            nn.GELU(),
+            nn.Linear(hidden, self.H * (2 + self.K))
+        )
+        
+    def forward(self, hist_y: torch.Tensor, cur_num: torch.Tensor,
+                cur_cat: torch.Tensor, region_id: torch.Tensor, origin_year: Optional[torch.Tensor] = None):
+        B = hist_y.shape[0]
+        # Encode categoricals
+        if cur_cat.shape[1] > 0 and len(self.cat_embs) > 0:
+            cat_vecs = []
+            for j, emb in enumerate(self.cat_embs):
+                v = cur_cat[:, min(j, cur_cat.shape[1]-1)].clamp(0, HASH_BUCKET_SIZE - 1).long()
+                cat_vecs.append(emb(v))
+            cat_vec = torch.cat(cat_vecs, dim=1)
+        else:
+            cat_vec = torch.zeros((B, self.cat_emb_dim), device=hist_y.device, dtype=hist_y.dtype)
+
+        # Encode region
+        region_vec = self.region_emb(region_id.clamp(0, GEO_BUCKETS - 1).long())
+
+        # Encode macro
+        if self.use_macro and origin_year is not None:
+             yr_idx = (origin_year - 2000).clamp(0, 99).long()
+             macro_vec = self.year_emb(yr_idx)
+        else:
+             macro_vec = torch.zeros((B, self.macro_emb_dim), device=hist_y.device, dtype=hist_y.dtype)
+
+        if cur_num.shape[1] == 0:
+            cur_num = torch.zeros((B, 1), device=hist_y.device, dtype=hist_y.dtype)
+
+        x = torch.cat([hist_y, cur_num, cat_vec, region_vec, macro_vec], dim=1)
+        out = self.net(x)  # [B, H * (2 + K)]
+        out = out.view(B, self.H, 2 + self.K)
+        
+        mu = out[:, :, 0]  # [B, H]
+        sigma = nn.functional.softplus(out[:, :, 1]) + 1e-4  # [B, H]
+        beta = out[:, :, 2:]  # [B, H, K]
+        
+        return mu, sigma, beta
 
 class CoherenceScale(nn.Module):
     """
@@ -1553,8 +1633,16 @@ class Conv1dDenoiserV11(nn.Module):
 def create_denoiser_v11(target_dim: int, hist_len: int, num_dim: int, n_cat: int) -> nn.Module:
     return Conv1dDenoiserV11(target_dim, hist_len, num_dim, n_cat, DENOISER_HIDDEN, DENOISER_LAYERS, CONV_KERNEL_SIZE)
 
-def create_gating_network(hist_len: int, num_dim: int, n_cat: int) -> nn.Module:
-    return GatingNetwork(hist_len, num_dim, n_cat, K=K_TOKENS, k=K_ACTIVE, hidden=GATING_HIDDEN)
+def create_gating_network(hist_len: int, num_dim: int, n_cat: int, use_macro: bool = True) -> nn.Module:
+    return GatingNetwork(
+        hist_len=int(hist_len),
+        num_dim=int(num_dim),
+        n_cat=int(n_cat),
+        K=int(K_TOKENS),
+        k=int(K_ACTIVE),
+        use_macro=bool(use_macro),
+        hidden=GATING_HIDDEN
+    )
 
 def create_token_persistence() -> TokenPersistence:
     return TokenPersistence(K=K_TOKENS, phi_init=PHI_INIT)
@@ -1753,7 +1841,8 @@ def train_diffusion_v11(
                 try:
                     with autocast_ctx:
                         # Compute per-parcel mixing weights
-                        alpha = gating_net(hy.float(), xn.float(), xc, rid)  # [B, K]
+                        oy = torch.full((B,), int(origin), dtype=torch.long, device=device)
+                        alpha = gating_net(hy.float(), xn.float(), xc, rid, origin_year=oy)  # [B, K]
 
                         # Accumulate diagnostics (detached, no grad impact)
                         with torch.no_grad():
@@ -2023,6 +2112,7 @@ def sample_ddim_v11(
     region_id_b: np.ndarray,
     Z_tokens: torch.Tensor,    # [S, K, H] pre-sampled token paths
     device: str,
+    anchor_year: int = 2021,   # explicitly pass anchor year for macro embedding
     coh_scale: CoherenceScale = None,  # optional: if None, sigma_u=1.0
     tau: float = 1.0,           # optional: temperature scaling for idiosyncratic noise
 ) -> np.ndarray:
@@ -2070,7 +2160,8 @@ def sample_ddim_v11(
     rid = torch.from_numpy(region_id_b.astype(np.int64)).pin_memory().to(device=device, non_blocking=True)
 
     # Compute per-parcel gating weights ONCE (shared across all scenarios)
-    alpha = gating_net(hy.float(), xn.float(), xc, rid)  # [N, K]
+    oy = torch.full((N,), int(anchor_year), dtype=torch.long, device=device)
+    alpha = gating_net(hy.float(), xn.float(), xc, rid, origin_year=oy)  # [N, K]
 
     # Move Z_tokens to device
     if Z_tokens.device != torch.device(device):
@@ -2187,6 +2278,155 @@ def sample_ddim_v11(
         print(f"[{ts()}] SAMPLER first_bad_step={first_bad_step}")
 
     return out
+
+# -----------------------------
+# 16) Challenger Model Training
+# -----------------------------
+def train_challenger_model_v11(
+    shard_paths: List[str],
+    origin: int,
+    epochs: int,
+    model: nn.Module,
+    device: str,
+    num_dim: int,
+    n_cat: int,
+    work_dirs: dict,
+):
+    """
+    Train the HeteroscedasticTokenModel using Student-t Negative Log Likelihood.
+    Minimizes the marginal NLL over the H-step forecast horizon.
+    """
+    print(f"[{ts()}] Starting train_challenger_model_v11 for origin {origin} on {device}")
+    
+    # ── 1) Fit local scalers identically to diffusion ──
+    print(f"[{ts()}] Fitting local tabular scalers for Stage 3 Challenger...")
+    
+    hist_y_list = []
+    cur_num_list = []
+    x0_list = []
+    
+    for _, z in _iter_shards_npz(shard_paths):
+        hist_y_s = z["hist_y_s"]
+        cur_num_s = z["cur_num_s"]
+        deltas = z["deltas"]
+        mask = z["mask"]
+        
+        # Only fit scalers on unmasked data
+        for i_h in range(deltas.shape[1]):
+            valid = mask[:, i_h] > 0
+            if valid.sum() > 0:
+                hist_y_list.append(hist_y_s[valid])
+                if int(num_dim) > 0:
+                    cur_num_list.append(cur_num_s[valid])
+                x0_list.append(deltas[valid, i_h])
+                
+    if not hist_y_list:
+        raise ValueError("No valid training data found in shards.")
+
+    y_mat = np.concatenate(hist_y_list, axis=0)
+    y_scaler = RobustScaler(quantile_range=(1.0, 99.0)).fit(y_mat)
+
+    n_scaler = None
+    if int(num_dim) > 0:
+        n_mat = np.concatenate(cur_num_list, axis=0)
+        n_scaler = RobustScaler(quantile_range=(1.0, 99.0)).fit(n_mat)
+    else:
+        n_scaler = RobustScaler()
+        n_scaler.mean_ = np.array([0.0])
+        n_scaler.scale_ = np.array([1.0])
+
+    t_mat = np.concatenate(x0_list, axis=0).reshape(-1, 1)
+    t_scaler = RobustScaler(quantile_range=(1.0, 99.0)).fit(t_mat)
+
+    # ── 2) Scale shards ──
+    scaled_dir = os.path.join(work_dirs["SCALED_SHARD_ROOT"], f"challenger_origin_{int(origin)}")
+    scaled_paths = write_scaled_shards_v102(
+        shard_paths_raw=shard_paths,
+        out_dir_scaled=scaled_dir,
+        y_scaler=y_scaler,
+        n_scaler=n_scaler,
+        t_scaler=t_scaler,
+        num_dim=int(num_dim),
+        keep_acct=False,
+        use_float16=bool(SCALED_SHARDS_FLOAT16),
+    )
+
+    opt = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=1e-4)
+    lr_sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=int(epochs), eta_min=1e-4)
+    model.train()
+    
+    losses = []
+    _total_batches = 0
+    rng = np.random.default_rng(42)
+    scaled_paths_local = list(scaled_paths)
+    
+    # Degrees of freedom for Student-t
+    nu = 4.0
+    
+    for ep in range(int(epochs)):
+        rng.shuffle(scaled_paths_local)
+        ep_losses = []
+        
+        for _shard_idx, (_, z) in enumerate(_iter_shards_npz(scaled_paths_local)):
+            hist_y_s = z["hist_y_s"]
+            cur_num_s = z["cur_num_s"]
+            x0_s = z["x0_s"]  # [N, H]  scaled target
+            mask = z["mask"]
+            cur_cat = z["cur_cat"].astype(np.int64, copy=False)
+            region_id = z["region_id"].astype(np.int64, copy=False)
+
+            n = int(x0_s.shape[0])
+            if n == 0: continue
+            
+            perm = rng.permutation(n)
+            
+            for start in range(0, n, int(DIFF_BATCH)):
+                b = perm[start:start + int(DIFF_BATCH)]
+                B = int(b.size)
+                if B == 0: continue
+                
+                hy = torch.from_numpy(hist_y_s[b]).to(device, non_blocking=True).float()
+                if int(num_dim) > 0:
+                    xn = torch.from_numpy(cur_num_s[b]).to(device, non_blocking=True).float()
+                else:
+                    xn = torch.zeros((B, 0), device=device, dtype=torch.float32)
+                
+                xc = torch.from_numpy(cur_cat[b]).to(device, non_blocking=True)
+                rid = torch.from_numpy(region_id[b]).to(device, non_blocking=True)
+                y_true = torch.from_numpy(x0_s[b]).to(device, non_blocking=True).float()
+                m = torch.from_numpy(mask[b]).to(device, non_blocking=True).float()
+                
+                oy = torch.full((B,), int(origin), dtype=torch.long, device=device)
+                
+                opt.zero_grad(set_to_none=True)
+                
+                mu, sigma, beta = model(hy, xn, xc, rid, origin_year=oy)
+                
+                # Marginal variance assuming tokens z ~ N(0, 1) mutually independent
+                # V_h = sum_k beta_{kh}^2 + sigma_h^2
+                V = (beta**2).sum(dim=2) + sigma**2  # [B, H]
+                S = torch.sqrt(V)  # scale parameter [B, H]
+                
+                # Student-t NLL: -log(S) - (nu + 1)/2 * log(1 + (y - mu)^2 / (nu * S^2))
+                # Negative of the likelihood:
+                nll = torch.log(S) + ((nu + 1) / 2.0) * torch.log(1.0 + ((y_true - mu)**2) / (nu * S**2))
+                
+                # Apply mask and average
+                loss = (nll * m).sum() / m.sum().clamp(min=1.0)
+                
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                opt.step()
+                
+                ep_losses.append(loss.item())
+                _total_batches += 1
+                
+        lr_sched.step()
+        ep_mean = float(np.mean(ep_losses)) if ep_losses else 0.0
+        losses.append(ep_mean)
+        print(f"[{ts()}] Challenger Epoch {ep:02d} | Loss: {ep_mean:.4f} | LR: {lr_sched.get_last_lr()[0]:.1e}")
+        
+    return y_scaler, n_scaler, t_scaler, losses, scaled_paths
 
 # -----------------------------
 # 17) Acceptance tests

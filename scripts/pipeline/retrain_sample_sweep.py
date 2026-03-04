@@ -376,6 +376,59 @@ for variant_tag, sample_size, strat_above, strat_pct in SWEEP_VARIANTS:
             work_dirs=variant_work_dirs,
         )
 
+        # ── Train Challenger Baseline ──
+        TRAIN_CHALLENGER = bool(globals().get("TRAIN_CHALLENGER", True))
+        if TRAIN_CHALLENGER:
+            print(f"  🧪 Training Challenger Baseline from scratch ({_epochs} epochs)")
+            try:
+                challenger_model = globals()["HeteroscedasticTokenModel"](
+                    hist_len=_hist_len,
+                    num_dim=_num_dim,
+                    n_cat=_n_cat,
+                    K=int(globals().get("K_TOKENS", 8)),
+                    H=_H,
+                ).to(_device)
+                
+                y_scaler_c, n_scaler_c, t_scaler_c, losses_c, _ = globals()["train_challenger_model_v11"](
+                    shard_paths=origin_shards,
+                    origin=origin,
+                    epochs=_epochs,
+                    model=challenger_model,
+                    device=_device,
+                    num_dim=_num_dim,
+                    n_cat=_n_cat,
+                    work_dirs=variant_work_dirs,
+                )
+                import sys
+                if 'wandb' in sys.modules:
+                    import wandb
+                    if wandb.run is not None:
+                        wandb.log({"challenger_final_loss": losses_c[-1] if losses_c else None})
+                        wandb.run.summary["challenger_final_loss"] = losses_c[-1] if losses_c else None
+                
+                # Save challenger ckpt
+                c_ckpt_data = {
+                    "model_state_dict": challenger_model.state_dict(),
+                    "y_scaler_mean": y_scaler_c.mean_.tolist(),
+                    "y_scaler_scale": y_scaler_c.scale_.tolist(),
+                    "n_scaler_mean": n_scaler_c.mean_.tolist(),
+                    "n_scaler_scale": n_scaler_c.scale_.tolist(),
+                    "t_scaler_mean": t_scaler_c.mean_.tolist(),
+                    "t_scaler_scale": t_scaler_c.scale_.tolist(),
+                    "arch": "heteroscedastic_token_v1",
+                    "sweep": { "final_loss": losses_c[-1] if losses_c else None }
+                }
+                c_ckpt_name = f"ckpt_challenger_origin_{origin}_{variant_tag}.pt"
+                c_local_ckpt = os.path.join(variant_scratch, c_ckpt_name)
+                torch.save(c_ckpt_data, c_local_ckpt)
+                copy_small_artifacts_to_drive(c_local_ckpt, _out_dir)
+                
+                # Cleanup footprint
+                del challenger_model
+            except Exception as e:
+                print(f"  ⚠️ Challenger training failed natively: {e}")
+
+
         # ── Save v11 checkpoint (all 4 modules) ──
         ckpt_data = {
             "model_state_dict": model.state_dict(),
