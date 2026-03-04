@@ -13,7 +13,12 @@ def ensure_import(mod: str, pip_name: Optional[str]=None) -> None:
         __import__(mod)
     except Exception:
         _pip_install([pip_name or mod])
-import wandb
+
+try:
+    import wandb
+except ImportError:
+    wandb = None
+
 import numpy as np
 import polars as pl
 import torch
@@ -27,6 +32,11 @@ def init_wandb(project: str='homecastr', entity: str='dhardestylewis-columbia-un
     global _WB_RUN
     wb_cfg = dict(extra_config or {})
     try:
+        if wandb is None:
+            print(f'[{ts()}] W&B not installed, skipping initialization.')
+            _WB_RUN = None
+            return
+            
         _WANDB_KEY_DEFAULT = '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'
         if not wandb.api.api_key:
             _api_key = os.environ.get('WANDB_API_KEY', _WANDB_KEY_DEFAULT)
@@ -59,7 +69,7 @@ def wb_config_update(data: Dict[str, Any]) -> None:
 
 def wb_log_artifact(path: str, name: str, artifact_type: str='model') -> None:
     """Log a file as W&B artifact."""
-    if _WB_RUN is not None:
+    if _WB_RUN is not None and wandb is not None:
         try:
             art = wandb.Artifact(name, type=artifact_type)
             art.add_file(path)

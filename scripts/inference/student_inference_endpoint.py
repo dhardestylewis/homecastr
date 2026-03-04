@@ -51,6 +51,9 @@ image = (
         "shapely>=2.0",
         "h3>=3.7",
         "fastapi[standard]",
+        "wandb",
+        "polars",
+        "torch",
     )
     .add_local_dir(
         local_path=os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "scripts"),
@@ -141,64 +144,93 @@ def _fetch_buildings_for_bbox(min_lat, min_lng, max_lat, max_lng):
 out geom;
 """
     
+    import time
+    
     all_buildings = []
-    try:
-        resp = requests.post("https://overpass-api.de/api/interpreter", data=query, timeout=30)
-        resp.raise_for_status()
-        data = resp.json()
-        
-        for el in data.get("elements", []):
-            if el["type"] == "way":
-                coords = [(pt["lon"], pt["lat"]) for pt in el.get("geometry", [])]
-                if len(coords) < 3:
-                    continue
+    max_retries = 3
+    
+    for attempt in range(max_retries):
+        try:
+            resp = requests.post("https://overpass-api.de/api/interpreter", data=query, timeout=30)
+            
+            # If we hit a 504 or 429 and can retry, back off and retry
+            if resp.status_code in (504, 429) and attempt < max_retries - 1:
+                sleep_s = 2 ** (attempt + 1)
+                print(f"  ⚠️ Overpass API {resp.status_code} error. Retrying {attempt+1}/{max_retries} in {sleep_s}s...")
+                time.sleep(sleep_s)
+                continue
                 
-                # Ensure closed polygon
-                if coords[0] != coords[-1]:
-                    coords.append(coords[0])
+            resp.raise_for_status()
+            data = resp.json()
+            
+            for el in data.get("elements", []):
+                if el["type"] == "way":
+                    coords = [(pt["lon"], pt["lat"]) for pt in el.get("geometry", [])]
+                    if len(coords) < 3:
+                        continue
                     
-                tags = el.get("tags", {})
-                levels = tags.get("building:levels", "1")
-                try:
-                    stories = max(1, float(levels))
-                except:
-                    stories = 1.0
-                
-                try:
-                    poly = Polygon(coords)
-                    centroid = poly.centroid
-                    # Area in sq degrees → approximate sq meters → sq feet
-                    area_sqm = poly.area * (111000 ** 2)  # crude deg² to m²
-                    sqft = area_sqm * 10.764
+                    # Ensure closed polygon
+                    if coords[0] != coords[-1]:
+                        coords.append(coords[0])
+                        
+                    tags = el.get("tags", {})
+                    levels = tags.get("building:levels", "1")
+                    try:
+                        stories = max(1, float(levels))
+                    except:
+                        stories = 1.0
                     
-                    centroid_lat = centroid.y
-                    centroid_lng = centroid.x
-                except:
-                    continue
-                
-                height_m = stories * 3.0
-                
-                # We need proper GeoJSON format for the geometry
-                geojson_geom = {
-                    "type": "Polygon",
-                    "coordinates": [coords]
-                }
-                
-                all_buildings.append({
-                    "geometry": geojson_geom,
-                    "lat": centroid_lat,
-                    "lon": centroid_lng,
-                    "sqft": sqft,
-                    "stories": float(stories),
-                    "height_m": height_m,
-                })
-                
-                if len(all_buildings) >= MAX_BUILDINGS:
-                    break
+                    try:
+                        poly = Polygon(coords)
+                        centroid = poly.centroid
+                        # Area in sq degrees → approximate sq meters → sq feet
+                        area_sqm = poly.area * (111000 ** 2)  # crude deg² to m²
+                        sqft = area_sqm * 10.764
+                        
+                        centroid_lat = centroid.y
+                        centroid_lng = centroid.x
+                    except:
+                        continue
                     
-    except Exception as e:
-        print(f"  ⚠️ Failed to fetch OSM buildings: {e}")
-        return [], []
+                    height_m = stories * 3.0
+                    
+                    # We need proper GeoJSON format for the geometry
+                    geojson_geom = {
+                        "type": "Polygon",
+                        "coordinates": [coords]
+                    }
+                    
+                    all_buildings.append({
+                        "geometry": geojson_geom,
+                        "lat": centroid_lat,
+                        "lon": centroid_lng,
+                        "sqft": sqft,
+                        "stories": float(stories),
+                        "height_m": height_m,
+                    })
+                    
+                    if len(all_buildings) >= MAX_BUILDINGS:
+                        break
+            
+            # If we arrive here, parsing worked completely, so break out of the retry loop
+            break
+                        
+        except requests.exceptions.RequestException as e:
+            # Catch network/timeout errors specifically to allow retries
+            if attempt < max_retries - 1:
+                sleep_s = 2 ** (attempt + 1)
+                print(f"  ⚠️ Overpass connection error '{e}'. Retrying {attempt+1}/{max_retries} in {sleep_s}s...")
+                time.sleep(sleep_s)
+                continue
+            import traceback
+            print(f"  ⚠️ Failed to fetch OSM buildings after {max_retries} attempts: {e}\n{traceback.format_exc()}")
+            return [], []
+            
+        except Exception as e:
+            # Non-network error (e.g., json parsing error from a bad response)
+            import traceback
+            print(f"  ⚠️ Failed to process OSM buildings: {e}\n{traceback.format_exc()}")
+            return [], []
 
     if not all_buildings:
         print(f"  No OSM Buildings found in bbox")
@@ -299,9 +331,9 @@ def _run_student_inference(df, ckpt_path, origin_year=2024, year=2026):
     
     # Checkpoint specifies exact NUM_DIM and N_CAT at the time of trace
     model_num_dim = len(num_use)
-    model_cat_dim = 12 if "n_cat" not in cfg else cfg["n_cat"]
+    model_cat_dim = len(cat_use) if "n_cat" not in cfg else cfg["n_cat"]
     
-    print(f"  Features: {len(num_use)} numeric, {len(cat_use)} categorical")
+    print(f"  Features: {len(num_use)} numeric, {model_cat_dim} categorical")
     print(f"  Device: {device}. Instantiating PyTorch modules...")
     
     denoiser = wm.create_denoiser_v11(target_dim=H_dim, hist_len=hist_len, num_dim=model_num_dim, n_cat=model_cat_dim).to(device)
@@ -493,47 +525,55 @@ def predict(data: dict):
     print(f"[{ts()}] Viewport inference request: bbox={bbox}, year={year}")
     t0 = time.time()
     
-    # Import locally inside the function to avoid top-level import errors in Modal
-    from scripts.inference import worldmodel_inference as wm
+    try:
+        # Import locally inside the function to avoid top-level import errors in Modal
+        from scripts.inference import worldmodel_inference as wm
+        
+        # Setup GCS
+        client, bucket = _setup_gcs()
     
-    # Setup GCS
-    client, bucket = _setup_gcs()
-    
-    # Step 1: Fetch buildings with polygon geometries
-    print(f"[{ts()}] Step 1: Fetching buildings...")
-    buildings, geometries = _fetch_buildings_for_bbox(min_lat, min_lng, max_lat, max_lng)
-    
-    if not buildings:
-        return {
-            "type": "FeatureCollection", 
-            "features": [],
-            "metadata": {"n_buildings": 0, "source": "student-v11-universal", "latency_s": round(time.time() - t0, 2)}
-        }
-    
-    # Step 2: Enrich features
-    print(f"[{ts()}] Step 2: Enriching features...")
-    df = _enrich_features_fast(buildings)
-    
-    # Step 3: Run inference
-    print(f"[{ts()}] Step 3: Running student inference...")
-    
-    # Ensure checkpoint is available
-    if not os.path.exists(CKPT_LOCAL):
-        print(f"  Downloading checkpoint from GCS...")
-        ckpt_blob = bucket.blob(CKPT_GCS_PATH)
-        os.makedirs(os.path.dirname(CKPT_LOCAL), exist_ok=True)
-        ckpt_blob.download_to_filename(CKPT_LOCAL)
-    
-    df = _run_student_inference(df, CKPT_LOCAL, origin_year=2024, year=year)
-    
-    # Step 4: Return GeoJSON with polygon geometries
-    result = _to_geojson(df, geometries)
-    
-    dt = time.time() - t0
-    result["metadata"]["latency_s"] = round(dt, 2)
-    print(f"[{ts()}] ✅ Complete: {len(result['features'])} buildings in {dt:.1f}s")
-    
-    return result
+        # Step 1: Fetch buildings with polygon geometries
+        print(f"[{ts()}] Step 1: Fetching buildings...")
+        buildings, geometries = _fetch_buildings_for_bbox(min_lat, min_lng, max_lat, max_lng)
+        
+        if not buildings:
+            return {
+                "type": "FeatureCollection", 
+                "features": [],
+                "metadata": {"n_buildings": 0, "source": "student-v11-universal", "latency_s": round(time.time() - t0, 2)}
+            }
+        
+        # Step 2: Enrich features
+        print(f"[{ts()}] Step 2: Enriching features...")
+        df = _enrich_features_fast(buildings)
+        
+        # Step 3: Run inference
+        print(f"[{ts()}] Step 3: Running student inference...")
+        
+        # Ensure checkpoint is available
+        if not os.path.exists(CKPT_LOCAL):
+            print(f"  Downloading checkpoint from GCS...")
+            ckpt_blob = bucket.blob(CKPT_GCS_PATH)
+            os.makedirs(os.path.dirname(CKPT_LOCAL), exist_ok=True)
+            ckpt_blob.download_to_filename(CKPT_LOCAL)
+        
+        df = _run_student_inference(df, CKPT_LOCAL, origin_year=2024, year=year)
+        
+        # Step 4: Return GeoJSON with polygon geometries
+        result = _to_geojson(df, geometries)
+        
+        dt = time.time() - t0
+        result["metadata"]["latency_s"] = round(dt, 2)
+        print(f"[{ts()}] ✅ Complete: {len(result['features'])} buildings in {dt:.1f}s")
+        
+        return result
+
+    except Exception as e:
+        import traceback
+        err_msg = str(e)
+        trace = traceback.format_exc()
+        print(f"[{ts()}] ❌ ERROR: {err_msg}\n{trace}")
+        return {"error": err_msg, "traceback": trace}
 
 
 # =============================================================================
