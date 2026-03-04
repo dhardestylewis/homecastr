@@ -72,7 +72,15 @@ CKPT_LOCAL = "/checkpoints/student_ckpt.pt"
 MS_BUILDINGS_INDEX = "https://minedbuildings.z5.web.core.windows.net/global-buildings/dataset-links.csv"
 
 # Maximum buildings per request (prevent OOM + keep response fast)
-MAX_BUILDINGS = 3000
+MAX_BUILDINGS = 300
+
+# Module-level cache: store fetched buildings + enriched df between Phase 1 and Phase 2 calls
+# Key: bbox hash string → { buildings, geometries, df, timestamp }
+_buildings_cache: dict = {}
+_CACHE_TTL = 600  # 10 minutes
+
+def _bbox_cache_key(bbox):
+    return f"{bbox[0]:.3f},{bbox[1]:.3f},{bbox[2]:.3f},{bbox[3]:.3f}"
 
 
 # =============================================================================
@@ -386,7 +394,7 @@ def _run_student_inference(df, ckpt_path, origin_year=2024, year=2026):
     
     # ─── Inference ─────────────────────────────────────────────
     # Step 1: Pre-sample token paths [S, K, H] for spatial coherence
-    S = 256  # Scenarios
+    S = 64  # Scenarios (reduced from 256 to prevent 120s timeouts on T4)
     K = 8    # Tokens
     Z_tokens = wm.sample_token_paths(K, H_dim, token_persistence, S, device)
     
@@ -495,7 +503,7 @@ def _to_geojson(df, geometries):
     gpu="T4",
     secrets=[gcs_secret],
     volumes={"/checkpoints": ckpt_vol},
-    timeout=120,
+    timeout=600,
     memory=8192,
     allow_concurrent_inputs=10,
     container_idle_timeout=300,
@@ -503,15 +511,17 @@ def _to_geojson(df, geometries):
 @modal.web_endpoint(method="POST")
 def predict(data: dict):
     """
-    On-demand viewport inference endpoint.
+    On-demand viewport inference endpoint (two-phase).
     
     Request body:
         {
             "bbox": [min_lat, min_lng, max_lat, max_lng],
-            "year": 2026  // optional, default 2026
+            "year": 2026,             // optional, default 2026
+            "include_forecast": false  // Phase 1 (buildings only) vs Phase 2 (with diffusion)
         }
     
-    Response: GeoJSON FeatureCollection with polygon geometries + p10/p50/p90.
+    Phase 1 (include_forecast=false): Returns GeoJSON with building polygons, p50=0 placeholder.
+    Phase 2 (include_forecast=true):  Runs diffusion inference and returns real p10/p50/p90.
     """
     import time
     ts = lambda: time.strftime("%Y-%m-%d %H:%M:%S")
@@ -522,34 +532,79 @@ def predict(data: dict):
     
     min_lat, min_lng, max_lat, max_lng = bbox
     year = data.get("year", 2026)
+    include_forecast = data.get("include_forecast", False)
+    phase = "Phase 2 (forecast)" if include_forecast else "Phase 1 (buildings)"
     
-    print(f"[{ts()}] Viewport inference request: bbox={bbox}, year={year}")
+    print(f"[{ts()}] {phase} request: bbox={bbox}, year={year}")
     t0 = time.time()
     
     try:
-        # Import locally inside the function to avoid top-level import errors in Modal
         from scripts.inference import worldmodel_inference as wm
         
         # Setup GCS
         client, bucket = _setup_gcs()
+        
+        cache_key = _bbox_cache_key(bbox)
     
-        # Step 1: Fetch buildings with polygon geometries
-        print(f"[{ts()}] Step 1: Fetching buildings...")
-        buildings, geometries = _fetch_buildings_for_bbox(min_lat, min_lng, max_lat, max_lng)
-        
-        if not buildings:
-            return {
-                "type": "FeatureCollection", 
-                "features": [],
-                "metadata": {"n_buildings": 0, "source": "student-v11-universal", "latency_s": round(time.time() - t0, 2)}
+        # ─── Check cache for buildings ───────────────────────────────
+        cached = _buildings_cache.get(cache_key)
+        if cached and (time.time() - cached["timestamp"] < _CACHE_TTL):
+            print(f"[{ts()}] Cache hit for {cache_key}")
+            buildings = cached["buildings"]
+            geometries = cached["geometries"]
+            df = cached["df"]
+        else:
+            # Step 1: Fetch buildings with polygon geometries
+            print(f"[{ts()}] Step 1: Fetching buildings...")
+            t_bldg_start = time.time()
+            buildings, geometries = _fetch_buildings_for_bbox(min_lat, min_lng, max_lat, max_lng)
+            t_bldg = time.time() - t_bldg_start
+            
+            if not buildings:
+                return {
+                    "type": "FeatureCollection", 
+                    "features": [],
+                    "metadata": {"n_buildings": 0, "source": "student-v11-universal", "latency_s": round(time.time() - t0, 3), "phase": 1}
+                }
+            
+            # Step 2: Enrich features
+            print(f"[{ts()}] Step 2: Enriching features...")
+            df = _enrich_features_fast(buildings)
+            
+            # Cache for Phase 2
+            _buildings_cache[cache_key] = {
+                "buildings": buildings,
+                "geometries": geometries,
+                "df": df.copy(),
+                "timestamp": time.time(),
             }
+            # Evict old cache entries
+            if len(_buildings_cache) > 20:
+                oldest_key = min(_buildings_cache, key=lambda k: _buildings_cache[k]["timestamp"])
+                del _buildings_cache[oldest_key]
         
-        # Step 2: Enrich features
-        print(f"[{ts()}] Step 2: Enriching features...")
-        df = _enrich_features_fast(buildings)
+        # ─── Phase 1: Return buildings with placeholder values ────────
+        if not include_forecast:
+            import numpy as np
+            df["p10"] = 0
+            df["p50"] = 0
+            df["p90"] = 0
+            df["horizon_months"] = 12
+            df["p10_arr"] = [[] for _ in range(len(df))]
+            df["p50_arr"] = [[] for _ in range(len(df))]
+            df["p90_arr"] = [[] for _ in range(len(df))]
+            
+            result = _to_geojson(df, geometries)
+            dt = time.time() - t0
+            result["metadata"]["latency_s"] = round(dt, 3)
+            result["metadata"]["phase"] = 1
+            result["metadata"]["forecast_pending"] = True
+            print(f"[{ts()}] ✅ Phase 1 complete: {len(result['features'])} buildings in {dt:.1f}s")
+            return result
         
-        # Step 3: Run inference
+        # ─── Phase 2: Run diffusion inference ─────────────────────────
         print(f"[{ts()}] Step 3: Running student inference...")
+        t_infer_start = time.time()
         
         # Ensure checkpoint is available
         if not os.path.exists(CKPT_LOCAL):
@@ -559,13 +614,22 @@ def predict(data: dict):
             ckpt_blob.download_to_filename(CKPT_LOCAL)
         
         df = _run_student_inference(df, CKPT_LOCAL, origin_year=2024, year=year)
+        t_infer = time.time() - t_infer_start
         
         # Step 4: Return GeoJSON with polygon geometries
         result = _to_geojson(df, geometries)
         
         dt = time.time() - t0
-        result["metadata"]["latency_s"] = round(dt, 2)
-        print(f"[{ts()}] ✅ Complete: {len(result['features'])} buildings in {dt:.1f}s")
+        result["metadata"]["latency_s"] = round(dt, 3)
+        result["metadata"]["phase"] = 2
+        result["metadata"]["forecast_pending"] = False
+        result["metadata"]["timing_breakdown"] = {
+            "diffusion_inference_s": round(t_infer, 3),
+            "total_s": round(dt, 3),
+            "ms_per_building_inference": round((t_infer / max(len(buildings), 1)) * 1000, 2)
+        }
+        print(f"[{ts()}] ✅ Phase 2 complete: {len(result['features'])} buildings in {dt:.1f}s")
+        print(f"  Inference: {t_infer:.1f}s ({result['metadata']['timing_breakdown']['ms_per_building_inference']}ms/bldg)")
         
         return result
 

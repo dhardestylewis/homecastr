@@ -496,27 +496,59 @@ export function ForecastMap({
 
                     setStudentLoading(true)
                     try {
-                        const res = await fetch('/api/student-inference', {
+                        // ─── Phase 1: Fetch building footprints only (fast ~17s) ───
+                        const res1 = await fetch('/api/student-inference', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ bbox, year }),
+                            body: JSON.stringify({ bbox, year, include_forecast: false }),
                             signal: ac.signal,
                         })
-                        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-                        const geojson = await res.json()
+                        if (!res1.ok) throw new Error(`HTTP ${res1.status}`)
+                        const geojson1 = await res1.json()
 
-                        // Update the GeoJSON source on the map
+                        // Show building outlines immediately (grey — p50=0 triggers fallback color)
                         const src = map.getSource('student-buildings') as maplibregl.GeoJSONSource
-                        if (src && geojson.features) {
-                            src.setData(geojson)
-                            console.log(`[STUDENT] Loaded ${geojson.features.length} buildings`)
+                        if (src && geojson1.features) {
+                            src.setData(geojson1)
+                            console.log(`[STUDENT] Phase 1: ${geojson1.features.length} building outlines loaded`)
                         }
+
+                        // ─── Phase 2: Fetch real forecasts (slow ~4min) ───
+                        // Fire and forget — don't block the loading indicator
+                        const ac2 = new AbortController()
+                        studentAbortRef.current = ac2  // allow aborting Phase 2 if user pans again
+
+                        fetch('/api/student-inference', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ bbox, year, include_forecast: true }),
+                            signal: ac2.signal,
+                        })
+                            .then(res2 => {
+                                if (!res2.ok) throw new Error(`HTTP ${res2.status}`)
+                                return res2.json()
+                            })
+                            .then(geojson2 => {
+                                const src2 = map.getSource('student-buildings') as maplibregl.GeoJSONSource
+                                if (src2 && geojson2.features) {
+                                    src2.setData(geojson2)
+                                    console.log(`[STUDENT] Phase 2: ${geojson2.features.length} buildings with forecasts`)
+                                }
+                                setStudentLoading(false)
+                            })
+                            .catch(err => {
+                                if (err.name !== 'AbortError') {
+                                    console.error('[STUDENT] Phase 2 error:', err.message)
+                                }
+                                setStudentLoading(false)
+                            })
+
                     } catch (err: any) {
                         if (err.name !== 'AbortError') {
                             console.error('[STUDENT] Inference error:', err.message)
                         }
                     } finally {
-                        setStudentLoading(false)
+                        // Don't clear loading here — Phase 2 handles it
                     }
                 }, 800)
             } else {
@@ -727,15 +759,24 @@ export function ForecastMap({
                 minzoom: 13,
                 paint: {
                     'fill-color': [
-                        'interpolate', ['linear'],
-                        ['get', 'p50'],
-                        100000, '#1e1b4b',
-                        200000, '#4c1d95',
-                        335000, '#7c3aed',
-                        525000, '#db2777',
-                        1000000, '#fbbf24',
+                        'case',
+                        ['==', ['get', 'p50'], 0],
+                        '#374151',  // Grey placeholder while forecast is loading (Phase 1)
+                        ['interpolate', ['linear'],
+                            ['get', 'p50'],
+                            100000, '#1e1b4b',
+                            200000, '#4c1d95',
+                            335000, '#7c3aed',
+                            525000, '#db2777',
+                            1000000, '#fbbf24',
+                        ],
                     ],
-                    'fill-opacity': 0.75,
+                    'fill-opacity': [
+                        'case',
+                        ['==', ['get', 'p50'], 0],
+                        0.5,  // Semi-transparent grey during loading
+                        0.75, // Full opacity when forecast is ready
+                    ],
                 },
             })
             map.addLayer({

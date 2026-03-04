@@ -24,7 +24,7 @@ function getCacheKey(bbox: number[], year: number): string {
 export async function POST(request: Request) {
     try {
         const body = await request.json()
-        const { bbox, year = 2026 } = body
+        const { bbox, year = 2026, include_forecast = false } = body
 
         if (!bbox || bbox.length !== 4) {
             return NextResponse.json(
@@ -52,17 +52,19 @@ export async function POST(request: Request) {
             )
         }
 
-        // Check cache
+        // Only cache Phase 2 (forecast) results
         const cacheKey = getCacheKey(bbox, year)
-        const cached = resultCache.get(cacheKey)
-        if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
-            console.log(`[STUDENT-INFERENCE] Cache hit: ${cacheKey}`)
-            return NextResponse.json(cached.data, {
-                headers: {
-                    "X-Cache": "HIT",
-                    "Cache-Control": "public, max-age=3600",
-                }
-            })
+        if (include_forecast) {
+            const cached = resultCache.get(cacheKey)
+            if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+                console.log(`[STUDENT-INFERENCE] Cache hit (Phase 2): ${cacheKey}`)
+                return NextResponse.json(cached.data, {
+                    headers: {
+                        "X-Cache": "HIT",
+                        "Cache-Control": "public, max-age=3600",
+                    }
+                })
+            }
         }
 
         if (!MODAL_ENDPOINT_URL) {
@@ -72,14 +74,15 @@ export async function POST(request: Request) {
             )
         }
 
-        console.log(`[STUDENT-INFERENCE] Requesting: bbox=${bbox} year=${year}`)
+        const phase = include_forecast ? "Phase 2 (forecast)" : "Phase 1 (buildings)"
+        console.log(`[STUDENT-INFERENCE] ${phase}: bbox=${bbox} year=${year}`)
 
         // Forward to Modal endpoint, using request.signal so we drop the connection
         // immediately if the user moves the map quickly and the client aborts.
         const response = await fetch(MODAL_ENDPOINT_URL, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ bbox, year }),
+            body: JSON.stringify({ bbox, year, include_forecast }),
             signal: request.signal,
         })
 
