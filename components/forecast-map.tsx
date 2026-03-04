@@ -761,7 +761,7 @@ export function ForecastMap({
                     'fill-color': [
                         'case',
                         ['==', ['get', 'p50'], 0],
-                        '#374151',  // Grey placeholder while forecast is loading (Phase 1)
+                        '#6b7280',  // Light grey placeholder while forecast is loading (Phase 1)
                         ['interpolate', ['linear'],
                             ['get', 'p50'],
                             100000, '#1e1b4b',
@@ -774,8 +774,8 @@ export function ForecastMap({
                     'fill-opacity': [
                         'case',
                         ['==', ['get', 'p50'], 0],
-                        0.5,  // Semi-transparent grey during loading
-                        0.75, // Full opacity when forecast is ready
+                        0.65,  // Semi-transparent grey during loading
+                        0.8, // Full opacity when forecast is ready
                     ],
                 },
             })
@@ -785,14 +785,19 @@ export function ForecastMap({
                 source: 'student-buildings',
                 minzoom: 13,
                 paint: {
-                    'line-color': '#fff',
+                    'line-color': [
+                        'case',
+                        ['==', ['get', 'p50'], 0],
+                        '#67e8f9',  // Bright cyan outline during loading
+                        '#ffffff',  // White outline when forecast is ready
+                    ],
                     'line-width': [
                         'interpolate', ['linear'], ['zoom'],
-                        13, 0.3,
-                        16, 1,
-                        18, 1.5,
+                        13, 0.8,
+                        16, 1.5,
+                        18, 2,
                     ],
-                    'line-opacity': 0.6,
+                    'line-opacity': 0.85,
                 },
             })
         })

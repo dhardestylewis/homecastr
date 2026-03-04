@@ -97,15 +97,17 @@ export async function POST(request: Request) {
 
         const result = await response.json()
 
-        // Cache result
-        resultCache.set(cacheKey, { data: result, timestamp: Date.now() })
+        // Only cache Phase 2 (forecast) results — Phase 1 has placeholder p50=0
+        if (include_forecast) {
+            resultCache.set(cacheKey, { data: result, timestamp: Date.now() })
 
-        // Evict old cache entries
-        if (resultCache.size > 100) {
-            const oldest = [...resultCache.entries()]
-                .sort((a, b) => a[1].timestamp - b[1].timestamp)
-                .slice(0, 50)
-            oldest.forEach(([key]) => resultCache.delete(key))
+            // Evict old cache entries
+            if (resultCache.size > 100) {
+                const oldest = [...resultCache.entries()]
+                    .sort((a, b) => a[1].timestamp - b[1].timestamp)
+                    .slice(0, 50)
+                oldest.forEach(([key]) => resultCache.delete(key))
+            }
         }
 
         console.log(`[STUDENT-INFERENCE] Success: ${result.features?.length || 0} buildings in ${result.metadata?.latency_s || '?'}s`)
