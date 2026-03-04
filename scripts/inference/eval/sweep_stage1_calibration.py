@@ -39,6 +39,7 @@ inference_image = (
 
 gcs_secret = modal.Secret.from_name("gcs-creds", required_keys=["GOOGLE_APPLICATION_CREDENTIALS_JSON"])
 wandb_secret = modal.Secret.from_name("wandb-creds", required_keys=["WANDB_API_KEY"])
+eval_volume = modal.Volume.from_name("properlytic-checkpoints")
 
 
 @app.function(
@@ -46,7 +47,7 @@ wandb_secret = modal.Secret.from_name("wandb-creds", required_keys=["WANDB_API_K
     gpu="A10G",  # Inference can use smaller GPUs
     timeout=7200,
     secrets=[gcs_secret, wandb_secret],
-    volumes={"/output": modal.Volume.from_name("properlytic-checkpoints")},
+    volumes={"/output": eval_volume},
 )
 def evaluate_checkpoints(
     jurisdiction: str = "sf_ca",
@@ -655,8 +656,8 @@ SimpleScaler = _DimSafeScaler
     calib_models = {}
     # Reload Volume to pick up calibrators saved by previous origin's container
     try:
-        vol = modal.Volume.lookup("properlytic-checkpoints")
-        vol.reload()
+        eval_volume.reload()
+        print(f"[{ts()}] Volume reloaded")
     except Exception as ve:
         print(f"[{ts()}] \u26a0\ufe0f Volume reload failed: {ve}")
     if os.path.exists(calib_load_path):
@@ -714,8 +715,7 @@ SimpleScaler = _DimSafeScaler
         print(f"[{ts()}] \U0001f3c6 Saved {len(new_calib_models)} calibrators to {calib_save_path}")
         # Flush to Modal Volume so next container can load these calibrators
         try:
-            vol = modal.Volume.lookup("properlytic-checkpoints")
-            vol.commit()
+            eval_volume.commit()
             print(f"[{ts()}] \U0001f4be Volume committed — calibrators visible to next origin")
         except Exception as ve:
             print(f"[{ts()}] \u26a0\ufe0f Volume commit failed: {ve}")
