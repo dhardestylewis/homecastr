@@ -1199,6 +1199,10 @@ SimpleScaler = _DimSafeScaler
                                 acct_s = str(acct).strip()
                                 m = meta_dict.get(acct_s, {})
                                 yb = m.get("yr_blt", None)
+                                try:
+                                    yb = int(yb) if yb is not None else None
+                                except (ValueError, TypeError):
+                                    yb = None
                                 if yb is None or not (age_lo <= yb < age_hi):
                                     continue
                                 bv = base_v_cond.get(acct_s, 0)

@@ -248,6 +248,27 @@ def rebuild_history_level_combo_year(level_name: str, geoid_col: str, table_name
     return {"level": level_name, "type": f"hist_{year}", "rows": rows, "status": "done"}
 
 
+@app.function(image=image, secrets=[supabase_secret], timeout=900, memory=512)
+def _discover_db_metadata(need_history: bool):
+    """Run on Modal to discover outlier column and history combos (needs DB access)."""
+    conn, cur = _connect()
+    cur.execute(f"""
+        SELECT column_name FROM information_schema.columns
+        WHERE table_schema = '{SCHEMA}'
+          AND table_name = 'metrics_parcel_forecast'
+          AND column_name = 'is_outlier'
+    """)
+    has_outlier = cur.fetchone() is not None
+
+    hist_combos = []
+    if need_history:
+        cur.execute(f"SELECT DISTINCT series_kind, variant_id, year FROM {SCHEMA}.metrics_parcel_history")
+        hist_combos = [list(row) for row in cur.fetchall()]
+
+    conn.close()
+    return {"has_outlier": has_outlier, "hist_combos": hist_combos}
+
+
 @app.local_entrypoint()
 def main(
     skip_history: bool = False,
@@ -257,23 +278,13 @@ def main(
 ):
     """Launch all geo-level aggregations in parallel via Modal."""
 
-    # Quick outlier column check
-    import psycopg2
-    db_url = os.environ.get("SUPABASE_DB_URL", "")
-    if db_url:
-        conn = psycopg2.connect(db_url)
-        conn.autocommit = True
-        cur = conn.cursor()
-        cur.execute(f"""
-            SELECT column_name FROM information_schema.columns
-            WHERE table_schema = '{SCHEMA}'
-              AND table_name = 'metrics_parcel_forecast'
-              AND column_name = 'is_outlier'
-        """)
-        has_outlier = cur.fetchone() is not None
-        conn.close()
-    else:
-        has_outlier = False
+    # Run outlier + history combo discovery remotely (needs SUPABASE_DB_URL from Modal secret)
+    print("  Discovering DB metadata via Modal...")
+    meta = _discover_db_metadata.remote(not skip_history)
+    has_outlier = meta["has_outlier"]
+    hist_combos = meta["hist_combos"]
+
+    outlier_filter = "AND mp.is_outlier IS NOT TRUE" if has_outlier else ""
 
     print(f"✓ Outlier filter: {'ON' if has_outlier else 'OFF'}")
     print(f"✓ Force (redo completed): {force}")
@@ -291,15 +302,6 @@ def main(
                 futures.append(rebuild_acs_zcta_forecast.spawn(h, force))
                 futures.append(rebuild_acs_zip3_forecast.spawn(h, force))
         if not skip_history:
-            _url = os.environ.get("SUPABASE_DB_URL", "")
-            if "pooler.supabase.com" in _url and "6543" in _url:
-                _url = _url.replace(":6543/", ":5432/")
-            import psycopg2
-            q_conn = psycopg2.connect(_url)
-            q_cur = q_conn.cursor()
-            q_cur.execute(f"SELECT DISTINCT series_kind, variant_id, year FROM {SCHEMA}.metrics_parcel_history")
-            hist_combos = q_cur.fetchall()
-            q_conn.close()
             print(f"  [ACS MODE] {len(hist_combos)} history combos")
             for sk, vid, yr in hist_combos:
                 futures.append(rebuild_acs_zcta_history.spawn(sk, vid, yr, force))
@@ -311,20 +313,6 @@ def main(
                     futures.append(rebuild_forecast_level_horizon.spawn(ln, gc, ft, h, outlier_filter, force))
 
         if not skip_history:
-            print("  Querying distinct combinations of (series_kind, variant_id, year) from history...")
-            import psycopg2
-            _url = os.environ.get("SUPABASE_DB_URL", "")
-            if "pooler.supabase.com" in _url and "6543" in _url:
-                _url = _url.replace(":6543/", ":5432/")
-
-            hist_combos = []
-            if _url:
-                q_conn = psycopg2.connect(_url)
-                q_cur = q_conn.cursor()
-                q_cur.execute(f"SELECT DISTINCT series_kind, variant_id, year FROM {SCHEMA}.metrics_parcel_history")
-                hist_combos = q_cur.fetchall()
-                q_conn.close()
-
             print(f"  Found {len(hist_combos)} history combos to process across all {len(AGG_LEVELS)} levels.")
             for ln, gc, _, ht in AGG_LEVELS:
                 for sk, vid, yr in hist_combos:
