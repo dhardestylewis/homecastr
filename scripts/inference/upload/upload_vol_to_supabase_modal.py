@@ -79,11 +79,8 @@ def upload_suite(
     print(f"[{_ts()}] ═══ SUITE {suite_id} ═══")
     print(f"[{_ts()}]   {len(fc_files)} forecast + {len(hist_files)} history chunks, {n_threads} threads")
 
-    # ── DB URL: bypass pooler, use direct connection for bulk ops ───────────
+    # ── DB URL with extended timeout ──────────────────────────────────────────
     db_url = os.environ["SUPABASE_DB_URL"]
-    # Swap session-mode pooler (6543) → direct (5432) to avoid MaxClientsInSessionMode
-    if "pooler.supabase.com" in db_url and "6543" in db_url:
-        db_url = db_url.replace(":6543/", ":5432/")
     if "statement_timeout" not in db_url:
         sep = "&" if "?" in db_url else "?"
         db_url = db_url + sep + "options=" + _up.quote("-c statement_timeout=1200000")

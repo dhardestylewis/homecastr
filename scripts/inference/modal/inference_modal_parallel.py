@@ -79,6 +79,7 @@ def run_inference_shard(
     n_shards: int,
     suite_id: str,
     schema: str,
+    panel_gcs_path: str = "",
 ):
     """Run inference for a single shard of accounts on its own A100."""
     import time, glob as _glob, shutil
@@ -94,7 +95,17 @@ def run_inference_shard(
     bucket = client.bucket("properlytic-raw-data")
 
     panel_path = f"/tmp/panel_{jurisdiction}_shard{shard_idx}.parquet"
-    bucket.blob(f"panel/jurisdiction={jurisdiction}/part.parquet").download_to_filename(panel_path)
+    _panel_blob_path = panel_gcs_path if panel_gcs_path else f"panel/jurisdiction={jurisdiction}/part.parquet"
+    blob = bucket.blob(_panel_blob_path)
+    for attempt in range(3):
+        try:
+            blob.download_to_filename(panel_path, timeout=600)
+            break
+        except Exception as e:
+            print(f"[{_ts()}] Panel download attempt {attempt+1} failed: {e}")
+            if attempt == 2:
+                raise
+            time.sleep(5 * (attempt + 1))
     print(f"[{_ts()}] Downloaded panel: {os.path.getsize(panel_path) / 1e6:.1f} MB")
 
     # ─── 2. Load worldmodel.py from local mount (matches training codebase) ──
@@ -156,20 +167,37 @@ def run_inference_shard(
     if "property_value" not in _df.columns:
         if "median_home_value" in _df.columns:
             _df = _df.with_columns(pl.col("median_home_value").alias("property_value"))
+        elif "assessed_value" in _df.columns:
+            _df = _df.with_columns(pl.col("assessed_value").alias("property_value"))
+            print(f"[{_ts()}] Derived property_value from assessed_value")
     if "parcel_id" not in _df.columns and "acct" not in _df.columns:
-        if "geoid" in _df.columns:
+        if "global_parcel_id" in _df.columns:
+            _df = _df.with_columns(pl.col("global_parcel_id").alias("parcel_id"))
+        elif "geoid" in _df.columns:
             _df = _df.with_columns(pl.col("geoid").alias("parcel_id"))
     _rename_map = {"parcel_id": "acct", "year": "yr", "property_value": "tot_appr_val",
                    "sqft": "living_area", "land_area": "land_ar", "year_built": "yr_blt",
+                   "building_area_sqft": "living_area", "land_area_sqft": "land_ar",
                    "bedrooms": "bed_cnt", "bathrooms": "full_bath", "stories": "nbr_story"}
     _actual = {k: v for k, v in _rename_map.items() if k in _df.columns}
     _drop = [v for k, v in _actual.items() if v in _df.columns]
     if _drop:
         _df = _df.drop(_drop)
     _df = _df.rename(_actual)
+    # Drop leaky columns AFTER deriving property_value
     for c in ["median_home_value", "sale_price", "assessed_value", "land_value", "improvement_value"]:
         if c in _df.columns:
             _df = _df.drop(c)
+    # Cast columns to match the checkpoint's feature architecture:
+    #   Numeric (13): living_area, land_ar + 11 macro features
+    #   Categorical (3): county_id, yr_blt, global_parcel_id (stay as Utf8)
+    # yr_blt must NOT be cast — it's categorical in the training checkpoint.
+    _numeric_casts = {"tot_appr_val": pl.Float64, "yr": pl.Int64,
+                      "living_area": pl.Float64, "land_ar": pl.Float64}
+    for _nc, _ndt in _numeric_casts.items():
+        if _nc in _df.columns and _df[_nc].dtype == pl.Utf8:
+            print(f"[{_ts()}] Casting {_nc} from Utf8 -> {_ndt}")
+            _df = _df.with_columns(pl.col(_nc).cast(_ndt, strict=False))
     if "tot_appr_val" in _df.columns:
         _df = _df.filter(pl.col("tot_appr_val").is_not_null() & (pl.col("tot_appr_val") > 0))
     _df.write_parquet(panel_path)
@@ -411,21 +439,34 @@ def run_inference_shard(
 @app.function(
     image=image,
     secrets=[gcs_secret],
-    timeout=300,
-    memory=4096,
+    timeout=900,
+    memory=16384,
 )
-def _load_accounts(jurisdiction: str) -> list:
+def _load_accounts(jurisdiction: str, panel_gcs_path: str = "") -> list:
     """Load all account IDs from GCS panel — runs in Modal with cloud creds."""
-    import json, polars as pl
+    import json, polars as pl, time as _time
     from google.cloud import storage
     creds = json.loads(os.environ["GOOGLE_APPLICATION_CREDENTIALS_JSON"])
     client = storage.Client.from_service_account_info(creds)
     bucket = client.bucket("properlytic-raw-data")
     panel_path = "/tmp/panel_split.parquet"
-    bucket.blob(f"panel/jurisdiction={jurisdiction}/part.parquet").download_to_filename(panel_path)
+    _panel_blob_path = panel_gcs_path if panel_gcs_path else f"panel/jurisdiction={jurisdiction}/part.parquet"
+    blob = bucket.blob(_panel_blob_path)
+    # Retry download up to 3 times — large panels can fail with PARTIAL_CONTENT
+    for attempt in range(3):
+        try:
+            blob.download_to_filename(panel_path, timeout=600)
+            break
+        except Exception as e:
+            print(f"[_load_accounts] Download attempt {attempt+1} failed: {e}")
+            if attempt == 2:
+                raise
+            _time.sleep(5 * (attempt + 1))
     schema = pl.scan_parquet(panel_path).collect_schema().names()
-    acct_col = "acct" if "acct" in schema else "geoid"
+    acct_col = "acct" if "acct" in schema else ("parcel_id" if "parcel_id" in schema else "geoid")
+    # Only read the acct column to minimize memory for large panels
     all_accts = pl.scan_parquet(panel_path).select(acct_col).unique().collect().to_series().to_list()
+    print(f"[_load_accounts] Loaded {len(all_accts):,} unique accounts ({acct_col}) from {jurisdiction}")
     return [str(a) for a in all_accts]
 
 
@@ -437,6 +478,7 @@ def main(
     resume_run_id: str = "",   # pass the run_id from a cancelled job to resume from last chunk
     suite_id_override: str = "",  # pass the suite_id from a cancelled job to reuse output dir
     schema: str = "forecast_queue",
+    panel_gcs_path: str = "",  # override GCS blob path for non-standard panels
 ):
     """Fan out inference across N parallel A100 containers.
 
@@ -450,7 +492,7 @@ def main(
         print(f"🔄 RESUME mode: run_id={resume_run_id} suite_id={suite_id_override or '(new suite)'}")
 
     # Load accounts inside Modal (has GCS creds)
-    all_accts = _load_accounts.remote(jurisdiction)
+    all_accts = _load_accounts.remote(jurisdiction, panel_gcs_path)
     print(f"✅ Loaded {len(all_accts):,} unique accounts from GCS")
 
     # Shared identifiers so all shards write under the same run/suite
@@ -476,7 +518,7 @@ def main(
     # Fan out via Modal starmap — all shards run in parallel
     t0 = time.time()
     inputs = [
-        (jurisdiction, origin, shard, run_id, i, n_shards, suite_id, schema)
+        (jurisdiction, origin, shard, run_id, i, n_shards, suite_id, schema, panel_gcs_path)
         for i, shard in enumerate(shards)
     ]
 

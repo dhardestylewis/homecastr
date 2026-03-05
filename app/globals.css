@@ -442,3 +442,36 @@
     max-width: 85%;
   }
 }
+
+/* ═══════════════════════════════════════════════════════
+   Print Styles — clean PDF export of the current map view
+   ═══════════════════════════════════════════════════════ */
+@media print {
+  /* Hide all floating UI */
+  .fixed,
+  .onboarding-overlay,
+  nav,
+  header,
+  footer {
+    display: none !important;
+  }
+
+  /* Let the map take the full page */
+  body,
+  main {
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* Remove backdrop blur / glass effects that don't print well */
+  .glass-panel {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  /* White background for print */
+  :root {
+    --background: white;
+    --foreground: black;
+  }
+}

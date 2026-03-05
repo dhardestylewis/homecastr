@@ -3,6 +3,12 @@
 import { useMemo, useState } from "react"
 import type { FanChartData } from "@/lib/types"
 
+interface PinnedComparison {
+  data: FanChartData
+  historicalValues?: number[]
+  label?: string
+}
+
 interface FanChartProps {
   data: FanChartData
   height?: number
@@ -15,6 +21,8 @@ interface FanChartProps {
   // Preview mode: overlay shift-select aggregation
   previewData?: FanChartData | null
   previewHistoricalValues?: number[] | null
+  // Pinned comparisons: persistent multi-area comparison (up to 4)
+  pinnedComparisons?: PinnedComparison[]
   // Optional fixed Y-axis domain [min, max] for consistent scaling across charts
   yDomain?: [number, number] | null
 }
@@ -23,6 +31,13 @@ const COLORS = [
   "#fb923c", // Orange (Default)
   "#8b5cf6", // Purple (Secondary origin year)
   "#38bdf8", // Light Blue (Tertiary)
+]
+
+const PINNED_COLORS = [
+  "#a3e635", // Lime
+  "#38bdf8", // Sky
+  "#f472b6", // Pink
+  "#facc15", // Amber
 ]
 
 
@@ -116,6 +131,7 @@ export function FanChart({
   comparisonHistoricalValues,
   previewData,
   previewHistoricalValues,
+  pinnedComparisons,
   yDomain,
   onYearChange
 }: FanChartProps & { onYearChange?: (year: number) => void }) {
@@ -162,6 +178,16 @@ export function FanChart({
     if (previewData?.p10) allValues.push(...previewData.p10.filter(v => Number.isFinite(v)))
     if (previewData?.p90) allValues.push(...previewData.p90.filter(v => Number.isFinite(v)))
     if (previewData?.p50) allValues.push(...previewData.p50.filter(v => Number.isFinite(v)))
+
+    // Include pinned comparisons in Y range
+    if (pinnedComparisons) {
+      for (const pc of pinnedComparisons) {
+        if (pc.historicalValues) allValues.push(...pc.historicalValues.filter(v => Number.isFinite(v)))
+        if (pc.data?.p10) allValues.push(...pc.data.p10.filter(v => Number.isFinite(v)))
+        if (pc.data?.p90) allValues.push(...pc.data.p90.filter(v => Number.isFinite(v)))
+        if (pc.data?.p50) allValues.push(...pc.data.p50.filter(v => Number.isFinite(v)))
+      }
+    }
 
 
     // Fallback if no data
@@ -506,6 +532,60 @@ export function FanChart({
         ))}
         {comparisonFanPath && <path d={comparisonFanPath} fill="#a3e635" fillOpacity={0.18} />}
 
+        {/* Pinned Comparisons — rendered below primary but above grid */}
+        {pinnedComparisons?.map((pc, pcIdx) => {
+          if (!pc.data?.p10 || !pc.data?.p90 || !pc.data?.p50) return null
+          const color = PINNED_COLORS[pcIdx % PINNED_COLORS.length]
+
+          // Fan area
+          const pcP90Path = forecastYears.map((year, i) => {
+            if (!Number.isFinite(pc.data.p90[i])) return null
+            return `${i === 0 ? "M" : "L"} ${xScale(year)} ${yScale(pc.data.p90[i])}`
+          }).filter(Boolean).join(" ")
+          const pcP10Reverse = [...forecastYears].reverse().map((year, i) => {
+            const idx = forecastYears.length - 1 - i
+            if (!Number.isFinite(pc.data.p10[idx])) return null
+            return `L ${xScale(year)} ${yScale(pc.data.p10[idx])}`
+          }).filter(Boolean).join(" ")
+          const pcFanPath = pcP90Path && pcP10Reverse ? `${pcP90Path} ${pcP10Reverse} Z` : ""
+
+          // Historical line
+          let pcHistPath = ""
+          if (pc.historicalValues && pc.historicalValues.length > 0) {
+            pcHistPath = buildPath([2019, 2020, 2021, 2022, 2023, 2024, 2025], pc.historicalValues, xScale, yScale)
+          }
+
+          // P50 forecast line
+          const pcP50Line = buildPath(forecastYears, pc.data.p50, xScale, yScale)
+
+          // Connector
+          let pcConnector = ""
+          if (pcHistPath && pcP50Line && pc.historicalValues?.[6] && pc.data.p50?.[0]) {
+            pcConnector = `M ${xScale(2025)} ${yScale(pc.historicalValues[6])} L ${xScale(2026)} ${yScale(pc.data.p50[0])}`
+          }
+
+          return (
+            <g key={`pinned-${pcIdx}`}>
+              {pcFanPath && <path d={pcFanPath} fill={color} fillOpacity={0.12} />}
+              {pcHistPath && <path d={pcHistPath} fill="none" stroke={color} strokeWidth={2} />}
+              {pcConnector && <path d={pcConnector} fill="none" stroke={color} strokeWidth={2} />}
+              {pcP50Line && (() => {
+                const solidDot = `M ${xScale(forecastYears[0])} ${yScale(pc.data.p50[0])}`
+                const dashedPc = forecastYears.slice(1).map((year, i) => {
+                  if (!Number.isFinite(pc.data.p50[i + 1])) return null
+                  return `${i === 0 ? `M ${xScale(forecastYears[0])} ${yScale(pc.data.p50[0])} L` : "L"} ${xScale(year)} ${yScale(pc.data.p50[i + 1])}`
+                }).filter(Boolean).join(" ")
+                return (
+                  <>
+                    <path d={solidDot} fill="none" stroke={color} strokeWidth={2} />
+                    {dashedPc && <path d={dashedPc} fill="none" stroke={color} strokeWidth={2} strokeDasharray="5 3" />}
+                  </>
+                )
+              })()}
+            </g>
+          )
+        })}
+
         {/* Historical line (solid - actual values) */}
         {histPath && (
           <path d={histPath} fill="none" stroke="#fb923c" strokeWidth={2.5} />
@@ -594,7 +674,7 @@ export function FanChart({
 
       </svg>
     )
-  }, [data, height, currentYear, historicalValues, p10, p50, p90, y_med, childLines, comparisonData, comparisonHistoricalValues, previewData, previewHistoricalValues, hoveredYear, onYearChange, yDomain])
+  }, [data, height, currentYear, historicalValues, p10, p50, p90, y_med, childLines, comparisonData, comparisonHistoricalValues, previewData, previewHistoricalValues, pinnedComparisons, hoveredYear, onYearChange, yDomain])
 
   return <div className="w-full h-full">{svgContent}</div>
 }

@@ -375,23 +375,6 @@ export async function generateForecastPDF(data: ForecastPDFData): Promise<void> 
                             doc.line(xOf(pcH[pcH.length - 1].yr), yOf(pcH[pcH.length - 1].v), xOf(2026), yOf(pc.p50[pcIdx2026c]))
                         }
                     }
-
-                    // P50 dashed forecast line (from 2026 onward)
-                    if (pc.p50?.length && pc.years?.length) {
-                        for (let i = 0; i < pc.years.length - 1; i++) {
-                            if (pc.years[i] < 2026) continue
-                            if (!Number.isFinite(pc.p50[i]) || !Number.isFinite(pc.p50[i + 1])) continue
-                            const x1 = xOf(pc.years[i]), y1 = yOf(pc.p50[i])
-                            const x2 = xOf(pc.years[i + 1]), y2 = yOf(pc.p50[i + 1])
-                            const len = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
-                            let d = 0
-                            while (d < len) {
-                                const a = d / len, b = Math.min((d + 1.5) / len, 1)
-                                doc.line(x1 + (x2 - x1) * a, y1 + (y2 - y1) * a, x1 + (x2 - x1) * b, y1 + (y2 - y1) * b)
-                                d += 2.5
-                            }
-                        }
-                    }
                 }
             }
 
@@ -500,7 +483,32 @@ export async function generateForecastPDF(data: ForecastPDFData): Promise<void> 
                 if (yr >= yrMin && yr <= yrMax) doc.text(yr.toString(), xOf(yr), y + cH + 3.5, { align: "center" })
             }
 
-            // P50 dashed forecast line — drawn LAST so it's always visible on top
+            // Comparison P50 dashed forecast lines — drawn FIRST so they sit below primary but above fan
+            if (data.pinnedComparisons?.length) {
+                for (let ci = 0; ci < data.pinnedComparisons.length; ci++) {
+                    const pc = data.pinnedComparisons[ci]
+                    const color = COMP_COLORS[ci % COMP_COLORS.length]
+                    doc.setDrawColor(...color)
+                    doc.setLineWidth(0.7)
+                    if (pc.p50?.length && pc.years?.length) {
+                        for (let i = 0; i < pc.years.length - 1; i++) {
+                            if (pc.years[i] < 2026) continue
+                            if (!Number.isFinite(pc.p50[i]) || !Number.isFinite(pc.p50[i + 1])) continue
+                            const x1 = xOf(pc.years[i]), y1 = yOf(pc.p50[i])
+                            const x2 = xOf(pc.years[i + 1]), y2 = yOf(pc.p50[i + 1])
+                            const len = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+                            let d = 0
+                            while (d < len) {
+                                const a = d / len, b = Math.min((d + 1.5) / len, 1)
+                                doc.line(x1 + (x2 - x1) * a, y1 + (y2 - y1) * a, x1 + (x2 - x1) * b, y1 + (y2 - y1) * b)
+                                d += 2.5
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Primary P50 dashed forecast line — drawn LAST so it's always visible on top
             doc.setDrawColor(...orange)
             doc.setLineWidth(1.0)
             for (let i = 0; i < data.years.length - 1; i++) {
@@ -567,17 +575,11 @@ export async function generateForecastPDF(data: ForecastPDFData): Promise<void> 
         doc.setFont("helvetica", "normal")
         doc.setFontSize(6.5)
         doc.setTextColor(...muted)
-        doc.text("Current Value (2025)", cx0 + 3, y + 5)
+        doc.text("Current Value (2026)", cx0 + 3, y + 5)
         doc.setFont("helvetica", "bold")
         doc.setFontSize(14)
         doc.setTextColor(...dark)
-        doc.text(fmt$(currentValue), cx0 + 3, y + 14)
-        if (p50_2026 != null) {
-            doc.setFont("helvetica", "normal")
-            doc.setFontSize(6)
-            doc.setTextColor(...muted)
-            doc.text(`2026 est: ${fmt$(p50_2026)}`, cx0 + 3, y + 20)
-        }
+        doc.text(p50_2026 != null ? fmt$(p50_2026) : (currentValue != null ? fmt$(currentValue) : "—"), cx0 + 3, y + 14)
 
         // Card 2: Forecast + Growth to selected year
         const cx1 = margin + (cardW + cardGap)
