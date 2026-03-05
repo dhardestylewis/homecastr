@@ -146,7 +146,7 @@ interface MapViewProps {
     onConsultAI?: (details: { predictedValue: number | null; opportunityScore: number | null; capRate: number | null }) => void
 }
 
-const HARRIS_COUNTY_CENTER = { lng: -95.3698, lat: 29.7604 }
+const MANHATTAN_CENTER = { lng: -73.9857, lat: 40.7484 }
 
 function getReliabilityStrokeWidth(r: number): number {
     if (r < 0.2) return 1
@@ -372,7 +372,7 @@ export function MapView({
     onConsultAI
 }: MapViewProps) {
     // --- STATE & REFS ---
-    const basemapCenter = useMemo(() => ({ lng: -95.3698, lat: 29.7604 }), [])
+    const basemapCenter = useMemo(() => ({ lng: -73.9857, lat: 40.7484 }), [])
     const [h3Resolution, setH3Resolution] = useState<number>(0)
     const lastResolutionRef = useRef<number>(0)
     const hexCanvasRef = useRef<HTMLCanvasElement>(null)

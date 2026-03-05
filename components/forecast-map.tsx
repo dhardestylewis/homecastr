@@ -404,7 +404,7 @@ export function ForecastMap({
     const [mapCenter, setMapCenter] = useState<{ lat: number, lng: number } | null>(null)
     const isHarrisCounty = mapCenter
         ? (mapCenter.lat >= 29.4 && mapCenter.lat <= 30.2 && mapCenter.lng >= -95.9 && mapCenter.lng <= -94.9)
-        : true // Default to true on initial load since default coordinates are Houston
+        : false // Default to false on initial load since default coordinates are Manhattan
 
     const originYear = isHarrisCounty ? 2025 : 2024
     const horizonM = (year - originYear) * 12
@@ -658,8 +658,8 @@ export function ForecastMap({
         if (!mapContainerRef.current) return
 
         const urlParams = new URLSearchParams(window.location.search)
-        const initialLat = parseFloat(urlParams.get("lat") || "29.76")
-        const initialLng = parseFloat(urlParams.get("lng") || "-95.37")
+        const initialLat = parseFloat(urlParams.get("lat") || "40.7484")
+        const initialLng = parseFloat(urlParams.get("lng") || "-73.9857")
         const initialZoom = parseFloat(urlParams.get("zoom") || "10")
 
         const map = new maplibregl.Map({
