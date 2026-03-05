@@ -808,7 +808,7 @@ function DashboardContent() {
           "fixed z-[9999] flex items-stretch gap-2 transition-all duration-300 max-w-[calc(100vw-24px)]",
           // Shift right of whichever panel is open (both are ~340px wide at left-5 → right edge ~365px)
           tavusConversationUrl || isChatOpen ? "left-[365px]" : "left-5",
-          mapState.selectedId && filters.useForecastMap && forecastData !== null ? "bottom-[calc(25vh+12px)] md:bottom-5" : "bottom-5"
+          mapState.selectedId && filters.useForecastMap ? "bottom-[calc(25vh+12px)] md:bottom-5" : "bottom-5"
         )}>
           {/* Left column — Agent buttons stacked vertically */}
           <div className="flex flex-col gap-1.5">

@@ -82,17 +82,23 @@ function formatValue(v: number | null | undefined): string {
     return "$" + v.toLocaleString("en-US", { maximumFractionDigits: 0 })
 }
 
-// Get label for current zoom
+// Get label for current zoom — iterate REVERSE so most specific level wins
+// (tract extends to z22 as a rendering underlay, but interaction should use
+//  the finest-grained level that the SQL tile RPC actually returns)
 function getLevelLabel(zoom: number): string {
-    for (const lvl of GEO_LEVELS) {
+    for (let i = GEO_LEVELS.length - 1; i >= 0; i--) {
+        const lvl = GEO_LEVELS[i]
         if (zoom >= lvl.minzoom && zoom <= lvl.maxzoom) return lvl.label
     }
     return "Parcel"
 }
 
-// Get source-layer name for current zoom
+// Get source-layer name for current zoom — iterate REVERSE so most specific level wins
+// (tract extends to z22 as a rendering underlay, but the SQL tile RPC returns
+//  tabblock at z12-16 and parcel at z17+, so interaction must match that routing)
 function getSourceLayer(zoom: number): string {
-    for (const lvl of GEO_LEVELS) {
+    for (let i = GEO_LEVELS.length - 1; i >= 0; i--) {
+        const lvl = GEO_LEVELS[i]
         if (zoom >= lvl.minzoom && zoom <= lvl.maxzoom) return lvl.name
     }
     return "parcel"

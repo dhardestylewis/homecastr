@@ -117,7 +117,7 @@ export async function generateForecastPDF(data: ForecastPDFData): Promise<void> 
     // Growth to SELECTED year
     const selectedIdx = data.years?.findIndex(yr => yr >= data.currentYear)
     const selectedForecast = selectedIdx != null && selectedIdx >= 0 ? data.p50[selectedIdx] : null
-    const baseValue = currentValue ?? p50_2026 // use best available baseline
+    const baseValue = p50_2026 ?? currentValue // prioritize p50_2026 as the baseline for growth
     const growthSelected = baseValue && selectedForecast && baseValue !== 0
         ? (selectedForecast - baseValue) / baseValue : null
 
@@ -303,7 +303,7 @@ export async function generateForecastPDF(data: ForecastPDFData): Promise<void> 
             const histYrsComp = [2019, 2020, 2021, 2022, 2023, 2024, 2025]
             if (data.pinnedComparisons?.length) {
                 for (let ci = 0; ci < data.pinnedComparisons.length; ci++) {
-                    const pc = data.pinnedComparisons[ci]
+                    const pc: PinnedComparisonPDF = data.pinnedComparisons[ci]
                     const color = COMP_COLORS[ci % COMP_COLORS.length]
 
                     // Fan band (P10–P90 shaded area) — lighter tint
@@ -483,26 +483,33 @@ export async function generateForecastPDF(data: ForecastPDFData): Promise<void> 
                 if (yr >= yrMin && yr <= yrMax) doc.text(yr.toString(), xOf(yr), y + cH + 3.5, { align: "center" })
             }
 
+            const drawDashed = (x1: number, y1: number, x2: number, y2: number) => {
+                const len = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+                let d = 0
+                while (d < len) {
+                    const a = d / len, b = Math.min((d + 1.5) / len, 1)
+                    doc.line(x1 + (x2 - x1) * a, y1 + (y2 - y1) * a, x1 + (x2 - x1) * b, y1 + (y2 - y1) * b)
+                    d += 2.5
+                }
+            }
+
             // Comparison P50 dashed forecast lines — drawn FIRST so they sit below primary but above fan
             if (data.pinnedComparisons?.length) {
                 for (let ci = 0; ci < data.pinnedComparisons.length; ci++) {
-                    const pc = data.pinnedComparisons[ci]
+                    const pc: PinnedComparisonPDF = data.pinnedComparisons[ci]
                     const color = COMP_COLORS[ci % COMP_COLORS.length]
                     doc.setDrawColor(...color)
                     doc.setLineWidth(0.7)
                     if (pc.p50?.length && pc.years?.length) {
+                        const pcIdx2026 = pc.years.findIndex((yr: number) => yr >= 2026)
+                        const pcIdx2027 = pc.years.findIndex((yr: number) => yr >= 2027)
+                        if (pcIdx2026 >= 0 && pcIdx2027 >= 0 && pc.years[pcIdx2026] !== 2026) {
+                            drawDashed(xOf(2026), yOf(pc.p50[pcIdx2026]), xOf(pc.years[pcIdx2027]), yOf(pc.p50[pcIdx2027]))
+                        }
                         for (let i = 0; i < pc.years.length - 1; i++) {
                             if (pc.years[i] < 2026) continue
                             if (!Number.isFinite(pc.p50[i]) || !Number.isFinite(pc.p50[i + 1])) continue
-                            const x1 = xOf(pc.years[i]), y1 = yOf(pc.p50[i])
-                            const x2 = xOf(pc.years[i + 1]), y2 = yOf(pc.p50[i + 1])
-                            const len = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
-                            let d = 0
-                            while (d < len) {
-                                const a = d / len, b = Math.min((d + 1.5) / len, 1)
-                                doc.line(x1 + (x2 - x1) * a, y1 + (y2 - y1) * a, x1 + (x2 - x1) * b, y1 + (y2 - y1) * b)
-                                d += 2.5
-                            }
+                            drawDashed(xOf(pc.years[i]), yOf(pc.p50[i]), xOf(pc.years[i + 1]), yOf(pc.p50[i + 1]))
                         }
                     }
                 }
@@ -511,17 +518,12 @@ export async function generateForecastPDF(data: ForecastPDFData): Promise<void> 
             // Primary P50 dashed forecast line — drawn LAST so it's always visible on top
             doc.setDrawColor(...orange)
             doc.setLineWidth(1.0)
+            if (idx2026 >= 0 && idx2027 >= 0 && data.years[idx2026] !== 2026) {
+                drawDashed(xOf(2026), yOf(fanP50_2026), xOf(data.years[idx2027]), yOf(data.p50[idx2027]))
+            }
             for (let i = 0; i < data.years.length - 1; i++) {
                 if (data.years[i] < 2026) continue
-                const x1 = xOf(data.years[i]), y1 = yOf(data.p50[i])
-                const x2 = xOf(data.years[i + 1]), y2 = yOf(data.p50[i + 1])
-                const len = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
-                let d = 0
-                while (d < len) {
-                    const a = d / len, b = Math.min((d + 1.5) / len, 1)
-                    doc.line(x1 + (x2 - x1) * a, y1 + (y2 - y1) * a, x1 + (x2 - x1) * b, y1 + (y2 - y1) * b)
-                    d += 2.5
-                }
+                drawDashed(xOf(data.years[i]), yOf(data.p50[i]), xOf(data.years[i + 1]), yOf(data.p50[i + 1]))
             }
 
             // Legend
@@ -541,7 +543,7 @@ export async function generateForecastPDF(data: ForecastPDFData): Promise<void> 
             if (data.pinnedComparisons?.length) {
                 let legX = margin + 95
                 for (let ci = 0; ci < data.pinnedComparisons.length; ci++) {
-                    const pc = data.pinnedComparisons[ci]
+                    const pc: PinnedComparisonPDF = data.pinnedComparisons[ci]
                     const color = COMP_COLORS[ci % COMP_COLORS.length]
                     doc.setDrawColor(...color)
                     doc.setLineWidth(0.8)

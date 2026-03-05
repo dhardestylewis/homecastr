@@ -247,7 +247,10 @@ export function InspectorDrawer({ selectedId, onClose, year = 2026, className, o
                     <div className="flex items-center gap-1.5">
                       {(() => {
                         const predicted = details.proforma?.predicted_value
-                        const current = details.historicalValues?.[details.historicalValues.length - 1]
+
+                        const idx2026 = details.fanChart?.years?.findIndex(y => y === 2026) ?? -1
+                        const p50_2026 = idx2026 >= 0 ? details.fanChart?.p50?.[idx2026] : null
+                        const current = p50_2026 ?? details.historicalValues?.[details.historicalValues.length - 1]
 
                         if (isFiniteNumber(predicted) && isFiniteNumber(current) && current !== 0) {
                           const growth = ((predicted - current) / current)
