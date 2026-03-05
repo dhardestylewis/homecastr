@@ -18,6 +18,7 @@ export async function GET(req: NextRequest) {
     const lng = searchParams.get("lng")
     const w = parseInt(searchParams.get("w") || "400")
     const h = parseInt(searchParams.get("h") || "300")
+    const returnBase64 = searchParams.get("base64") === "1"
 
     if (!lat || !lng) {
         return NextResponse.json({ error: "Missing lat/lng" }, { status: 400 })
@@ -35,8 +36,18 @@ export async function GET(req: NextRequest) {
             const [exists] = await bucket.file(gcsPath).exists()
             if (exists) {
                 console.log(`[SV-CACHE] HIT  ${gcsPath}`)
+                const cachedUrl = gcsPublicUrl(bucketName, gcsPath)
+                if (returnBase64) {
+                    try {
+                        const imgRes = await fetch(cachedUrl)
+                        const imgBuf = Buffer.from(await imgRes.arrayBuffer())
+                        return NextResponse.json({ dataUrl: `data:image/jpeg;base64,${imgBuf.toString("base64")}` })
+                    } catch {
+                        return NextResponse.json({ url: cachedUrl }, { headers: { "Cache-Control": "public, max-age=86400" } })
+                    }
+                }
                 return NextResponse.json(
-                    { url: gcsPublicUrl(bucketName, gcsPath) },
+                    { url: cachedUrl },
                     { headers: { "Cache-Control": "public, max-age=86400" } }
                 )
             }
@@ -74,6 +85,15 @@ export async function GET(req: NextRequest) {
 
     // ── 3. No GCS configured — old behaviour ─────────────────────────────────
     if (!bucketName) {
+        if (returnBase64) {
+            try {
+                const imgRes = await fetch(googleUrl)
+                const imgBuf = Buffer.from(await imgRes.arrayBuffer())
+                return NextResponse.json({ dataUrl: `data:image/jpeg;base64,${imgBuf.toString("base64")}` })
+            } catch {
+                return NextResponse.json({ url: googleUrl })
+            }
+        }
         return NextResponse.json({ url: googleUrl })
     }
 
@@ -106,8 +126,12 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ url: googleUrl })
     }
 
+    const finalUrl = gcsPublicUrl(bucketName, gcsPath)
+    if (returnBase64) {
+        return NextResponse.json({ dataUrl: `data:image/jpeg;base64,${imageBytes.toString("base64")}` })
+    }
     return NextResponse.json(
-        { url: gcsPublicUrl(bucketName, gcsPath) },
+        { url: finalUrl },
         { headers: { "Cache-Control": "public, max-age=86400" } }
     )
 }

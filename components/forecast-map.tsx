@@ -122,6 +122,17 @@ interface ForecastMapProps {
     capRate?: number | null
     isChatOpen?: boolean
     isTavusOpen?: boolean
+    compareMode?: boolean
+    onPinnedCountChange?: (count: number) => void
+}
+
+interface PinnedEntry {
+    id: string
+    data: FanChartData
+    historicalValues?: number[]
+    label?: string
+    coords: [number, number]
+    sourceLayer: string
 }
 
 export function ForecastMap({
@@ -136,6 +147,8 @@ export function ForecastMap({
     onConsultAI,
     isChatOpen = false,
     isTavusOpen = false,
+    compareMode = false,
+    onPinnedCountChange,
 }: ForecastMapProps) {
     const mapContainerRef = useRef<HTMLDivElement>(null)
     const mapRef = useRef<maplibregl.Map | null>(null)
@@ -202,6 +215,70 @@ export function ForecastMap({
             onFeatureSelect(null)
         }
     }, [mapState.selectedId])
+
+    // Restore selection from URL param on initial map load
+    const hasRestoredUrlSelection = useRef(false)
+    useEffect(() => {
+        if (hasRestoredUrlSelection.current) return
+        if (!isLoaded || !mapRef.current || !mapState.selectedId) return
+        hasRestoredUrlSelection.current = true
+
+        const id = mapState.selectedId
+        const map = mapRef.current
+        const zoom = map.getZoom()
+        const sourceLayer = getSourceLayer(zoom)
+
+        // Apply visual selection state
+        selectedIdRef.current = id
+        selectedSourceLayerRef.current = sourceLayer
+        setSelectedId(id)
+        onFeatureSelect(id)
+
+        // Set feature state for outline highlight (delayed to allow tiles to load)
+        setTimeout(() => {
+            ;["forecast-a", "forecast-b"].forEach((s) => {
+                try {
+                    map.setFeatureState(
+                        { source: s, sourceLayer, id },
+                        { selected: true }
+                    )
+                } catch { /* tiles may not be loaded yet */ }
+            })
+
+            // Query rendered features to populate tooltip props
+            const activeSuffix = (map as any)._activeSuffix || "a"
+            const fillLayerId = `forecast-fill-${sourceLayer}-${activeSuffix}`
+            if (map.getLayer(fillLayerId)) {
+                const features = map.querySourceFeatures(`forecast-${activeSuffix}`, { sourceLayer })
+                const match = features.find(f => (f.properties?.id || f.id) === id)
+                if (match?.properties) {
+                    setSelectedProps(match.properties)
+                } else {
+                    setSelectedProps({ id })
+                }
+            } else {
+                setSelectedProps({ id })
+            }
+
+            // Position tooltip at a sensible default (right-center of viewport)
+            const container = mapContainerRef.current
+            if (container) {
+                const rect = container.getBoundingClientRect()
+                const pos = getSmartTooltipPos(
+                    rect.width / 2, rect.height / 2,
+                    window.innerWidth, window.innerHeight
+                )
+                setFixedTooltipPos({ globalX: pos.x, globalY: pos.y })
+            }
+        }, 1500)
+
+        // Fetch forecast detail data for the selected feature
+        fetchForecastDetail(id, sourceLayer)
+
+        // Set map center coords so geocoding works
+        const center = map.getCenter()
+        setSelectedCoords([center.lat, center.lng])
+    }, [isLoaded, mapState.selectedId])
 
     // Mobile detection
     const [isMobile, setIsMobile] = useState(false)
@@ -364,6 +441,10 @@ export function ForecastMap({
     const selectedPropsRef = useRef<any>(null)
     useEffect(() => { selectedPropsRef.current = selectedProps }, [selectedProps])
 
+    // Ref for compareMode so the MapLibre click handler (registered once) always sees the latest value
+    const compareModeRef = useRef(compareMode)
+    useEffect(() => { compareModeRef.current = compareMode }, [compareMode])
+
     // Reverse geocoded name for tooltip header
     const [geocodedName, setGeocodedName] = useState<string | null>(null)
 
@@ -381,7 +462,70 @@ export function ForecastMap({
     const comparisonTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const hoverDetailTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-    // Street view dwell hover: only show after hovering same feature for 1.5s
+    // Pinned comparisons: persistent multi-area comparison (up to 4)
+    const MAX_PINNED = 4
+    const PINNED_COLORS = ["#a3e635", "#38bdf8", "#f472b6", "#facc15"] // lime, sky, pink, amber
+    const [pinnedComparisons, setPinnedComparisons] = useState<PinnedEntry[]>([])
+    const pinnedComparisonsRef = useRef<PinnedEntry[]>([])
+    useEffect(() => { pinnedComparisonsRef.current = pinnedComparisons }, [pinnedComparisons])
+    useEffect(() => { onPinnedCountChange?.(pinnedComparisons.length) }, [pinnedComparisons.length, onPinnedCountChange])
+    // Expose pinned data for PDF export and sharing
+    useEffect(() => {
+        ; (window as any).__getPinnedComparisons = () => pinnedComparisons.map(pc => ({
+            label: pc.label || pc.id,
+            historicalValues: pc.historicalValues,
+            p50: pc.data?.p50,
+            p10: pc.data?.p10,
+            p90: pc.data?.p90,
+            years: pc.data?.years,
+        }))
+            ; (window as any).__getPinnedIds = () => pinnedComparisons.map(pc => pc.id)
+        return () => {
+            delete (window as any).__getPinnedComparisons
+            delete (window as any).__getPinnedIds
+        }
+    }, [pinnedComparisons])
+
+    // Restore pinned comparisons from URL ?compare=id1,id2,id3
+    const compareRestoredRef = useRef(false)
+    useEffect(() => {
+        if (!isLoaded || compareRestoredRef.current) return
+        const compareParam = searchParams.get("compare")
+        if (!compareParam) return
+        compareRestoredRef.current = true
+
+        const ids = compareParam.split(",").filter(Boolean).slice(0, MAX_PINNED)
+        if (!ids.length) return
+
+        // Fetch and pin each comparison
+        ids.forEach(async (id) => {
+            try {
+                const res = await fetch(`/api/forecast-detail?id=${id}&yr=${year}${schema ? `&schema=${schema}` : ""}`)
+                if (!res.ok) return
+                const json = await res.json()
+                const fanChart: FanChartData = {
+                    p50: json.p50 || [],
+                    p10: json.p10 || [],
+                    p90: json.p90 || [],
+                    years: json.years || [],
+                }
+
+                const entry: PinnedEntry = {
+                    id,
+                    data: fanChart,
+                    historicalValues: json.historical_values,
+                    label: id, // Use GEOID as label for URL-restored comparisons
+                    coords: [0, 0],
+                    sourceLayer: "zcta",
+                }
+                setPinnedComparisons(prev => {
+                    if (prev.some(p => p.id === id)) return prev
+                    if (prev.length >= MAX_PINNED) return prev
+                    return [...prev, entry]
+                })
+            } catch { /* skip silently */ }
+        })
+    }, [isLoaded, searchParams, year, schema])
     const [hoverDwell, setHoverDwell] = useState(false)
     const hoverDwellTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -687,10 +831,37 @@ export function ForecastMap({
             maxZoom: 18,
             minZoom: 2,
             maxTileCacheSize: 30, // Keep very low — forces MapLibre to prioritize visible tiles over off-viewport prefetch
+            preserveDrawingBuffer: true, // Required for canvas.toDataURL() in PDF export
         })
 
         map.on("load", () => {
             setIsLoaded(true)
+
+                // Expose global map capture for PDF export (zoom in for closer view)
+                ; (window as any).__captureMapImage = () => {
+                    return new Promise<string | undefined>((resolve) => {
+                        try {
+                            const origZoom = map.getZoom()
+                            const pdfZoom = origZoom + 5
+                            map.jumpTo({ zoom: pdfZoom })
+                            // Wait for tiles to load after zoom
+                            setTimeout(() => {
+                                map.triggerRepaint()
+                                requestAnimationFrame(() => {
+                                    try {
+                                        const dataUrl = map.getCanvas().toDataURL("image/png")
+                                        // Restore original zoom
+                                        map.jumpTo({ zoom: origZoom })
+                                        resolve(dataUrl)
+                                    } catch {
+                                        map.jumpTo({ zoom: origZoom })
+                                        resolve(undefined)
+                                    }
+                                })
+                            }, 800)
+                        } catch { resolve(undefined) }
+                    })
+                }
 
             const fillColor = buildFillColor()
 
@@ -1352,8 +1523,89 @@ export function ForecastMap({
                     setComparisonData(null)
                     setComparisonHistoricalValues(undefined)
                     comparisonFetchRef.current = null
+                    // Clear all pinned comparisons
+                    pinnedComparisonsRef.current.forEach(pc => {
+                        ;["forecast-a", "forecast-b"].forEach(s => {
+                            try { map.setFeatureState({ source: s, sourceLayer: pc.sourceLayer, id: pc.id }, { pinned: false }) } catch { }
+                        })
+                    })
+                    setPinnedComparisons([])
                     onFeatureSelect(null)
                     return
+                }
+
+                // Shift+click OR Compare mode: PIN this area for persistent comparison
+                if ((e.originalEvent.shiftKey || compareModeRef.current) && selectedIdRef.current) {
+                    const existingIdx = pinnedComparisonsRef.current.findIndex(p => p.id === id)
+                    if (existingIdx !== -1) {
+                        // Unpin
+                        ;["forecast-a", "forecast-b"].forEach(s => {
+                            try { map.setFeatureState({ source: s, sourceLayer, id }, { pinned: false }) } catch { }
+                        })
+                        setPinnedComparisons(prev => prev.filter(p => p.id !== id))
+                    } else {
+                        // Pin: fetch detail and add
+                        const pinLevel = getSourceLayer(zoom)
+                        const cacheKey = `${pinLevel}:${id}`
+                        const cached = detailCacheRef.current.get(cacheKey)
+
+                        const addPin = (fanChart: FanChartData | null, histVals: number[] | undefined) => {
+                            if (!fanChart) return
+                            // Reverse geocode for label
+                            let label = id
+                            import("@/app/actions/geocode").then(mod => {
+                                mod.reverseGeocode(e.lngLat.lat, e.lngLat.lng, 18).then(name => {
+                                    if (name) {
+                                        setPinnedComparisons(prev => prev.map(p => p.id === id ? { ...p, label: name } : p))
+                                    }
+                                }).catch(() => { })
+                            }).catch(() => { })
+
+                            const newPin: PinnedEntry = {
+                                id,
+                                data: fanChart,
+                                historicalValues: histVals,
+                                label,
+                                coords: [e.lngLat.lat, e.lngLat.lng],
+                                sourceLayer,
+                            }
+                            setPinnedComparisons(prev => {
+                                // Replace oldest if at max
+                                if (prev.length >= MAX_PINNED) {
+                                    const removed = prev[0]
+                                        ;["forecast-a", "forecast-b"].forEach(s => {
+                                            try { map.setFeatureState({ source: s, sourceLayer: removed.sourceLayer, id: removed.id }, { pinned: false }) } catch { }
+                                        })
+                                    return [...prev.slice(1), newPin]
+                                }
+                                return [...prev, newPin]
+                            })
+                                // Set MapLibre feature state
+                                ;["forecast-a", "forecast-b"].forEach(s => {
+                                    try { map.setFeatureState({ source: s, sourceLayer, id }, { pinned: true }) } catch { }
+                                })
+                        }
+
+                        if (cached) {
+                            addPin(cached.fanChart, cached.historicalValues)
+                        } else {
+                            // Fetch
+                            const schemaParam = schema ? `&schema=${schema}` : ""
+                            fetch(`/api/forecast-detail?level=${pinLevel}&id=${encodeURIComponent(id)}&originYear=${originYear}${schemaParam}`)
+                                .then(res => res.ok ? res.json() : null)
+                                .then(json => {
+                                    if (!json) return
+                                    const fanChart = json.years?.length > 0 ? (json as FanChartData) : null
+                                    const histVals = json.historicalValues?.some((v: any) => v != null) ? json.historicalValues : undefined
+                                    if (fanChart) {
+                                        detailCacheRef.current.set(cacheKey, { fanChart, historicalValues: histVals })
+                                    }
+                                    addPin(fanChart, histVals)
+                                })
+                                .catch(() => { })
+                        }
+                    }
+                    return // Don't change primary selection
                 }
 
                 selectedIdRef.current = id
@@ -1363,6 +1615,13 @@ export function ForecastMap({
                 setComparisonData(null)
                 setComparisonHistoricalValues(undefined)
                 comparisonFetchRef.current = null
+                // Clear all pinned comparisons when changing primary selection
+                pinnedComparisonsRef.current.forEach(pc => {
+                    ;["forecast-a", "forecast-b"].forEach(s => {
+                        try { map.setFeatureState({ source: s, sourceLayer: pc.sourceLayer, id: pc.id }, { pinned: false }) } catch { }
+                    })
+                })
+                setPinnedComparisons([])
                 onFeatureSelect(id)
 
                 // Fetch fan chart detail for newly selected area (critical on mobile where hover doesn't fire)
@@ -1441,6 +1700,14 @@ export function ForecastMap({
                 setComparisonHistoricalValues(undefined)
                 comparisonFetchRef.current = null
                 detailFetchRef.current = null
+                // Clear pinned comparisons on ESC
+                const map2 = mapRef.current
+                pinnedComparisonsRef.current.forEach(pc => {
+                    ;["forecast-a", "forecast-b"].forEach(s => {
+                        try { map2?.setFeatureState({ source: s, sourceLayer: pc.sourceLayer, id: pc.id }, { pinned: false }) } catch { }
+                    })
+                })
+                setPinnedComparisons([])
                 onFeatureSelect(null)
             }
         }
@@ -1470,7 +1737,27 @@ export function ForecastMap({
                 } catch { /* layer may not exist yet */ }
             }
         }
-    }, [selectedId, isLoaded])
+
+        // Update outline colors — add pinned state
+        for (const suffix of ["a", "b"]) {
+            for (const lvl of GEO_LEVELS) {
+                const layerId = `forecast-outline-${lvl.name}-${suffix}`
+                if (!map.getLayer(layerId)) continue
+                try {
+                    map.setPaintProperty(layerId, "line-color", [
+                        "case",
+                        ["boolean", ["feature-state", "selected"], false],
+                        "#fbbf24",   // amber — always for locked selection
+                        ["boolean", ["feature-state", "pinned"], false],
+                        "#a3e635",   // lime — pinned comparison areas
+                        ["boolean", ["feature-state", "hover"], false],
+                        hoverColor,  // amber when previewing, lime when comparing
+                        "rgba(0,0,0,0)",
+                    ])
+                } catch { /* layer may not exist yet */ }
+            }
+        }
+    }, [selectedId, isLoaded, pinnedComparisons])
 
     // Tavus map-action handler: clear_selection, fly_to_location
     useEffect(() => {
@@ -1503,6 +1790,14 @@ export function ForecastMap({
                 setComparisonHistoricalValues(undefined)
                 comparisonFetchRef.current = null
                 detailFetchRef.current = null
+                // Clear pinned comparisons on clear_selection
+                pinnedComparisonsRef.current.forEach(pc => {
+                    const map2 = mapRef.current
+                        ;["forecast-a", "forecast-b"].forEach(s => {
+                            try { map2?.setFeatureState({ source: s, sourceLayer: pc.sourceLayer, id: pc.id }, { pinned: false }) } catch { }
+                        })
+                })
+                setPinnedComparisons([])
                 onFeatureSelect(null)
             } else if (action === "clear_comparison") {
                 // Clear only the comparison overlay, keep primary selection
@@ -1880,13 +2175,18 @@ export function ForecastMap({
         if (historicalValues) vals.push(...historicalValues.filter(v => Number.isFinite(v)))
         if (comparisonData?.p50) vals.push(...comparisonData.p50.filter(v => Number.isFinite(v)))
         if (comparisonHistoricalValues) vals.push(...comparisonHistoricalValues.filter(v => Number.isFinite(v)))
+        // Include pinned comparison data in Y range
+        for (const pc of pinnedComparisons) {
+            if (pc.historicalValues) vals.push(...pc.historicalValues.filter(v => Number.isFinite(v)))
+            if (pc.data?.p50) vals.push(...pc.data.p50.filter(v => Number.isFinite(v)))
+        }
         if (vals.length === 0) return viewportYDomain
         const dataMin = Math.min(...vals)
         const dataMax = Math.max(...vals)
         // Only extend, never shrink from viewport range
         if (dataMin >= lo && dataMax <= hi) return viewportYDomain // no extension needed
         return [Math.min(lo, dataMin), Math.max(hi, dataMax)]
-    }, [viewportYDomain, fanChartData, historicalValues, comparisonData, comparisonHistoricalValues])
+    }, [viewportYDomain, fanChartData, historicalValues, comparisonData, comparisonHistoricalValues, pinnedComparisons])
 
     // Comparison: when locked, fetch comparison detail for hovered feature
     // Skip updates when Shift is held (freeze current comparison)
@@ -2186,6 +2486,32 @@ export function ForecastMap({
                                         </span>
                                     </div>
                                 )}
+                                {pinnedComparisons.length > 0 && (
+                                    <div className="mt-1 flex flex-wrap items-center gap-1">
+                                        {pinnedComparisons.map((pc, idx) => (
+                                            <button
+                                                key={pc.id}
+                                                onClick={(ev) => {
+                                                    ev.stopPropagation()
+                                                    const map = mapRef.current
+                                                    if (map) {
+                                                        ;["forecast-a", "forecast-b"].forEach(s => {
+                                                            try { map.setFeatureState({ source: s, sourceLayer: pc.sourceLayer, id: pc.id }, { pinned: false }) } catch { }
+                                                        })
+                                                    }
+                                                    setPinnedComparisons(prev => prev.filter(p => p.id !== pc.id))
+                                                }}
+                                                className="px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wider rounded flex items-center gap-1 hover:opacity-70 transition-opacity cursor-pointer"
+                                                style={{ backgroundColor: `${PINNED_COLORS[idx % PINNED_COLORS.length]}20`, color: PINNED_COLORS[idx % PINNED_COLORS.length] }}
+                                                title={`Click to unpin ${pc.label || pc.id}`}
+                                            >
+                                                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: PINNED_COLORS[idx % PINNED_COLORS.length] }} />
+                                                {pc.label || pc.id}
+                                                <span className="ml-0.5">×</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         </>
                     )}
@@ -2230,7 +2556,7 @@ export function ForecastMap({
                                             {/* Full-width chart */}
                                             <div className="w-full h-full">
                                                 {fanChartData ? (
-                                                    <FanChart data={fanChartData} currentYear={year} height={200} historicalValues={historicalValues} childLines={debugBuildings ? studentChildLines : undefined} comparisonData={comparisonData} comparisonHistoricalValues={comparisonHistoricalValues} yDomain={effectiveYDomain} />
+                                                    <FanChart data={fanChartData} currentYear={year} height={200} historicalValues={historicalValues} childLines={debugBuildings ? studentChildLines : undefined} comparisonData={comparisonData} comparisonHistoricalValues={comparisonHistoricalValues} pinnedComparisons={pinnedComparisons.map(pc => ({ data: pc.data, historicalValues: pc.historicalValues, label: pc.label }))} yDomain={effectiveYDomain} />
                                                 ) : isLoadingDetail ? (
                                                     <div className="h-full flex items-center justify-center">
                                                         <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
@@ -2318,6 +2644,7 @@ export function ForecastMap({
                                             childLines={debugBuildings ? studentChildLines : undefined}
                                             comparisonData={comparisonData}
                                             comparisonHistoricalValues={comparisonHistoricalValues}
+                                            pinnedComparisons={pinnedComparisons.map(pc => ({ data: pc.data, historicalValues: pc.historicalValues, label: pc.label }))}
                                             yDomain={effectiveYDomain}
                                         />
                                     ) : isLoadingDetail ? (

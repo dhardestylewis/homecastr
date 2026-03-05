@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useCallback, Suspense, useEffect } from "react"
+import React, { useState, useCallback, Suspense, useEffect, useRef } from "react"
 import { MapView } from "@/components/map-view"
 import { VectorMap } from "@/components/vector-map"
 import { ForecastMap } from "@/components/forecast-map"
@@ -15,7 +15,8 @@ import { useToast } from "@/hooks/use-toast"
 import type { PropertyForecast } from "@/app/actions/property-forecast"
 import { TimeControls } from "@/components/time-controls"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { AlertCircle, Plus, Minus, RotateCcw, ArrowLeftRight, Copy, Terminal, Activity, MessageSquare, Mic, CalendarDays } from "lucide-react"
+import { AlertCircle, Plus, Minus, RotateCcw, ArrowLeftRight, Copy, Terminal, Activity, MessageSquare, Mic, CalendarDays, Link2, FileDown, Check } from "lucide-react"
+import { useSearchParams, useRouter } from "next/navigation"
 import { geocodeAddress, reverseGeocode } from "@/app/actions/geocode"
 
 import { cellToLatLng, latLngToCell } from "h3-js"
@@ -28,6 +29,7 @@ import { createTavusConversation } from "@/app/actions/tavus"
 import dynamic from "next/dynamic"
 import { HomecastrLogo } from "@/components/homecastr-logo"
 import { ContactModal } from "@/components/contact-modal"
+import { generateForecastPDF } from "@/lib/generate-pdf"
 
 // Dynamic import with SSR disabled — daily-js needs browser APIs
 const TavusMiniWindow = dynamic(
@@ -38,17 +40,53 @@ const TavusMiniWindow = dynamic(
 
 
 function DashboardContent() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const { filters, setFilters, resetFilters } = useFilters()
   const { mapState, setMapState, selectFeature, hoverFeature } = useMapState()
   const [forecastData, setForecastData] = useState<{ acct: string; data: PropertyForecast[] } | null>(null)
-  const [currentYear, setCurrentYear] = useState(2027)
+  const [currentYear, setCurrentYear] = useState(() => {
+    const yrParam = searchParams.get("yr")
+    return yrParam ? Math.max(2019, Math.min(2030, parseInt(yrParam, 10))) : 2027
+  })
   const [hasManuallySetYear, setHasManuallySetYear] = useState(false)
   const [isUsingMockData, setIsUsingMockData] = useState(false)
   const [searchBarValue, setSearchBarValue] = useState<string>("")
   const [mobileSelectionMode, setMobileSelectionMode] = useState<'replace' | 'add' | 'range'>('replace')
+  const [compareMode, setCompareMode] = useState(false)
+  const [pinnedCount, setPinnedCount] = useState(0)
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [isContactOpen, setIsContactOpen] = useState(false)
+  const [linkCopied, setLinkCopied] = useState(false)
   const { toast } = useToast()
+
+  // Auto-open contact form and/or enable compare mode from URL params (post-hydration)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get("contact") === "1") {
+      setIsContactOpen(true)
+      params.delete("contact")
+      const newUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ""}${window.location.hash}`
+      window.history.replaceState({}, "", newUrl)
+    }
+    if (params.has("compare")) {
+      setCompareMode(true)
+    }
+  }, [])
+
+  // Sync currentYear to URL
+  const prevYearRef = useRef(currentYear)
+  useEffect(() => {
+    if (prevYearRef.current === currentYear) return
+    prevYearRef.current = currentYear
+    const params = new URLSearchParams(window.location.search)
+    if (currentYear !== 2027) {
+      params.set("yr", currentYear.toString())
+    } else {
+      params.delete("yr")
+    }
+    router.replace(`?${params.toString()}`, { scroll: false })
+  }, [currentYear, router])
 
   // Derive origin year from map viewport — same Harris County check as forecast-map.tsx
   const [mapLng, mapLat] = mapState.center
@@ -596,6 +634,8 @@ function DashboardContent() {
             onConsultAI={handleConsultAI}
             isChatOpen={isChatOpen}
             isTavusOpen={!!tavusConversationUrl && !isTavusLoading}
+            compareMode={compareMode}
+            onPinnedCountChange={setPinnedCount}
           />
         ) : filters.useVectorMap ? (
           <VectorMap
@@ -679,20 +719,25 @@ function DashboardContent() {
 
               {/* Single Select */}
               <button
-                onClick={() => setMobileSelectionMode('replace')}
-                className={`aspect-square rounded-md flex items-center justify-center transition-colors shadow-sm font-bold text-[10px] ${mobileSelectionMode === 'replace' ? "bg-primary text-primary-foreground" : "glass-panel text-foreground"}`}
+                onClick={() => { setCompareMode(false); setMobileSelectionMode('replace') }}
+                className={`aspect-square rounded-md flex items-center justify-center transition-colors shadow-sm font-bold text-[10px] ${!compareMode ? "bg-primary text-primary-foreground" : "glass-panel text-foreground"}`}
                 title="Single Select"
               >
                 1
               </button>
 
-              {/* Multi Select */}
+              {/* Compare Mode */}
               <button
-                onClick={() => setMobileSelectionMode('add')}
-                className={`aspect-square rounded-md flex items-center justify-center transition-colors shadow-sm ${mobileSelectionMode === 'add' ? "bg-primary text-primary-foreground" : "glass-panel text-foreground"}`}
-                title="Multi Select"
+                onClick={() => setCompareMode(!compareMode)}
+                className={`aspect-square rounded-md flex items-center justify-center transition-colors shadow-sm relative ${compareMode ? "bg-lime-500 text-black" : "glass-panel text-foreground"}`}
+                title={compareMode ? "Compare Mode ON — click areas to pin" : "Compare Mode — pin areas to compare"}
               >
-                <Copy className="h-3.5 w-3.5" />
+                <ArrowLeftRight className="h-3.5 w-3.5" />
+                {pinnedCount > 0 && (
+                  <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-lime-400 text-black text-[8px] font-bold rounded-full flex items-center justify-center">
+                    {pinnedCount}
+                  </span>
+                )}
               </button>
 
               {/* Zoom In */}
@@ -758,52 +803,161 @@ function DashboardContent() {
           </div>
         </div>
 
-        {/* Floating action buttons — flex row, same gap-2 as sidebar rows */}
+        {/* Floating action buttons — 2-column layout */}
         <div className={cn(
-          "fixed z-[9999] flex items-center gap-2 transition-all duration-300",
+          "fixed z-[9999] flex items-stretch gap-2 transition-all duration-300 max-w-[calc(100vw-24px)]",
           // Shift right of whichever panel is open (both are ~340px wide at left-5 → right edge ~365px)
           tavusConversationUrl || isChatOpen ? "left-[365px]" : "left-5",
           mapState.selectedId && filters.useForecastMap && forecastData !== null ? "bottom-[calc(25vh+12px)] md:bottom-5" : "bottom-5"
         )}>
-          {/* Chat button — visible when chat panel is closed */}
-          {!isChatOpen && (
-            <button
-              onClick={() => setIsChatOpen(true)}
-              className="flex items-center gap-2.5 px-5 py-3 rounded-2xl glass-panel hover:bg-accent/50 text-foreground shadow-2xl transition-all duration-300 hover:scale-105 active:scale-95"
-            >
-              <MessageSquare size={22} />
-              <div className="flex flex-col items-start">
-                <span className="text-xs font-semibold">Chat with live agent</span>
-                <span className="text-[10px] text-muted-foreground">Powered by OpenAI</span>
-              </div>
-            </button>
-          )}
+          {/* Left column — Agent buttons stacked vertically */}
+          <div className="flex flex-col gap-1.5">
+            {/* Chat button — visible when chat panel is closed */}
+            {!isChatOpen && (
+              <button
+                onClick={() => setIsChatOpen(true)}
+                className="flex-1 flex items-center gap-2.5 px-4 py-2.5 rounded-2xl glass-panel hover:bg-accent/50 text-foreground shadow-2xl transition-all duration-300 hover:scale-105 active:scale-95 min-w-0"
+              >
+                <MessageSquare size={18} className="shrink-0" />
+                <div className="flex flex-col items-start min-w-0">
+                  <span className="text-xs font-semibold whitespace-nowrap">Chat with live agent</span>
+                  <span className="text-[10px] text-muted-foreground whitespace-nowrap">Powered by OpenAI</span>
+                </div>
+              </button>
+            )}
 
-          {/* Tavus button — visible when not in a Tavus call */}
-          {!tavusConversationUrl && !isTavusLoading && (
-            <button
-              onClick={handleFloatingConsultAI}
-              className="flex items-center gap-2.5 px-5 py-3 rounded-2xl glass-panel hover:bg-accent/50 text-foreground shadow-2xl transition-all duration-300 hover:scale-105 active:scale-95"
-            >
-              <Mic size={22} />
-              <div className="flex flex-col items-start">
-                <span className="text-xs font-semibold">Talk to live agent</span>
-                <span className="text-[10px] text-muted-foreground">Powered by Tavus</span>
-              </div>
-            </button>
-          )}
+            {/* Tavus button — visible when not in a Tavus call */}
+            {!tavusConversationUrl && !isTavusLoading && (
+              <button
+                onClick={handleFloatingConsultAI}
+                className="flex-1 flex items-center gap-2.5 px-4 py-2.5 rounded-2xl glass-panel hover:bg-accent/50 text-foreground shadow-2xl transition-all duration-300 hover:scale-105 active:scale-95 min-w-0"
+              >
+                <Mic size={18} className="shrink-0" />
+                <div className="flex flex-col items-start min-w-0">
+                  <span className="text-xs font-semibold whitespace-nowrap">Talk to live agent</span>
+                  <span className="text-[10px] text-muted-foreground whitespace-nowrap">Powered by Tavus</span>
+                </div>
+              </button>
+            )}
+          </div>
 
-          {/* CTA: Request custom analysis — always visible */}
-          <button
-            onClick={() => setIsContactOpen(true)}
-            className="flex items-center gap-2.5 px-5 py-3 rounded-2xl glass-panel hover:bg-accent/50 text-foreground shadow-2xl transition-all duration-300 hover:scale-105 active:scale-95 border border-[hsl(var(--primary))]/30"
-          >
-            <CalendarDays size={22} className="text-[hsl(45,80%,45%)]" />
-            <div className="flex flex-col items-start">
-              <span className="text-xs font-semibold">Request custom analysis</span>
-              <span className="text-[10px] text-muted-foreground">Bulk forecasts, API, pilots</span>
-            </div>
-          </button>
+          {/* Right column — Utility buttons stacked vertically */}
+          <div className="flex flex-col gap-1.5">
+            {/* Share View — copy link with full state */}
+            <button
+              onClick={() => {
+                const url = new URL(window.location.href)
+                // Ensure year is in the URL
+                if (currentYear !== 2027) url.searchParams.set("yr", currentYear.toString())
+                // Include pinned comparison IDs
+                const pinnedIds = (window as any).__getPinnedIds?.() as string[] | undefined
+                if (pinnedIds?.length) {
+                  url.searchParams.set("compare", pinnedIds.join(","))
+                } else {
+                  url.searchParams.delete("compare")
+                }
+                navigator.clipboard.writeText(url.toString()).then(() => {
+                  setLinkCopied(true)
+                  toast({ title: "Link copied", description: pinnedIds?.length ? `Shared with ${pinnedIds.length} comparison(s)` : "Share this URL to show the same view", duration: 2500 })
+                  setTimeout(() => setLinkCopied(false), 2500)
+                })
+              }}
+              className="flex-1 flex items-center gap-2 px-4 py-2 rounded-2xl glass-panel hover:bg-accent/50 text-foreground shadow-2xl transition-all duration-300 hover:scale-105 active:scale-95 min-w-0"
+            >
+              {linkCopied ? <Check size={16} className="shrink-0 text-green-500" /> : <Link2 size={16} className="shrink-0" />}
+              <span className="text-xs font-semibold whitespace-nowrap">{linkCopied ? "Copied!" : "Share"}</span>
+            </button>
+
+            {/* Download PDF — branded forecast report */}
+            <button
+              onClick={async () => {
+                try {
+                  toast({ title: "Generating PDF…", duration: 2000 })
+
+                  // Capture map canvas via global helper exposed by ForecastMap
+                  const captureMap = (window as any).__captureMapImage
+                  const mapImageDataUrl: string | undefined = captureMap ? await captureMap() : undefined
+
+                  // Fetch forecast data
+                  const selectedId = mapState.selectedId
+                  let historicalValues: (number | null)[] = []
+                  let p50: number[] = []
+                  let p10: number[] = []
+                  let p90: number[] = []
+                  let years: number[] = []
+
+                  if (selectedId) {
+                    // Auto-detect geo level from ID format
+                    const level = selectedId.length === 3 ? "zip3"
+                      : selectedId.length === 5 ? "zcta"
+                        : selectedId.length === 11 ? "tract"
+                          : selectedId.length === 15 ? "tabblock"
+                            : "parcel"
+                    const res = await fetch(`/api/forecast-detail?level=${level}&id=${encodeURIComponent(selectedId)}&originYear=${pageOriginYear}`)
+                    if (res.ok) {
+                      const json = await res.json()
+                      historicalValues = json.historicalValues || []
+                      p50 = json.p50 || []
+                      p10 = json.p10 || []
+                      p90 = json.p90 || []
+                      years = json.years || []
+                    }
+                  }
+
+                  const shareUrl = new URL(window.location.href)
+                  if (currentYear !== 2027) shareUrl.searchParams.set("yr", currentYear.toString())
+                  // Include pinned comparison IDs in PDF share URL
+                  const pdfPinnedIds = (window as any).__getPinnedIds?.() as string[] | undefined
+                  if (pdfPinnedIds?.length) shareUrl.searchParams.set("compare", pdfPinnedIds.join(","))
+
+                  await generateForecastPDF({
+                    locationName: searchBarValue && !searchBarValue.includes("Loading")
+                      ? searchBarValue
+                      : selectedId
+                        ? selectedId
+                        : (() => {
+                          const params = new URLSearchParams(window.location.search)
+                          const lat = parseFloat(params.get("lat") || "0")
+                          const lng = parseFloat(params.get("lng") || "0")
+                          return lat ? `Map View — ${Math.abs(lat).toFixed(2)}°${lat >= 0 ? "N" : "S"}, ${Math.abs(lng).toFixed(2)}°${lng >= 0 ? "E" : "W"}` : "Map Overview"
+                        })(),
+                    locationId: selectedId || "—",
+                    currentYear,
+                    historicalValues,
+                    p50,
+                    p10,
+                    p90,
+                    years,
+                    mapImageDataUrl,
+                    shareUrl: shareUrl.toString(),
+                    coords: (() => {
+                      const params = new URLSearchParams(window.location.search)
+                      const lat = parseFloat(params.get("lat") || "0")
+                      const lng = parseFloat(params.get("lng") || "0")
+                      return lat ? [lat, lng] as [number, number] : undefined
+                    })(),
+                    pinnedComparisons: (window as any).__getPinnedComparisons?.() || undefined,
+                  })
+                } catch (err) {
+                  console.error("PDF generation failed:", err)
+                  toast({ title: "PDF failed", description: "Could not generate report", variant: "destructive" })
+                }
+              }}
+              className="flex-1 flex items-center gap-2 px-4 py-2 rounded-2xl glass-panel hover:bg-accent/50 text-foreground shadow-2xl transition-all duration-300 hover:scale-105 active:scale-95 min-w-0"
+            >
+              <FileDown size={16} className="shrink-0" />
+              <span className="text-xs font-semibold whitespace-nowrap">PDF</span>
+            </button>
+
+            {/* CTA: Request custom analysis */}
+            <button
+              onClick={() => setIsContactOpen(true)}
+              className="flex-1 flex items-center gap-2 px-4 py-2 rounded-2xl glass-panel hover:bg-accent/50 text-foreground shadow-2xl transition-all duration-300 hover:scale-105 active:scale-95 border border-[hsl(var(--primary))]/30 min-w-0"
+            >
+              <CalendarDays size={16} className="text-[hsl(45,80%,45%)] shrink-0" />
+              <span className="text-xs font-semibold whitespace-nowrap">Request Analysis</span>
+            </button>
+          </div>
         </div>
 
         {/* Homecastr Loading Indicator */}
