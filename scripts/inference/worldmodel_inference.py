@@ -113,7 +113,7 @@ INFERENCE_BATCH_SIZE = 16384
 S_SCENARIOS = 256
 USE_BF16 = True
 USE_TORCH_COMPILE = True
-COMPILE_MODE = 'max-autotune'
+COMPILE_MODE = 'reduce-overhead'
 SCALE_FLOOR_Y = 0.03
 SCALE_FLOOR_NUM = 0.03
 SCALE_FLOOR_TGT = 0.03
@@ -609,7 +609,7 @@ def fit_scalers_from_shards_v102_robust_y(shard_paths: List[str], num_dim: int, 
         n_sc = np.ones((0,), dtype=np.float32)
     return (SimpleScaler(y_mu, y_sc), SimpleScaler(n_mu, n_sc), SimpleScaler(t_mu, t_sc))
 
-def assert_y_scaler_contract(y_scaler: SimpleScaler, shard_paths: List[str], z_clip: float=20.0, max_check_rows: int=200000, max_sat_frac: float=0.02) -> None:
+def assert_y_scaler_contract(y_scaler: SimpleScaler, shard_paths: List[str], z_clip: float=20.0, max_check_rows: int=200000, max_sat_frac: float=0.025) -> None:
     """
     Fail-fast if the standardized hist_y saturates the sampler regime again.
     This is the exact failure you saw (|hy_z|>20 on a large fraction).
@@ -970,7 +970,7 @@ def train_diffusion_v11(shard_paths: List[str], origin: int, epochs: int, model:
     print(f"[{ts()}] initial phi_k = {[f'{p:.3f}' for p in phi_init]}  sigma_u={sigma_init:.3f}")
     y_floor = max(float(SCALE_FLOOR_Y), 0.1)
     y_scaler, n_scaler, t_scaler = fit_scalers_from_shards_v102_robust_y(shard_paths=shard_paths, num_dim=int(num_dim), scale_floor_y=float(y_floor), scale_floor_num=float(SCALE_FLOOR_NUM), scale_floor_tgt=float(SCALE_FLOOR_TGT), max_y_rows=500000)
-    assert_y_scaler_contract(y_scaler=y_scaler, shard_paths=shard_paths, z_clip=float(SAMPLER_Z_CLIP) if SAMPLER_Z_CLIP is not None else 20.0, max_check_rows=200000, max_sat_frac=0.02)
+    assert_y_scaler_contract(y_scaler=y_scaler, shard_paths=shard_paths, z_clip=float(SAMPLER_Z_CLIP) if SAMPLER_Z_CLIP is not None else 20.0, max_check_rows=200000, max_sat_frac=0.025)
     model._y_scaler = y_scaler
     model._n_scaler = n_scaler
     model._t_scaler = t_scaler

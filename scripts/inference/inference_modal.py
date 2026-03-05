@@ -32,6 +32,7 @@ image = (
         "psycopg2-binary",
         "wandb",
         "scipy",
+        "scikit-learn",
     )
 )
 

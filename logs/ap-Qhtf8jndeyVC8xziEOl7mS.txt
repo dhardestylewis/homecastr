@@ -1,0 +1,114 @@
+﻿
+[2026-03-05 02:39:53] SAMPLER v11 conditioning absmax hy=20.000 xn=11.839 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:39:54] SAMPLER v11 conditioning absmax hy=20.000 xn=11.130 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:39:55] SAMPLER v11 conditioning absmax hy=20.000 xn=19.197 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:39:56] SAMPLER v11 conditioning absmax hy=20.000 xn=11.130 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:39:57] SAMPLER v11 conditioning absmax hy=20.000 xn=11.130 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:39:58] SAMPLER v11 conditioning absmax hy=20.000 xn=16.449 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:39:58] SAMPLER v11 conditioning absmax hy=20.000 xn=12.093 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:39:59] SAMPLER v11 conditioning absmax hy=20.000 xn=11.130 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:00] SAMPLER v11 conditioning absmax hy=20.000 xn=12.487 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:01] SAMPLER v11 conditioning absmax hy=20.000 xn=11.130 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:02] SAMPLER v11 conditioning absmax hy=20.000 xn=14.621 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:03] SAMPLER v11 conditioning absmax hy=20.000 xn=11.027 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:03] SAMPLER v11 conditioning absmax hy=20.000 xn=18.904 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:04] SAMPLER v11 conditioning absmax hy=20.000 xn=12.061 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:05] SAMPLER v11 conditioning absmax hy=20.000 xn=11.130 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:06] SAMPLER v11 conditioning absmax hy=20.000 xn=13.006 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:07] SAMPLER v11 conditioning absmax hy=20.000 xn=11.130 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:08] SAMPLER v11 conditioning absmax hy=20.000 xn=12.876 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:08] SAMPLER v11 conditioning absmax hy=20.000 xn=11.130 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:09] SAMPLER v11 conditioning absmax hy=20.000 xn=11.130 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:10] SAMPLER v11 conditioning absmax hy=20.000 xn=11.316 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:11] SAMPLER v11 conditioning absmax hy=20.000 xn=15.820 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:12] SAMPLER v11 conditioning absmax hy=20.000 xn=13.296 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:13] SAMPLER v11 conditioning absmax hy=20.000 xn=11.130 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:14] SAMPLER v11 conditioning absmax hy=20.000 xn=11.130 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:14] SAMPLER v11 conditioning absmax hy=20.000 xn=11.130 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:15] SAMPLER v11 conditioning absmax hy=20.000 xn=13.302 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:16] SAMPLER v11 conditioning absmax hy=20.000 xn=20.000 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:17] SAMPLER v11 conditioning absmax hy=20.000 xn=12.635 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:18] SAMPLER v11 conditioning absmax hy=20.000 xn=11.130 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:19] SAMPLER v11 conditioning absmax hy=20.000 xn=11.130 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:19] SAMPLER v11 conditioning absmax hy=20.000 xn=11.130 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:20] SAMPLER v11 conditioning absmax hy=20.000 xn=11.130 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:21] SAMPLER v11 conditioning absmax hy=20.000 xn=6.285 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:22] SAMPLER v11 conditioning absmax hy=20.000 xn=11.130 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:23] SAMPLER v11 conditioning absmax hy=20.000 xn=11.130 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:24] SAMPLER v11 conditioning absmax hy=20.000 xn=11.130 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:25] SAMPLER v11 conditioning absmax hy=20.000 xn=11.130 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:25] SAMPLER v11 conditioning absmax hy=20.000 xn=15.246 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:26] SAMPLER v11 conditioning absmax hy=20.000 xn=11.130 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:27] SAMPLER v11 conditioning absmax hy=20.000 xn=20.000 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:28] SAMPLER v11 conditioning absmax hy=20.000 xn=11.130 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:29] SAMPLER v11 conditioning absmax hy=20.000 xn=19.994 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:30] SAMPLER v11 conditioning absmax hy=20.000 xn=11.130 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:30] SAMPLER v11 conditioning absmax hy=20.000 xn=13.463 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:31] SAMPLER v11 conditioning absmax hy=20.000 xn=11.130 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:32] SAMPLER v11 conditioning absmax hy=20.000 xn=11.130 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:33] SAMPLER v11 conditioning absmax hy=20.000 xn=11.130 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:34] SAMPLER v11 conditioning absmax hy=20.000 xn=11.130 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:35] SAMPLER v11 conditioning absmax hy=20.000 xn=11.130 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:36] SAMPLER v11 conditioning absmax hy=20.000 xn=12.654 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:36] SAMPLER v11 conditioning absmax hy=20.000 xn=12.618 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:37] SAMPLER v11 conditioning absmax hy=20.000 xn=11.130 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:38] SAMPLER v11 conditioning absmax hy=20.000 xn=13.349 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:39] SAMPLER v11 conditioning absmax hy=20.000 xn=11.130 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:40] SAMPLER v11 conditioning absmax hy=20.000 xn=11.130 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:41] SAMPLER v11 conditioning absmax hy=20.000 xn=17.997 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:41] SAMPLER v11 conditioning absmax hy=20.000 xn=11.130 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:42] SAMPLER v11 conditioning absmax hy=20.000 xn=11.130 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:43] SAMPLER v11 conditioning absmax hy=20.000 xn=20.000 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:44] SAMPLER v11 conditioning absmax hy=20.000 xn=12.987 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:45] SAMPLER v11 conditioning absmax hy=20.000 xn=9.434 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:46] SAMPLER v11 conditioning absmax hy=20.000 xn=11.130 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:47] SAMPLER v11 conditioning absmax hy=20.000 xn=11.130 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:47] SAMPLER v11 conditioning absmax hy=20.000 xn=11.130 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:48] SAMPLER v11 conditioning absmax hy=20.000 xn=11.130 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:49] SAMPLER v11 conditioning absmax hy=20.000 xn=10.651 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:50] SAMPLER v11 conditioning absmax hy=20.000 xn=11.130 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:51] SAMPLER v11 conditioning absmax hy=20.000 xn=11.130 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:52] SAMPLER v11 conditioning absmax hy=20.000 xn=11.358 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:53] SAMPLER v11 conditioning absmax hy=20.000 xn=12.168 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:53] SAMPLER v11 conditioning absmax hy=20.000 xn=11.130 N=256 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:54] SAMPLER v11 conditioning absmax hy=20.000 xn=4.741 N=32 S=128 K=8 S_BLOCK=16 sigma_u=0.718 tau=1.000
+[2026-03-05 02:40:55] Stability gates: non-finite=0.00e+00, outlier=3.07e-02
+
+python : +- Error ---
+---------------------
+---------------------
+---------------------
+---+
+At C:\tmp\fetch_sweep
+_logs.ps1:12 char:5
++     python -m 
+modal app logs $app 
+2>&1 | Out-File 
+-FilePath $outfile  
+...
++     ~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo   
+           : NotSpe  
+  cified: (+- Erro   
+ r ------...-----    
+---------+:Strin    
+g) [], RemoteExc    
+eption
+    + FullyQualified 
+   ErrorId : Native  
+  CommandError
+ 
+| 'charmap' codec 
+can't encode 
+characters in 
+position 22-23: 
+character maps   |
+| to <undefined>     
+                     
+                     
+               |
++--------------------
+---------------------
+---------------------
+---------------+

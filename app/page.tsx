@@ -50,6 +50,11 @@ function DashboardContent() {
   const [isContactOpen, setIsContactOpen] = useState(false)
   const { toast } = useToast()
 
+  // Derive origin year from map viewport — same Harris County check as forecast-map.tsx
+  const [mapLng, mapLat] = mapState.center
+  const isHarrisCounty = mapLat >= 29.4 && mapLat <= 30.2 && mapLng >= -95.9 && mapLng <= -94.9
+  const pageOriginYear = isHarrisCounty ? 2025 : 2024
+
   // Tavus Homecastr state
   const [tavusConversationUrl, setTavusConversationUrl] = useState<string | null>(null)
   const [isTavusLoading, setIsTavusLoading] = useState(false)
@@ -511,7 +516,7 @@ function DashboardContent() {
         // Forecast map mode: query forecast-detail API if we have a selectedId
         if (mapState.selectedId) {
           try {
-            const res = await fetch(`/api/forecast-detail?level=zcta&id=${encodeURIComponent(mapState.selectedId)}&originYear=2025`)
+            const res = await fetch(`/api/forecast-detail?level=zcta&id=${encodeURIComponent(mapState.selectedId)}&originYear=${pageOriginYear}`)
             if (res.ok) {
               const json = await res.json()
               if (json.p50 && json.p50.length > 0) {
@@ -666,7 +671,7 @@ function DashboardContent() {
               colorMode={filters.colorMode}
               onColorModeChange={handleColorModeChange}
               year={currentYear}
-              originYear={2025}
+              originYear={pageOriginYear}
             />
 
             {/* Controls: 2x2 Grid */}
@@ -716,14 +721,39 @@ function DashboardContent() {
 
           {/* API Documentation + Version */}
           <div className="flex justify-between items-center px-1">
-            <a
-              href="/api-docs"
-              className="text-[10px] text-muted-foreground hover:text-primary transition-colors flex items-center gap-1 font-medium"
-              target="_blank"
-            >
-              <Terminal className="w-3 h-3" />
-              API Documentation
-            </a>
+            <div className="flex items-center gap-2">
+              <a
+                href="/api-docs"
+                className="text-[10px] text-muted-foreground hover:text-primary transition-colors flex items-center gap-1 font-medium"
+                target="_blank"
+              >
+                <Terminal className="w-3 h-3" />
+                API Documentation
+              </a>
+
+              {/* Dev Only Schema Toggle */}
+              {process.env.NODE_ENV === "development" && (
+                <button
+                  onClick={() => {
+                    const urlArgs = new URLSearchParams(window.location.search)
+                    const currentSchema = urlArgs.get("schema") || ""
+                    const newSchema = prompt("Switch inference schema (leave blank for PROD):", currentSchema ? currentSchema : "forecast_queue")
+                    if (newSchema !== null) {
+                      if (newSchema.trim() === "") {
+                        urlArgs.delete("schema")
+                      } else {
+                        urlArgs.set("schema", newSchema.trim())
+                      }
+                      window.location.search = urlArgs.toString()
+                    }
+                  }}
+                  className="text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1 font-mono transition-colors bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 border border-amber-500/20"
+                >
+                  <Activity className="w-2.5 h-2.5" />
+                  Schema
+                </button>
+              )}
+            </div>
             <div className="text-[10px] text-muted-foreground/50 font-mono">v1.4.0-beige</div>
           </div>
         </div>

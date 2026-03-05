@@ -44,3 +44,6 @@ scripts/data_acquisition/.venv/
 
 # Logs (local only)
 scripts/logs/
+
+# Scratch work
+_scratch/

@@ -61,10 +61,13 @@ begin
           coalesce(h_past.p50,h_past.value) as p50,
           null::double precision as p75, null::double precision as p90,
           null::bigint as n,
-          least(100, greatest(-50,
-            round((100.0*(coalesce(f_now.p50,f_now.value)-coalesce(h_past.p50,h_past.value))
-              /nullif(coalesce(h_past.p50,h_past.value),0))::numeric,1)
-          )) as growth_pct,
+          CASE 
+            WHEN coalesce(f_now.p50,f_now.value) IS NULL OR coalesce(h_past.p50,h_past.value) IS NULL THEN null
+            ELSE least(100, greatest(-50,
+              round((100.0*(coalesce(f_now.p50,f_now.value)-coalesce(h_past.p50,h_past.value))
+                /nullif(coalesce(h_past.p50,h_past.value),0))::numeric,1)
+            ))
+          END as growth_pct,
           'historical'::text as series_kind, null::text as variant_id,
           null::text as run_id, null::text as backtest_id,
           null::text as model_version, null::date as as_of_date,
@@ -103,10 +106,13 @@ begin
         select g.%1$I::text as id, m.origin_year, m.horizon_m,
           coalesce(m.forecast_year,m.origin_year+((m.horizon_m+11)/12))::integer as forecast_year,
           m.value, m.p10, m.p25, coalesce(m.p50,m.value) as p50, m.p75, m.p90, m.n,
-          least(100, greatest(-50,
-            round((100.0*(coalesce(m.p50,m.value)-coalesce(f_now.p50,f_now.value))
-              /nullif(coalesce(f_now.p50,f_now.value),0))::numeric,1)
-          )) as growth_pct,
+          CASE 
+            WHEN coalesce(m.p50,m.value) IS NULL OR coalesce(f_now.p50,f_now.value) IS NULL THEN null
+            ELSE least(100, greatest(-50,
+              round((100.0*(coalesce(m.p50,m.value)-coalesce(f_now.p50,f_now.value))
+                /nullif(coalesce(f_now.p50,f_now.value),0))::numeric,1)
+            ))
+          END as growth_pct,
           m.series_kind, m.variant_id, m.run_id, m.backtest_id,
           m.model_version, m.as_of_date, m.n_scenarios, m.is_backtest,
           ST_AsMVTGeom(ST_Transform(g.geom,3857),bounds.b3857,4096,256,true) as geom

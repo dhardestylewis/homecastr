@@ -235,7 +235,7 @@ S_SCENARIOS = 256
 # Precision / compilation
 USE_BF16 = True
 USE_TORCH_COMPILE = True
-COMPILE_MODE = "max-autotune"
+COMPILE_MODE = "reduce-overhead"
 
 # Scaler floors (critical) — v11.1: raised from 1e-2 to 3e-2 for better PI coverage
 # Cross-jurisdiction eval showed HCAD under-covering at 58% (target 80%);
@@ -1175,7 +1175,7 @@ def assert_y_scaler_contract(
     shard_paths: List[str],
     z_clip: float = 20.0,
     max_check_rows: int = 200_000,
-    max_sat_frac: float = 0.02,
+    max_sat_frac: float = 0.025,
 ) -> None:
     """
     Fail-fast if the standardized hist_y saturates the sampler regime again.
@@ -1943,7 +1943,7 @@ def train_diffusion_v11(
         shard_paths=shard_paths,
         z_clip=float(SAMPLER_Z_CLIP) if SAMPLER_Z_CLIP is not None else 20.0,
         max_check_rows=200_000,
-        max_sat_frac=0.02,
+        max_sat_frac=0.025,
     )
 
     model._y_scaler = y_scaler

@@ -73,7 +73,7 @@ from psycopg2.extras import execute_values
 # CONFIG
 # -----------------------------------------------------------------------------
 # >>>> REQUIRED <<<<
-TARGET_SCHEMA = globals().get("TARGET_SCHEMA", "forecast_20260220_7f31c6e4")   # set this to your created schema
+TARGET_SCHEMA = globals().get("TARGET_SCHEMA", "forecast_queue")   # Default to queue to protect prod
 SUPABASE_DB_URL = (os.environ.get("SUPABASE_DB_URL")
                    or os.environ.get("POSTGRES_URL")
                    or os.environ.get("POSTGRES_URL_NON_POOLING")
@@ -918,6 +918,21 @@ def _clear_stale_agg_for_run(
 # -----------------------------------------------------------------------------
 # FINAL EXACT AGGREGATE REFRESH (OPTIONAL, RECOMMENDED)
 # -----------------------------------------------------------------------------
+def _check_has_outlier_col(conn, schema: str) -> bool:
+    """Return True if metrics_parcel_forecast has an is_outlier column."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = %s
+              AND table_name   = 'metrics_parcel_forecast'
+              AND column_name  = 'is_outlier'
+            """,
+            (schema,),
+        )
+        return cur.fetchone() is not None
+
+
 def _recompute_forecast_aggregates_exact_for_run(
     conn,
     schema: str,
@@ -932,6 +947,9 @@ def _recompute_forecast_aggregates_exact_for_run(
     Deletes and rebuilds all aggregate forecast rows for this (origin_year, series_kind, variant_id)
     from parcel forecast rows for this run_id. This guarantees exact final aggregates.
     """
+    has_outlier = _check_has_outlier_col(conn, schema)
+    outlier_filter = "AND coalesce(mp.is_outlier, false) = false" if has_outlier else ""
+    print(f"[{_ts()}] is_outlier filter: {'ON' if has_outlier else 'OFF (column absent — skipping)'}")
     q_parcel = _q_table(schema, "metrics_parcel_forecast")
 
     for _, ladder_col, tbl_forecast, _ in AGG_LEVELS:
@@ -997,7 +1015,7 @@ def _recompute_forecast_aggregates_exact_for_run(
                   AND mp.origin_year = %s
                   AND mp.series_kind = %s
                   AND mp.variant_id = %s
-                  AND coalesce(mp.is_outlier, false) = false
+                  {outlier_filter}
                   AND {pl_geo_col} IS NOT NULL
                 GROUP BY {pl_geo_col}, mp.origin_year, mp.horizon_m, mp.forecast_year
                 """,
@@ -1701,7 +1719,15 @@ def _run_one_origin(
     # ── torch.compile: kernel fusion for 20-40% faster DDIM sampling ──
     try:
         import torch as _torch
-        if hasattr(_torch, 'compile') and _torch.cuda.is_available():
+        _use_compile = globals().get("USE_TORCH_COMPILE", True)
+        if _use_compile and hasattr(_torch, 'compile') and _torch.cuda.is_available():
+            # Safety net: suppress inductor/Triton errors so they fall back to eager
+            # rather than crashing the entire inference job.
+            try:
+                import torch._dynamo
+                torch._dynamo.config.suppress_errors = True
+            except Exception:
+                pass
             _compile_mode = globals().get("COMPILE_MODE", "reduce-overhead")
             # The compiled model replaces the sampler's forward pass in-place
             _model_ref = globals().get("model") or globals().get("_model")
@@ -1714,6 +1740,8 @@ def _run_one_origin(
                 elif '_model' in globals():
                     globals()['_model'] = _compiled
                 _compiled._compiled = True  # mark to avoid re-compiling on resume
+        elif not _use_compile:
+            print(f"[{_ts()}] torch.compile DISABLED (USE_TORCH_COMPILE=False)")
     except Exception as _e:
         print(f"[{_ts()}] torch.compile skipped: {_e}")
 

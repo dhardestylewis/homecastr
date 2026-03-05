@@ -59,6 +59,7 @@ def evaluate_checkpoints(
     eta: float = 0.0,
     diff_steps: int = 20,
     tau: float = 1.0,
+    panel_gcs_path: str = "",
 ):
     import os, json, time, tempfile, glob, pickle
     import wandb
@@ -176,8 +177,8 @@ SimpleScaler = _DimSafeScaler
     
     # ─── 2.5 Load and Format Panel (Must happen BEFORE worldmodel exec) ───
     print(f"[{ts()}] Loading {jurisdiction} ground truth from panel...")
-    panel_blob_path = f"panel/jurisdiction={jurisdiction}/part.parquet"
-    if jurisdiction == "all":
+    panel_blob_path = panel_gcs_path if panel_gcs_path else f"panel/jurisdiction={jurisdiction}/part.parquet"
+    if not panel_gcs_path and jurisdiction == "all":
         panel_blob_path = "panel/grand_panel/part.parquet"
         
     local_panel_path = "/tmp/panel_actuals.parquet"
@@ -554,29 +555,41 @@ SimpleScaler = _DimSafeScaler
     Z_tokens = sample_token_paths(K=int(_cfg.get("K_TOKENS", 8)), H=H, phi_vec=phi_vec, S=scenarios, device=_device)
 
     # ── Dimension diagnostics & force-alignment ──
-    # Truncate hist_y to FULL_HIST_LEN (ACS may have more years than checkpoint expects)
-    _full_hist_len = int(_cfg.get("FULL_HIST_LEN", 15))
-    if ctx["hist_y"].shape[1] > _full_hist_len:
-        print(f"[{ts()}] Truncating hist_y: {ctx['hist_y'].shape[1]} → {_full_hist_len} (keeping most recent)")
-        ctx["hist_y"] = ctx["hist_y"][:, -_full_hist_len:]
+    # Truncate hist_y to hist_len (ACS may have more years than checkpoint expects)
+    if ctx["hist_y"].shape[1] > hist_len:
+        print(f"[{ts()}] Truncating hist_y: {ctx['hist_y'].shape[1]} → {hist_len} (keeping most recent)")
+        ctx["hist_y"] = ctx["hist_y"][:, -hist_len:]
+    elif ctx["hist_y"].shape[1] < hist_len:
+        print(f"[{ts()}] Padding hist_y: {ctx['hist_y'].shape[1]} → {hist_len} (pre-padding with zeros)")
+        pad = np.zeros((ctx["hist_y"].shape[0], hist_len - ctx["hist_y"].shape[1]), dtype=ctx["hist_y"].dtype)
+        ctx["hist_y"] = np.concatenate([pad, ctx["hist_y"]], axis=1)
     
     # Find gating network input dimension from state dict
     _gating_in_dim = None
-    for k, v in sd.items():
-        if "gating" in k.lower() and "0.weight" in k and v.dim() == 2:
-            _gating_in_dim = v.shape[1]
-            break
+    if gating_sd is not None:
+        for k, v in gating_sd.items():
+            if "0.weight" in k and v.dim() == 2:
+                _gating_in_dim = v.shape[1]
+                break
+    
+    if _gating_in_dim is None:
+        for k, v in sd.items():
+            if "gating" in k.lower() and "0.weight" in k and v.dim() == 2:
+                _gating_in_dim = v.shape[1]
+                break
     
     _hist_dim = ctx["hist_y"].shape[1]
     _num_dim_actual = ctx["cur_num"].shape[1]
     _cat_dim = ctx["cur_cat"].shape[1] if len(ctx["cur_cat"].shape) > 1 else 1
-    _reg_dim = ctx["region_id"].shape[1] if len(ctx["region_id"].shape) > 1 else 1
-    _total = _hist_dim + _num_dim_actual + _cat_dim + _reg_dim
-    print(f"[{ts()}] Dimension check: hist_y={_hist_dim} cur_num={_num_dim_actual} cur_cat={_cat_dim} region_id={_reg_dim} total={_total} gating_expects={_gating_in_dim}")
+    _cat_total = _cat_dim * 16 # default cat emb size
+    _reg_dim = 32 # REGION_EMB_DIM
+    _macro_dim = 16 if has_macro else 0
+    _total = _hist_dim + _num_dim_actual + _cat_total + _reg_dim + _macro_dim
+    print(f"[{ts()}] Dimension check: hist_y={_hist_dim} cur_num={_num_dim_actual} cat_total={_cat_total} region_id={_reg_dim} macro={_macro_dim} total={_total} gating_expects={_gating_in_dim}")
     
-    # Force cur_num to exactly match gating network expectations
+    # Force cur_num to exactly match gating network expectations by subtracting all other embedding sizes
     if _gating_in_dim is not None:
-        _expected_num = _gating_in_dim - _hist_dim - _cat_dim - _reg_dim
+        _expected_num = _gating_in_dim - _hist_dim - _cat_total - _reg_dim - _macro_dim
         if _expected_num > 0 and _num_dim_actual != _expected_num:
             print(f"[{ts()}] Force-aligning cur_num: {_num_dim_actual} → {_expected_num}")
             if _num_dim_actual < _expected_num:
@@ -1711,6 +1724,7 @@ def main(
     scenarios: int = 128,
     origins: str = "2021,2022,2023",
     version_tag: str = "v11",
+    panel_gcs_path: str = "",
 ):
     origin_list = [int(o.strip()) for o in origins.split(",")]
     
@@ -1739,7 +1753,8 @@ def main(
                 for origin in sorted(origin_list):
                     res = evaluate_checkpoints.remote(
                         jurisdiction, bucket_name, origin, sample_size,
-                        scenarios, version_tag, _eta, _steps, _tau
+                        scenarios, version_tag, _eta, _steps, _tau,
+                        panel_gcs_path,
                     )
                     results.append(res)
 

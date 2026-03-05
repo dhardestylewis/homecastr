@@ -1,0 +1,32 @@
+﻿python : +- Error ---
+---------------------
+---------------------
+---------------------
+---+
+At line:1 char:1
++ python -m modal 
+app logs ap-NacDsRMR8
+ipHsVcp2M22yVt 2>&1 
+| Out-File - ...
++ ~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
+    + CategoryInfo   
+           : NotSpe  
+  cified: (+- Erro   
+ r ------...-----    
+---------+:Strin    
+g) [], RemoteExc    
+eption
+    + FullyQualified 
+   ErrorId : Native  
+  CommandError
+ 
+| Could not find a 
+deployed app named 'a
+p-NacDsRMR8ipHsVcp2M2
+2yVt'.           |
++--------------------
+---------------------
+---------------------
+---------------+

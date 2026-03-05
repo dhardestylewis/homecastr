@@ -42,6 +42,7 @@ image = (
         "psycopg2-binary",
         "wandb",
         "scipy",
+        "scikit-learn",
     )
     # Mount local scripts so worldmodel.py + inference_pipeline.py always match
     # the local codebase (prevents stale GCS code/ downloads)
@@ -263,6 +264,14 @@ def run_inference_shard(
         # Solution: skip agg writes entirely during inference; run rebuild_aggregates.py
         # once after all shards complete to get a clean, complete aggregation.
         "SKIP_AGG_CHUNK_WRITES": True,
+        # Disable torch.compile in Modal — Triton's inductor backend has
+        # filesystem race conditions in containerized /tmp dirs, causing
+        # FileNotFoundError on triton_.json.tmp files.  Eager mode is ~30%
+        # slower per shard but avoids crashes entirely.
+        "USE_TORCH_COMPILE": False,
+        # Raise statement timeout to 20 min for large parcel history/forecast inserts
+        # (default 5 min was too short for 500K+ row chunks hitting index rebuild)
+        "PG_STATEMENT_TIMEOUT_MS": 1200_000,  # 20 minutes
     })
 
     # Patch DB URL to raise statement_timeout from Supabase's default (~30s)
@@ -272,13 +281,27 @@ def run_inference_shard(
     if _db_url and "statement_timeout" not in _db_url:
         import urllib.parse as _up
         _sep = "&" if "?" in _db_url else "?"
-        _db_url_patched = _db_url + _sep + "options=" + _up.quote("-c statement_timeout=300000")
+        _db_url_patched = _db_url + _sep + "options=" + _up.quote("-c statement_timeout=1200000")
         os.environ["SUPABASE_DB_URL"] = _db_url_patched
         g["SUPABASE_DB_URL"] = _db_url_patched
-        print(f"[{_ts()}] DB statement_timeout patched to 300s for shard {shard_idx+1}")
+        print(f"[{_ts()}] DB statement_timeout patched to 1200s (20min) for shard {shard_idx+1}")
 
     exec(wm_source, g)
     print(f"[{_ts()}] worldmodel.py loaded")
+
+    # ── torch.compile safety net ──────────────────────────────────────────────
+    # Even with USE_TORCH_COMPILE=False, some code paths may trigger a compile.
+    # Give each shard its own Triton cache dir to prevent /tmp race conditions
+    # (FileNotFoundError on triton_.cubin.tmp) and suppress any compile errors
+    # so they fall back to eager rather than crashing the container.
+    _shard_tmp = f"/tmp/torchinductor_shard{shard_idx}"
+    os.makedirs(_shard_tmp, exist_ok=True)
+    os.environ["TORCHINDUCTOR_CACHE_DIR"] = _shard_tmp
+    try:
+        import torch._dynamo as _dynamo
+        _dynamo.config.suppress_errors = True
+    except Exception:
+        pass
 
     exec(inf_source, g)
     print(f"[{_ts()}] inference_pipeline.py loaded")
@@ -413,7 +436,7 @@ def main(
     n_shards: int = 6,
     resume_run_id: str = "",   # pass the run_id from a cancelled job to resume from last chunk
     suite_id_override: str = "",  # pass the suite_id from a cancelled job to reuse output dir
-    schema: str = "forecast_20260220_7f31c6e4",
+    schema: str = "forecast_queue",
 ):
     """Fan out inference across N parallel A100 containers.
 

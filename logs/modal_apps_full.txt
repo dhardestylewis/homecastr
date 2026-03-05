@@ -1,0 +1,170 @@
+﻿                                            Apps                               
++------------------------------------------------------------------------------
+| App ID                    | Description | State       | Tasks | Created at  |
+|---------------------------+-------------+-------------+-------+-------------+
+| ap-l0xkdaAaqU2FdWJOdJK7Hl | inference-à | ephemeral   | 2     | 2026-03-04  |
+|                           |             | (detached)  |       | 22:13       |
+|                           |             |             |       | Eastern     |
+|                           |             |             |       | Standard    |
+|                           |             |             |       | Time        |
+| ap-zO8zi4R3LouOVdWt8Cn1ha | inference-à | ephemeral   | 5     | 2026-03-04  |
+|                           |             | (detached)  |       | 22:15       |
+|                           |             |             |       | Eastern     |
+|                           |             |             |       | Standard    |
+|                           |             |             |       | Time        |
+| ap-pIYOPwp0wFBxkM3ikskPNp | train-florà | ephemeral   | 1     | 2026-03-04  |
+|                           |             | (detached)  |       | 22:31       |
+|                           |             |             |       | Eastern     |
+|                           |             |             |       | Standard    |
+|                           |             |             |       | Time        |
+| ap-MpYV5HYWXxOOV2xP4P8q3D | train-florà | ephemeral   | 1     | 2026-03-04  |
+|                           |             | (detached)  |       | 22:31       |
+|                           |             |             |       | Eastern     |
+|                           |             |             |       | Standard    |
+|                           |             |             |       | Time        |
+| ap-Cf0iWBAEfPJMIsdVVW6Qeu | train-florà | ephemeral   | 0     | 2026-03-04  |
+|                           |             | (detached)  |       | 22:31       |
+|                           |             |             |       | Eastern     |
+|                           |             |             |       | Standard    |
+|                           |             |             |       | Time        |
+| ap-toT97EA6FLEDXyKS4Dv0EP | train-florà | ephemeral   | 1     | 2026-03-04  |
+|                           |             | (detached)  |       | 22:31       |
+|                           |             |             |       | Eastern     |
+|                           |             |             |       | Standard    |
+|                           |             |             |       | Time        |
+| ap-DRwAimaWlaPab1llv3v1AU | train-florà | ephemeral   | 1     | 2026-03-04  |
+|                           |             | (detached)  |       | 22:31       |
+|                           |             |             |       | Eastern     |
+|                           |             |             |       | Standard    |
+|                           |             |             |       | Time        |
+| ap-jlcJSmcHd3U1DblnEHt6xb | train-florà | ephemeral   | 0     | 2026-03-04  |
+|                           |             | (detached)  |       | 22:31       |
+|                           |             |             |       | Eastern     |
+|                           |             |             |       | Standard    |
+|                           |             |             |       | Time        |
+| ap-r4UsnVbKyfxvnDvsWs9d6z | train-florà | ephemeral   | 0     | 2026-03-04  |
+|                           |             | (detached)  |       | 22:35       |
+|                           |             |             |       | Eastern     |
+|                           |             |             |       | Standard    |
+|                           |             |             |       | Time        |
+| ap-mfBVTN3fQ0c1HEmAgfVNmY | train-florà | ephemeral   | 0     | 2026-03-04  |
+|                           |             | (detached)  |       | 22:35       |
+|                           |             |             |       | Eastern     |
+|                           |             |             |       | Standard    |
+|                           |             |             |       | Time        |
+| ap-s02ICvv3VIoBn6oaX0SDk5 | train-florà | ephemeral   | 0     | 2026-03-04  |
+|                           |             | (detached)  |       | 22:35       |
+|                           |             |             |       | Eastern     |
+|                           |             |             |       | Standard    |
+|                           |             |             |       | Time        |
+| ap-1MAIxU1mW2esqCfgYvux6q | train-florà | ephemeral   | 0     | 2026-03-04  |
+|                           |             | (detached)  |       | 22:35       |
+|                           |             |             |       | Eastern     |
+|                           |             |             |       | Standard    |
+|                           |             |             |       | Time        |
+| ap-uXD0cEsJtn7ilLjDV1Fokl | train-florà | stopped     | 0     | 2026-03-04  |
+|                           |             |             |       | 22:32       |
+|                           |             |             |       | Eastern     |
+|                           |             |             |       | Standard    |
+|                           |             |             |       | Time        |
+| ap-RWQ7W9EpEKeREXdp3hK5EC | train-florà | stopped     | 0     | 2026-03-04  |
+|                           |             |             |       | 22:31       |
+|                           |             |             |       | Eastern     |
+|                           |             |             |       | Standard    |
+|                           |             |             |       | Time        |
+| ap-UZYCbNhhclJPbnRj692b15 | inference-à | stopped     | 0     | 2026-03-04  |
+|                           |             |             |       | 22:13       |
+|                           |             |             |       | Eastern     |
+|                           |             |             |       | Standard    |
+|                           |             |             |       | Time        |
+| ap-SNNadce9S5C1XWaDfjzwrP | inference-à | stopped     | 0     | 2026-03-04  |
+|                           |             |             |       | 22:07       |
+|                           |             |             |       | Eastern     |
+|                           |             |             |       | Standard    |
+|                           |             |             |       | Time        |
+| ap-ArdJf7eqjNYydrHNB0M90T | inference-à | stopped     | 0     | 2026-03-04  |
+|                           |             |             |       | 22:03       |
+|                           |             |             |       | Eastern     |
+|                           |             |             |       | Standard    |
+|                           |             |             |       | Time        |
+| ap-NacDsRMR8ipHsVcp2pNrfY | sweep-calià | stopped     | 0     | 2026-03-04  |
+|                           |             |             |       | 21:10       |
+|                           |             |             |       | Eastern     |
+|                           |             |             |       | Standard    |
+|                           |             |             |       | Time        |
+| ap-Qhtf8jndeyVC8xziEOl7mS | sweep-calià | stopped     | 0     | 2026-03-04  |
+|                           |             |             |       | 20:44       |
+|                           |             |             |       | Eastern     |
+|                           |             |             |       | Standard    |
+|                           |             |             |       | Time        |
+| ap-OZpClzZPzVLIeuUBUV9IaF | florida-doà | stopped     | 0     | 2026-03-04  |
+|                           |             |             |       | 21:49       |
+|                           |             |             |       | Eastern     |
+|                           |             |             |       | Standard    |
+|                           |             |             |       | Time        |
+| ap-a0757zWMU50qKlGM8qXE2Q | inference-à | stopped     | 0     | 2026-03-04  |
+|                           |             |             |       | 21:41       |
+|                           |             |             |       | Eastern     |
+|                           |             |             |       | Standard    |
+|                           |             |             |       | Time        |
+| ap-3nvhL7qc8Yg3QFdYrPdxkJ | inference-à | stopped     | 0     | 2026-03-04  |
+|                           |             |             |       | 21:19       |
+|                           |             |             |       | Eastern     |
+|                           |             |             |       | Standard    |
+|                           |             |             |       | Time        |
+| ap-aDByT3T0jpvavoGSeCViLE | inference-à | stopped     | 0     | 2026-03-04  |
+|                           |             |             |       | 21:15       |
+|                           |             |             |       | Eastern     |
+|                           |             |             |       | Standard    |
+|                           |             |             |       | Time        |
+| ap-juecp83nDj2viPHFl8Jmpy | inference-à | stopped     | 0     | 2026-03-04  |
+|                           |             |             |       | 21:10       |
+|                           |             |             |       | Eastern     |
+|                           |             |             |       | Standard    |
+|                           |             |             |       | Time        |
+| ap-njwT00vJOM6LwALUiG0IeR | train-hcadà | stopped     | 0     | 2026-03-04  |
+|                           |             |             |       | 20:15       |
+|                           |             |             |       | Eastern     |
+|                           |             |             |       | Standard    |
+|                           |             |             |       | Time        |
+| ap-8eeAdXBOuP5lzUXhJyd7PS | rebuild-agà | stopped     | 0     | 2026-03-04  |
+|                           |             |             |       | 20:58       |
+|                           |             |             |       | Eastern     |
+|                           |             |             |       | Standard    |
+|                           |             |             |       | Time        |
+| ap-K8KkIJX5ULWOAqCzLsBBp5 | train-hcadà | stopped     | 0     | 2026-03-04  |
+|                           |             |             |       | 20:15       |
+|                           |             |             |       | Eastern     |
+|                           |             |             |       | Standard    |
+|                           |             |             |       | Time        |
+| ap-G4NMdIhFYLB97C15BeJRy6 | train-hcadà | stopped     | 0     | 2026-03-04  |
+|                           |             |             |       | 20:15       |
+|                           |             |             |       | Eastern     |
+|                           |             |             |       | Standard    |
+|                           |             |             |       | Time        |
+| ap-WoPobiadDhzbXZz98MY7lb | rebuild-agà | stopped     | 0     | 2026-03-04  |
+|                           |             |             |       | 20:52       |
+|                           |             |             |       | Eastern     |
+|                           |             |             |       | Standard    |
+|                           |             |             |       | Time        |
+| ap-iZPmnIp8oGIzmPJl5gr9MM | rebuild-agà | stopped     | 0     | 2026-03-04  |
+|                           |             |             |       | 19:31       |
+|                           |             |             |       | Eastern     |
+|                           |             |             |       | Standard    |
+|                           |             |             |       | Time        |
+| ap-FKc696XGhlDDgHWyJvPmhW | sweep-calià | stopped     | 0     | 2026-03-04  |
+|                           |             |             |       | 20:44       |
+|                           |             |             |       | Eastern     |
+|                           |             |             |       | Standard    |
+|                           |             |             |       | Time        |
+| ap-IvJMuPRiEump02XSyi7mOz | sweep-calià | stopped     | 0     | 2026-03-04  |
+|                           |             |             |       | 20:42       |
+|                           |             |             |       | Eastern     |
+|                           |             |             |       | Standard    |
+|                           |             |             |       | Time        |
+| ap-pFYudUOENqH2crHqM31bPn | sweep-calià | stopped     | 0     | 2026-03-04  |
+|                           |             |             |       | 20:37       |
+|                           |             |             |       | Eastern     |
+|                           |             |             |       | Standard    |
+|                           |             |             |       | Time        |
++------------------------------------------------------------------------------

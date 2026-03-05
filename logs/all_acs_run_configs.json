@@ -1,0 +1,199 @@
+[
+  {
+    "id": "ji3atrwk",
+    "name": "sweep_stage1_v11_acs_nationwide_o2019_eta0.3_tau1.0_steps20",
+    "state": "finished",
+    "created_at": "2026-03-05T01:46:08Z",
+    "group": "sweep_stage1_v11_acs_nationwide",
+    "config": {
+      "eta": 0.3,
+      "tau": 1,
+      "origin": 2019,
+      "version": "v11",
+      "scenarios": 128,
+      "diff_steps": 20,
+      "sample_size": 20000
+    }
+  },
+  {
+    "id": "ot1gm2tm",
+    "name": "sweep_stage1_v11_acs_nationwide_o2019_eta0.3_tau1.0_steps20",
+    "state": "finished",
+    "created_at": "2026-03-05T01:43:51Z",
+    "group": "sweep_stage1_v11_acs_nationwide",
+    "config": {
+      "eta": 0.3,
+      "tau": 1,
+      "origin": 2019,
+      "version": "v11",
+      "scenarios": 128,
+      "diff_steps": 20,
+      "sample_size": 20000
+    }
+  },
+  {
+    "id": "a0zwku43",
+    "name": "sweep_stage1_v11_acs_nationwide_o2019_eta0.3_tau1.0_steps20",
+    "state": "finished",
+    "created_at": "2026-03-05T01:38:40Z",
+    "group": "sweep_stage1_v11_acs_nationwide",
+    "config": {
+      "eta": 0.3,
+      "tau": 1,
+      "origin": 2019,
+      "version": "v11",
+      "scenarios": 128,
+      "diff_steps": 20,
+      "sample_size": 20000
+    }
+  },
+  {
+    "id": "oeq1380k",
+    "name": "sweep_stage1_v11_acs_nationwide_o2019_eta0.3_tau1.0_steps20",
+    "state": "finished",
+    "created_at": "2026-03-05T01:33:20Z",
+    "group": "sweep_stage1_v11_acs_nationwide",
+    "config": {
+      "eta": 0.3,
+      "tau": 1,
+      "origin": 2019,
+      "version": "v11",
+      "scenarios": 128,
+      "diff_steps": 20,
+      "sample_size": 20000
+    }
+  },
+  {
+    "id": "msyjpca3",
+    "name": "sweep_stage1_v11_acs_nationwide_o2019_eta0.3_tau1.0_steps20",
+    "state": "finished",
+    "created_at": "2026-03-05T01:29:41Z",
+    "group": "sweep_stage1_v11_acs_nationwide",
+    "config": {
+      "eta": 0.3,
+      "tau": 1,
+      "origin": 2019,
+      "version": "v11",
+      "scenarios": 128,
+      "diff_steps": 20,
+      "sample_size": 20000
+    }
+  },
+  {
+    "id": "psvc4lzj",
+    "name": "v11-acs_nationwide-SF500K-o2022",
+    "state": "finished",
+    "created_at": "2026-03-05T01:17:54Z",
+    "group": null,
+    "config": {
+      "origin": 2022,
+      "n_train": 841867,
+      "variant": "SF500K",
+      "sample_size": 500000
+    }
+  },
+  {
+    "id": "y1knjcxk",
+    "name": "v11-acs_nationwide-SF500K-o2021",
+    "state": "finished",
+    "created_at": "2026-03-05T01:14:35Z",
+    "group": null,
+    "config": {
+      "origin": 2021,
+      "n_train": 760124,
+      "variant": "SF500K",
+      "sample_size": 500000
+    }
+  },
+  {
+    "id": "kvwmshzf",
+    "name": "v11-acs_nationwide-SF500K-o2020",
+    "state": "finished",
+    "created_at": "2026-03-05T01:11:09Z",
+    "group": null,
+    "config": {
+      "origin": 2020,
+      "n_train": 699745,
+      "variant": "SF500K",
+      "sample_size": 500000
+    }
+  },
+  {
+    "id": "o11g2wm2",
+    "name": "v11-acs_nationwide-SF500K-o2019",
+    "state": "finished",
+    "created_at": "2026-03-05T01:08:18Z",
+    "group": null,
+    "config": {
+      "origin": 2019,
+      "n_train": 627977,
+      "variant": "SF500K",
+      "sample_size": 500000
+    }
+  },
+  {
+    "id": "nvxtsgrw",
+    "name": "v11-acs_nationwide-SF500K-o2023",
+    "state": "finished",
+    "created_at": "2026-03-05T00:41:44Z",
+    "group": null,
+    "config": {
+      "origin": 2023,
+      "n_train": 922708,
+      "variant": "SF500K",
+      "sample_size": 500000
+    }
+  },
+  {
+    "id": "wezh9ga5",
+    "name": "v11-acs_nationwide-SF500K-o2024",
+    "state": "finished",
+    "created_at": "2026-03-05T00:41:38Z",
+    "group": null,
+    "config": {
+      "origin": 2024,
+      "n_train": 1004374,
+      "variant": "SF500K",
+      "sample_size": 500000
+    }
+  },
+  {
+    "id": "liselg3p",
+    "name": "v11-acs_nationwide-SF500K-o2024",
+    "state": "finished",
+    "created_at": "2026-03-04T22:16:17Z",
+    "group": null,
+    "config": {
+      "origin": 2024,
+      "n_train": 1004374,
+      "variant": "SF500K",
+      "sample_size": 500000
+    }
+  },
+  {
+    "id": "geta0ol4",
+    "name": "v11-acs_nationwide-SF500K-o2023",
+    "state": "finished",
+    "created_at": "2026-03-04T22:06:57Z",
+    "group": null,
+    "config": {
+      "origin": 2023,
+      "n_train": 922708,
+      "variant": "SF500K",
+      "sample_size": 500000
+    }
+  },
+  {
+    "id": "izs2wo2f",
+    "name": "v11-acs_nationwide-SF500K-o2022",
+    "state": "finished",
+    "created_at": "2026-03-04T22:06:34Z",
+    "group": null,
+    "config": {
+      "origin": 2022,
+      "n_train": 841867,
+      "variant": "SF500K",
+      "sample_size": 500000
+    }
+  }
+]

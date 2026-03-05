@@ -1,0 +1,32 @@
+﻿python : Traceback 
+(most recent call 
+last):
+At line:1 char:1
++ python c:\tmp\modal
+_task_logs.py 2>&1 | 
+Out-File -FilePath 
+"logs\task ...
++ ~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~
+    + CategoryInfo   
+           : NotSpe  
+  cified: (Traceba   
+ ck (most recent     
+call last)::Stri    
+ng) [], RemoteEx    
+ception
+    + FullyQualified 
+   ErrorId : Native  
+  CommandError
+ 
+  File "c:\tmp\modal_
+task_logs.py", line 
+17, in <module>
+    client = modal.Cl
+ient.from_local()
+             ^^^^^^^^
+^^^^^^^^^^^^^^^
+AttributeError: type 
+object 'Client' has 
+no attribute 
+'from_local'

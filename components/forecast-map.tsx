@@ -442,8 +442,18 @@ export function ForecastMap({
         setIsLoadingDetail(true)
         try {
             const schemaParam = schema ? `&schema=${schema}` : ""
-            const res = await fetch(`/api/forecast-detail?level=${level}&id=${encodeURIComponent(featureId)}&originYear=${originYear}${schemaParam}`)
-            if (!res.ok) throw new Error(`HTTP ${res.status}`)
+            const url = `/api/forecast-detail?level=${level}&id=${encodeURIComponent(featureId)}&originYear=${originYear}${schemaParam}`
+            let res = await fetch(url)
+            // Retry once on transient server errors (Supabase cold-start / connection pool)
+            if (res.status >= 500) {
+                await new Promise(r => setTimeout(r, 500))
+                res = await fetch(url)
+            }
+            if (!res.ok) {
+                console.warn(`[FORECAST-DETAIL] ${res.status} for ${level}/${featureId} — skipping`)
+                setFanChartData(null)
+                return
+            }
             const json = await res.json()
             const fanChart = json.years?.length > 0 ? (json as FanChartData) : null
             const histVals = json.historicalValues?.some((v: any) => v != null) ? json.historicalValues : undefined
@@ -457,7 +467,7 @@ export function ForecastMap({
                 if (oldest) detailCacheRef.current.delete(oldest)
             }
         } catch (err) {
-            console.error('[FORECAST-DETAIL] fetch error:', err)
+            console.warn('[FORECAST-DETAIL] fetch error:', err)
             setFanChartData(null)
         } finally {
             setIsLoadingDetail(false)
@@ -1747,6 +1757,8 @@ export function ForecastMap({
     }, [filters.colorMode, isLoaded])
 
     // UPDATE YEAR — Seamless A/B swap (same pattern as vector-map.tsx)
+    // Note: tile URLs are managed by the earlier effect (which handles both sources correctly,
+    // including originYear, horizonM, and schema). This effect only handles color + visibility swap.
     useEffect(() => {
         if (!isLoaded || !mapRef.current) return
         const map = mapRef.current
@@ -1756,13 +1768,6 @@ export function ForecastMap({
         const nextSource = `forecast-${nextSuffix}`
         const currentSource = `forecast-${currentSuffix}`
 
-        // Update NEXT source tiles
-        const source = map.getSource(nextSource)
-        if (source && source.type === "vector") {
-            ; (source as any).setTiles([
-                `${window.location.origin}/api/forecast-tiles/{z}/{x}/{y}?originYear=${originYear}&horizonM=${horizonM}&v=6`,
-            ])
-        }
 
         // Apply color logic to all fill layers
         const fillColor = buildFillColor(filters.colorMode)
@@ -1827,7 +1832,7 @@ export function ForecastMap({
 
             ; (map as any)._targetYear = year
         map.on("sourcedata", onSourceData)
-    }, [year, isLoaded, filters.colorMode, originYear, horizonM])
+    }, [year, isLoaded, filters.colorMode])
 
     // SYNC VIEWPORT
     useEffect(() => {

@@ -1,0 +1,39 @@
+
+=== ap-NacDsRMR8ipHsVcp2pNrfY ===
+Usage: python -m modal app logs [OPTIONS] [APP_IDENTIFIER]
+Try 'python -m modal app logs -h' for help.
++- Error ---------------------------------------------------------------------+
+| No such option: --no-follow                                                 |
++-----------------------------------------------------------------------------+
+
+
+=== ap-Qhtf8jndeyVC8xziEOl7mS ===
+Usage: python -m modal app logs [OPTIONS] [APP_IDENTIFIER]
+Try 'python -m modal app logs -h' for help.
++- Error ---------------------------------------------------------------------+
+| No such option: --no-follow                                                 |
++-----------------------------------------------------------------------------+
+
+
+=== ap-FKc696XGhlDDgHWyJvPmhW ===
+Usage: python -m modal app logs [OPTIONS] [APP_IDENTIFIER]
+Try 'python -m modal app logs -h' for help.
++- Error ---------------------------------------------------------------------+
+| No such option: --no-follow                                                 |
++-----------------------------------------------------------------------------+
+
+
+=== ap-IvJMuPRiEump02XSyi7mOz ===
+Usage: python -m modal app logs [OPTIONS] [APP_IDENTIFIER]
+Try 'python -m modal app logs -h' for help.
++- Error ---------------------------------------------------------------------+
+| No such option: --no-follow                                                 |
++-----------------------------------------------------------------------------+
+
+
+=== ap-pFYudUOENqH2crHqM31bPn ===
+Usage: python -m modal app logs [OPTIONS] [APP_IDENTIFIER]
+Try 'python -m modal app logs -h' for help.
++- Error ---------------------------------------------------------------------+
+| No such option: --no-follow                                                 |
++-----------------------------------------------------------------------------+

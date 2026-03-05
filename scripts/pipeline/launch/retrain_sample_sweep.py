@@ -56,6 +56,7 @@ _required = [
     "train_diffusion_v11", "create_denoiser_v11",
     "create_gating_network", "create_token_persistence",
     "create_coherence_scale", "copy_small_artifacts_to_drive",
+    "create_mu_backbone", "AB1_ENABLED",
 ]
 _missing = [r for r in _required if r not in dir() and r not in globals()]
 if _missing:
@@ -342,6 +343,19 @@ for variant_tag, sample_size, strat_above, strat_pct in SWEEP_VARIANTS:
         token_persistence = create_token_persistence().to(_device)
         coh_scale = create_coherence_scale().to(_device)
 
+        # AB1: create mu_backbone if enabled
+        _ab1_enabled = bool(globals().get("AB1_ENABLED", False))
+        mu_backbone = None
+        if _ab1_enabled:
+            mu_backbone = create_mu_backbone(
+                hist_len=_hist_len,
+                num_dim=_num_dim,
+                n_cat=_n_cat,
+                H=_H,
+            ).to(_device)
+            _bb_params = sum(p.numel() for p in mu_backbone.parameters())
+            print(f"  AB1: mu_backbone created ({_bb_params:,} params)")
+
         # ── Initialize W&B for this variant ──
         try:
             init_wandb(
@@ -374,7 +388,61 @@ for variant_tag, sample_size, strat_above, strat_pct in SWEEP_VARIANTS:
             num_dim=_num_dim,
             n_cat=_n_cat,
             work_dirs=variant_work_dirs,
+            mu_backbone=mu_backbone,
         )
+
+        # ── Train Challenger Baseline ──
+        TRAIN_CHALLENGER = bool(globals().get("TRAIN_CHALLENGER", True))
+        if TRAIN_CHALLENGER:
+            print(f"  🧪 Training Challenger Baseline from scratch ({_epochs} epochs)")
+            try:
+                challenger_model = globals()["HeteroscedasticTokenModel"](
+                    hist_len=_hist_len,
+                    num_dim=_num_dim,
+                    n_cat=_n_cat,
+                    K=int(globals().get("K_TOKENS", 8)),
+                    H=_H,
+                ).to(_device)
+                
+                y_scaler_c, n_scaler_c, t_scaler_c, losses_c, _ = globals()["train_challenger_model_v11"](
+                    shard_paths=origin_shards,
+                    origin=origin,
+                    epochs=_epochs,
+                    model=challenger_model,
+                    device=_device,
+                    num_dim=_num_dim,
+                    n_cat=_n_cat,
+                    work_dirs=variant_work_dirs,
+                )
+                import sys
+                if 'wandb' in sys.modules:
+                    import wandb
+                    if wandb.run is not None:
+                        wandb.log({"challenger_final_loss": losses_c[-1] if losses_c else None})
+                        wandb.run.summary["challenger_final_loss"] = losses_c[-1] if losses_c else None
+                
+                # Save challenger ckpt
+                c_ckpt_data = {
+                    "model_state_dict": challenger_model.state_dict(),
+                    "y_scaler_mean": y_scaler_c.mean_.tolist(),
+                    "y_scaler_scale": y_scaler_c.scale_.tolist(),
+                    "n_scaler_mean": n_scaler_c.mean_.tolist(),
+                    "n_scaler_scale": n_scaler_c.scale_.tolist(),
+                    "t_scaler_mean": t_scaler_c.mean_.tolist(),
+                    "t_scaler_scale": t_scaler_c.scale_.tolist(),
+                    "arch": "heteroscedastic_token_v1",
+                    "sweep": { "final_loss": losses_c[-1] if losses_c else None }
+                }
+                c_ckpt_name = f"ckpt_challenger_origin_{origin}_{variant_tag}.pt"
+                c_local_ckpt = os.path.join(variant_scratch, c_ckpt_name)
+                torch.save(c_ckpt_data, c_local_ckpt)
+                copy_small_artifacts_to_drive(c_local_ckpt, _out_dir)
+                
+                # Cleanup footprint
+                del challenger_model
+            except Exception as e:
+                print(f"  ⚠️ Challenger training failed natively: {e}")
+
 
         # ── Save v11 checkpoint (all 4 modules) ──
         ckpt_data = {
@@ -390,7 +458,9 @@ for variant_tag, sample_size, strat_above, strat_pct in SWEEP_VARIANTS:
             "t_scaler_scale": t_scaler.scale_.tolist(),
             "global_medians": _global_medians,
             "cfg": _cfg,
-            "arch": "v11",
+            "arch": "ab1" if _ab1_enabled else "v11",
+            # AB1: mu backbone state dict (None if not enabled)
+            "mu_backbone_state_dict": mu_backbone.state_dict() if mu_backbone is not None else None,
             # Feature lists: critical for eval-time alignment
             "num_use": list(_num_use),
             "cat_use": list(_cat_use),
@@ -425,6 +495,8 @@ for variant_tag, sample_size, strat_above, strat_pct in SWEEP_VARIANTS:
 
         # Free GPU memory
         del model, gating_net, token_persistence, coh_scale
+        if mu_backbone is not None:
+            del mu_backbone
         if _device == "cuda":
             torch.cuda.empty_cache()
 
