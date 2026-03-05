@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react"
 import { useKeyboardOpen } from "@/hooks/use-keyboard-open"
-import { Send, X, Loader2, MessageSquare, MapPin, Sparkles } from "lucide-react"
+import { Send, X, Loader2, MessageSquare, MapPin, Sparkles, Link2, FileDown, CalendarDays } from "lucide-react"
 import { HomecastrLogo } from "./homecastr-logo"
 import ReactMarkdown from "react-markdown"
 
@@ -31,9 +31,12 @@ interface ChatPanelProps {
     onTavusRequest?: () => void
     tooltipVisible?: boolean
     mapViewport?: { center: [number, number]; zoom: number; selectedId?: string | null }
+    onShare?: () => void
+    onPDF?: () => void
+    onContact?: () => void
 }
 
-export function ChatPanel({ isOpen, onClose, onMapAction, forecastMode, onTavusRequest, tooltipVisible = false, mapViewport }: ChatPanelProps) {
+export function ChatPanel({ isOpen, onClose, onMapAction, forecastMode, onTavusRequest, tooltipVisible = false, mapViewport, onShare, onPDF, onContact }: ChatPanelProps) {
     const [messages, setMessages] = useState<ChatMessage[]>([])
     const [input, setInput] = useState("")
     const [isLoading, setIsLoading] = useState(false)
@@ -201,9 +204,9 @@ export function ChatPanel({ isOpen, onClose, onMapAction, forecastMode, onTavusR
             } : {}}
         >
             <div className="h-full flex flex-col glass-panel border border-white/10 rounded-t-xl md:rounded-2xl shadow-2xl">
-                {/* Header — hidden on mobile (use corner icon to close) and when keyboard is open */}
-                {!isKeyboardOpen && !isMobile && (
-                    <div className="flex items-center justify-between px-3 h-9 border-b border-border bg-background/80">
+                {/* Header */}
+                {!isKeyboardOpen && (
+                    <div className="flex items-center justify-between px-3 h-9 border-b border-border bg-background/80 shrink-0">
                         <div className="flex items-center gap-2">
                             <HomecastrLogo variant="horizontal" size={16} />
                             <span className="text-[10px] px-1.5 py-0.5 bg-primary/10 text-primary rounded-full font-medium">
@@ -211,11 +214,43 @@ export function ChatPanel({ isOpen, onClose, onMapAction, forecastMode, onTavusR
                             </span>
                         </div>
                         <div className="flex items-center gap-1">
+                            {/* Utility icons — mobile only, when chat covers the floating buttons */}
+                            {isMobile && onShare && (
+                                <button
+                                    onClick={onShare}
+                                    className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-muted active:bg-muted/60 transition-colors"
+                                    aria-label="Share link"
+                                    style={{ touchAction: 'manipulation' }}
+                                >
+                                    <Link2 className="w-3.5 h-3.5" />
+                                </button>
+                            )}
+                            {isMobile && onPDF && (
+                                <button
+                                    onClick={onPDF}
+                                    className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-muted active:bg-muted/60 transition-colors"
+                                    aria-label="Download PDF"
+                                    style={{ touchAction: 'manipulation' }}
+                                >
+                                    <FileDown className="w-3.5 h-3.5" />
+                                </button>
+                            )}
+                            {isMobile && onContact && (
+                                <button
+                                    onClick={onContact}
+                                    className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-muted active:bg-muted/60 transition-colors text-[hsl(45,80%,45%)]"
+                                    aria-label="Request analysis"
+                                    style={{ touchAction: 'manipulation' }}
+                                >
+                                    <CalendarDays className="w-3.5 h-3.5" />
+                                </button>
+                            )}
 
                             <button
                                 onClick={onClose}
-                                className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-muted transition-colors"
+                                className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-muted active:bg-muted/60 transition-colors"
                                 aria-label="Close chat"
+                                style={{ touchAction: 'manipulation' }}
                             >
                                 <X className="w-4 h-4" />
                             </button>

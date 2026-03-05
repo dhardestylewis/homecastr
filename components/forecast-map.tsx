@@ -1303,9 +1303,29 @@ export function ForecastMap({
             const activeSuffix = (map as any)._activeSuffix || "a"
             const fillLayerId = `forecast-fill-${sourceLayer}-${activeSuffix}`
 
-            const features = map.getLayer(fillLayerId)
+            let features = map.getLayer(fillLayerId)
                 ? map.queryRenderedFeatures(e.point, { layers: [fillLayerId] })
                 : []
+
+            // FALLBACK: if finest-grained layer has no features (tiles still loading on mobile),
+            // try coarser layers that extend as fallback underlays (tract → zcta)
+            let effectiveSourceLayer = sourceLayer
+            if (features.length === 0) {
+                for (let i = GEO_LEVELS.length - 1; i >= 0; i--) {
+                    const lvl = GEO_LEVELS[i]
+                    if (lvl.name === sourceLayer) continue // already tried
+                    if (zoom < lvl.minzoom || zoom > lvl.maxzoom) continue
+                    const fallbackLayerId = `forecast-fill-${lvl.name}-${activeSuffix}`
+                    if (!map.getLayer(fallbackLayerId)) continue
+                    const fallbackFeatures = map.queryRenderedFeatures(e.point, { layers: [fallbackLayerId] })
+                    if (fallbackFeatures.length > 0) {
+                        features = fallbackFeatures
+                        effectiveSourceLayer = lvl.name
+                        console.log(`[CLICK FALLBACK] ${sourceLayer} had 0 features, fell back to ${lvl.name} (${fallbackFeatures.length} features)`)
+                        break
+                    }
+                }
+            }
 
             // Clear hover detail timer so click fetch takes precedence
             if (hoverDetailTimerRef.current) { clearTimeout(hoverDetailTimerRef.current); hoverDetailTimerRef.current = null }
@@ -1317,7 +1337,7 @@ export function ForecastMap({
                 ? map.queryRenderedFeatures(e.point, { layers: ['student-buildings-fill'] })
                 : []
 
-            console.log(`[CLICK DEBUG] zoom=${zoom.toFixed(1)} mvtFeatures=${features.length} studentFeatures=${studentFeatures.length} hasStudentLayer=${hasStudentLayer}`)
+            console.log(`[CLICK DEBUG] zoom=${zoom.toFixed(1)} layer=${effectiveSourceLayer} mvtFeatures=${features.length} studentFeatures=${studentFeatures.length} hasStudentLayer=${hasStudentLayer}`)
 
             // Prioritize student buildings when we have them and no MVT features
             if (features.length === 0 && studentFeatures.length > 0) {
@@ -1476,7 +1496,7 @@ export function ForecastMap({
                 if (selectedIdRef.current) {
                     ;["forecast-a", "forecast-b"].forEach((s) => {
                         try {
-                            map.removeFeatureState({ source: s, sourceLayer })
+                            map.removeFeatureState({ source: s, sourceLayer: effectiveSourceLayer })
                         } catch (err) {
                             /* ignore */
                         }
@@ -1502,9 +1522,9 @@ export function ForecastMap({
                 // Clear prev selection — use the sourceLayer where the selection was made,
                 // NOT the current zoom's sourceLayer, to handle zoom-between-taps on mobile
                 if (selectedIdRef.current) {
-                    const prevLayer = selectedSourceLayerRef.current || sourceLayer
+                    const prevLayer = selectedSourceLayerRef.current || effectiveSourceLayer
                     // Clear on BOTH the previous layer AND current layer to handle edge cases
-                    const layersToClean = new Set([prevLayer, sourceLayer])
+                    const layersToClean = new Set([prevLayer, effectiveSourceLayer])
                         ;["forecast-a", "forecast-b"].forEach((s) => {
                             layersToClean.forEach((sl) => {
                                 try {
@@ -1546,12 +1566,12 @@ export function ForecastMap({
                     if (existingIdx !== -1) {
                         // Unpin
                         ;["forecast-a", "forecast-b"].forEach(s => {
-                            try { map.setFeatureState({ source: s, sourceLayer, id }, { pinned: false }) } catch { }
+                            try { map.setFeatureState({ source: s, sourceLayer: effectiveSourceLayer, id }, { pinned: false }) } catch { }
                         })
                         setPinnedComparisons(prev => prev.filter(p => p.id !== id))
                     } else {
                         // Pin: fetch detail and add
-                        const pinLevel = getSourceLayer(zoom)
+                        const pinLevel = effectiveSourceLayer
                         const cacheKey = `${pinLevel}:${id}`
                         const cached = detailCacheRef.current.get(cacheKey)
 
@@ -1573,7 +1593,7 @@ export function ForecastMap({
                                 historicalValues: histVals,
                                 label,
                                 coords: [e.lngLat.lat, e.lngLat.lng],
-                                sourceLayer,
+                                sourceLayer: effectiveSourceLayer,
                             }
                             setPinnedComparisons(prev => {
                                 // Replace oldest if at max
@@ -1588,7 +1608,7 @@ export function ForecastMap({
                             })
                                 // Set MapLibre feature state
                                 ;["forecast-a", "forecast-b"].forEach(s => {
-                                    try { map.setFeatureState({ source: s, sourceLayer, id }, { pinned: true }) } catch { }
+                                    try { map.setFeatureState({ source: s, sourceLayer: effectiveSourceLayer, id }, { pinned: true }) } catch { }
                                 })
                         }
 
@@ -1615,7 +1635,7 @@ export function ForecastMap({
                 }
 
                 selectedIdRef.current = id
-                selectedSourceLayerRef.current = sourceLayer
+                selectedSourceLayerRef.current = effectiveSourceLayer
                 setSelectedId(id)
                 setSelectedProps(feature.properties)
                 setComparisonData(null)
@@ -1631,14 +1651,13 @@ export function ForecastMap({
                 onFeatureSelect(id)
 
                 // Fetch fan chart detail for newly selected area (critical on mobile where hover doesn't fire)
-                const clickLevel = getSourceLayer(zoom)
-                fetchForecastDetail(id, clickLevel)
+                fetchForecastDetail(id, effectiveSourceLayer)
 
                     // Set selected state
                     ;["forecast-a", "forecast-b"].forEach((s) => {
                         try {
                             map.setFeatureState(
-                                { source: s, sourceLayer, id },
+                                { source: s, sourceLayer: effectiveSourceLayer, id },
                                 { selected: true }
                             )
                         } catch (err) {
