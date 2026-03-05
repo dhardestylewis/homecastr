@@ -73,7 +73,7 @@ from psycopg2.extras import execute_values
 # CONFIG
 # -----------------------------------------------------------------------------
 # >>>> REQUIRED <<<<
-TARGET_SCHEMA = "forecast_20260220_7f31c6e4"   # set this to your created schema
+TARGET_SCHEMA = globals().get("TARGET_SCHEMA", "forecast_20260220_7f31c6e4")   # set this to your created schema
 SUPABASE_DB_URL = (os.environ.get("SUPABASE_DB_URL")
                    or os.environ.get("POSTGRES_URL")
                    or os.environ.get("POSTGRES_URL_NON_POOLING")
@@ -127,7 +127,7 @@ PG_BATCH_ROWS = 5000
 
 # Timeout / Retry
 PG_STATEMENT_TIMEOUT_MS = 300_000   # 5 minutes per SQL statement
-PG_TX_MAX_RETRIES = 3               # retries on transient DB errors
+PG_TX_MAX_RETRIES = 100               # retries on transient DB errors
 PG_TX_BACKOFF_BASE = 5              # base seconds for exponential backoff
 
 # Schema compatibility:
@@ -261,7 +261,12 @@ def _get_completed_accts_from_db(schema: str, run_id: str, table: str = "metrics
 def _pg_connect():
     if not SUPABASE_DB_URL:
         raise RuntimeError("SUPABASE_DB_URL is required for this pipeline.")
-    conn = psycopg2.connect(SUPABASE_DB_URL)
+    
+    url = SUPABASE_DB_URL
+    if "pooler.supabase.com" in url and "6543" in url:
+        url = url.replace(":6543/", ":5432/")
+        
+    conn = psycopg2.connect(url)
     conn.autocommit = False
     # Set a generous statement timeout so long-running queries fail fast
     # rather than holding a connection indefinitely.
@@ -320,10 +325,11 @@ def _pg_tx(retries=None, label=""):
                 except Exception:
                     pass
             if attempt < retries and _is_transient_pg_error(exc):
-                wait = PG_TX_BACKOFF_BASE * (2 ** attempt)
+                # Backoff similar to rebuild_aggregates_modal.py
+                wait = min(60.0, PG_TX_BACKOFF_BASE * (1.5 ** attempt))
                 print(f"[{_ts()}] _pg_tx{' (' + label + ')' if label else ''}: "
                       f"transient error (attempt {attempt+1}/{retries+1}), "
-                      f"retrying in {wait}s: {exc}")
+                      f"retrying in {wait:.1f}s: {exc}")
                 time.sleep(wait)
             else:
                 raise
@@ -668,6 +674,7 @@ AGG_LEVELS = [
     ("zcta",        "zcta5",            "metrics_zcta_forecast",        "metrics_zcta_history"),
     ("unsd",        "unsd_geoid",       "metrics_unsd_forecast",        "metrics_unsd_history"),
     ("neighborhood","neighborhood_id",  "metrics_neighborhood_forecast","metrics_neighborhood_history"),
+    ("zip3",        "zip3",             "metrics_zip3_forecast",        "metrics_zip3_history"),
 ]
 
 def _aggregate_forecast_levels_for_chunk(
@@ -698,6 +705,10 @@ def _aggregate_forecast_levels_for_chunk(
 
     for _, ladder_col, tbl_forecast, _ in AGG_LEVELS:
         q_target = _q_table(schema, tbl_forecast)
+        
+        pl_geo_col = f"pl.{_q_ident(ladder_col)}"
+        if ladder_col == "zip3":
+            pl_geo_col = "LEFT(pl.zcta5, 3)"
 
         sql = f"""
             INSERT INTO {q_target}
@@ -710,7 +721,7 @@ def _aggregate_forecast_levels_for_chunk(
                 inserted_at, updated_at
             )
             SELECT
-                pl.{_q_ident(ladder_col)} AS {_q_ident(ladder_col)},
+                {pl_geo_col} AS {_q_ident(ladder_col)},
                 mp.origin_year,
                 mp.horizon_m,
                 mp.forecast_year,
@@ -743,8 +754,8 @@ def _aggregate_forecast_levels_for_chunk(
               AND mp.series_kind = %s
               AND mp.variant_id = %s
               AND mp.acct = ANY(%s)
-              AND pl.{_q_ident(ladder_col)} IS NOT NULL
-            GROUP BY pl.{_q_ident(ladder_col)}, mp.origin_year, mp.horizon_m, mp.forecast_year
+              AND {pl_geo_col} IS NOT NULL
+            GROUP BY {pl_geo_col}, mp.origin_year, mp.horizon_m, mp.forecast_year
             ON CONFLICT ({_q_ident(ladder_col)}, origin_year, horizon_m, series_kind, variant_id)
             DO NOTHING
         """
@@ -797,6 +808,10 @@ def _aggregate_history_levels_for_chunk(
 
     for _, ladder_col, _, tbl_history in AGG_LEVELS:
         q_target = _q_table(schema, tbl_history)
+        
+        pl_geo_col = f"pl.{_q_ident(ladder_col)}"
+        if ladder_col == "zip3":
+            pl_geo_col = "LEFT(pl.zcta5, 3)"
 
         sql = f"""
             INSERT INTO {q_target}
@@ -809,7 +824,7 @@ def _aggregate_history_levels_for_chunk(
                 inserted_at, updated_at
             )
             SELECT
-                pl.{_q_ident(ladder_col)} AS {_q_ident(ladder_col)},
+                {pl_geo_col} AS {_q_ident(ladder_col)},
                 mh.year,
 
                 AVG(mh.value)::float8 AS value,
@@ -833,8 +848,8 @@ def _aggregate_history_levels_for_chunk(
               AND mh.series_kind = %s
               AND mh.variant_id = %s
               AND mh.acct = ANY(%s)
-              AND pl.{_q_ident(ladder_col)} IS NOT NULL
-            GROUP BY pl.{_q_ident(ladder_col)}, mh.year
+              AND {pl_geo_col} IS NOT NULL
+            GROUP BY {pl_geo_col}, mh.year
             ON CONFLICT ({_q_ident(ladder_col)}, year, series_kind, variant_id)
             DO NOTHING
         """
@@ -921,6 +936,10 @@ def _recompute_forecast_aggregates_exact_for_run(
 
     for _, ladder_col, tbl_forecast, _ in AGG_LEVELS:
         q_target = _q_table(schema, tbl_forecast)
+        
+        pl_geo_col = f"pl.{_q_ident(ladder_col)}"
+        if ladder_col == "zip3":
+            pl_geo_col = "LEFT(pl.zcta5, 3)"
 
         with conn.cursor() as cur:
             cur.execute(
@@ -946,7 +965,7 @@ def _recompute_forecast_aggregates_exact_for_run(
                     inserted_at, updated_at
                 )
                 SELECT
-                    pl.{_q_ident(ladder_col)} AS {_q_ident(ladder_col)},
+                    {pl_geo_col} AS {_q_ident(ladder_col)},
                     mp.origin_year,
                     mp.horizon_m,
                     mp.forecast_year,
@@ -979,8 +998,8 @@ def _recompute_forecast_aggregates_exact_for_run(
                   AND mp.series_kind = %s
                   AND mp.variant_id = %s
                   AND coalesce(mp.is_outlier, false) = false
-                  AND pl.{_q_ident(ladder_col)} IS NOT NULL
-                GROUP BY pl.{_q_ident(ladder_col)}, mp.origin_year, mp.horizon_m, mp.forecast_year
+                  AND {pl_geo_col} IS NOT NULL
+                GROUP BY {pl_geo_col}, mp.origin_year, mp.horizon_m, mp.forecast_year
                 """,
                 (
                     run_id,
@@ -1013,6 +1032,10 @@ def _recompute_history_aggregates_exact_for_run(
 
     for _, ladder_col, _, tbl_history in AGG_LEVELS:
         q_target = _q_table(schema, tbl_history)
+        
+        pl_geo_col = f"pl.{_q_ident(ladder_col)}"
+        if ladder_col == "zip3":
+            pl_geo_col = "LEFT(pl.zcta5, 3)"
 
         with conn.cursor() as cur:
             cur.execute(
@@ -1037,7 +1060,7 @@ def _recompute_history_aggregates_exact_for_run(
                     inserted_at, updated_at
                 )
                 SELECT
-                    pl.{_q_ident(ladder_col)} AS {_q_ident(ladder_col)},
+                    {pl_geo_col} AS {_q_ident(ladder_col)},
                     mh.year,
 
                     AVG(mh.value)::float8 AS value,
@@ -1057,11 +1080,10 @@ def _recompute_history_aggregates_exact_for_run(
                 FROM {q_parcel} mh
                 JOIN public.parcel_ladder_v1 pl
                   ON pl.acct = mh.acct
-                WHERE mh.run_id = %s
-                  AND mh.series_kind = %s
+                WHERE mh.series_kind = %s
                   AND mh.variant_id = %s
-                  AND pl.{_q_ident(ladder_col)} IS NOT NULL
-                GROUP BY pl.{_q_ident(ladder_col)}, mh.year
+                  AND {pl_geo_col} IS NOT NULL
+                GROUP BY {pl_geo_col}, mh.year
                 """,
                 (
                     run_id,
@@ -1070,7 +1092,6 @@ def _recompute_history_aggregates_exact_for_run(
                     MODEL_VERSION,
                     as_of_date,
                     series_kind,
-                    run_id,
                     series_kind,
                     variant_id,
                 ),
@@ -1161,7 +1182,11 @@ def _load_ckpt_into_live_objects(ckpt_path: str):
 
     ckpt = torch.load(ckpt_path, map_location="cpu")
     _cfg_ckpt = ckpt.get("cfg", {})
-    _arch = ckpt.get("arch", "v10.2")
+    # Detect v11 from checkpoint keys (retrain_sample_sweep.py doesn't save 'arch')
+    _arch = ckpt.get("arch", None)
+    if _arch is None:
+        # v11 checkpoints always contain gating_net_state_dict; v10.2 never does
+        _arch = "v11" if "gating_net_state_dict" in ckpt else "v10.2"
 
     # Architecture dims — pull from saved config or fall back to worldmodel.py globals
     _hist_len = int(_cfg_ckpt.get("FULL_HIST_LEN", globals().get("FULL_HIST_LEN", 21)))
@@ -1171,7 +1196,7 @@ def _load_ckpt_into_live_objects(ckpt_path: str):
 
     _device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    if _arch == "v11":
+    if _arch in ("v11", "ab1"):
         # ── v11: denoiser + gating + token_persistence + coh_scale ──
         # Detect actual num_dim from checkpoint weights to handle cross-jurisdiction inference
         _ckpt_num_dim = _num_dim
@@ -1735,20 +1760,50 @@ def _run_one_origin(
     t_run0 = time.time()
 
     # Load Calibration models if they exist
+    # Fallback chain:
+    #   1) Per-origin file from sweep: calibrators_v11_{jur}_o{origin}.pkl (best match)
+    #   2) Consolidated production file: calibrators_v11_{jur}.pkl
+    #   3) Legacy hardcoded: calibrators_v11_sf_ca.pkl
     calib_models = {}
     if APPLY_CALIBRATION:
-        calib_path = os.path.join(CKPT_DIR, "calibrators_v11_sf_ca.pkl") # Use jurisdiction dynamically from directory
-        jur_match = re.search(r"/(.+)_v11", CKPT_DIR)
+        import pickle as _calib_pickle
+        import glob as _calib_glob
+
+        # Extract jurisdiction name from CKPT_DIR (e.g. /output/hcad_houston_v11 → hcad_houston)
+        _jur_name = None
+        jur_match = re.search(r"[/\\]([^/\\]+)_v\d+", CKPT_DIR)
         if jur_match:
-            calib_path = os.path.join(CKPT_DIR, f"calibrators_v11_{jur_match.group(1)}.pkl")
-        
-        if os.path.exists(calib_path):
-            import pickle
+            _jur_name = jur_match.group(1)
+
+        calib_path = None
+        _calib_candidates = []
+
+        if _jur_name:
+            # 1) Per-origin: pick the latest (highest origin year) available
+            _per_origin_glob = os.path.join(CKPT_DIR, f"calibrators_v11_{_jur_name}_o*.pkl")
+            _per_origin_files = sorted(_calib_glob.glob(_per_origin_glob))
+            if _per_origin_files:
+                _calib_candidates.append(("per-origin (latest)", _per_origin_files[-1]))
+
+            # 2) Consolidated production file
+            _prod_path = os.path.join(CKPT_DIR, f"calibrators_v11_{_jur_name}.pkl")
+            if os.path.exists(_prod_path):
+                _calib_candidates.append(("consolidated", _prod_path))
+
+        # 3) Legacy fallback
+        _legacy_path = os.path.join(CKPT_DIR, "calibrators_v11_sf_ca.pkl")
+        if os.path.exists(_legacy_path):
+            _calib_candidates.append(("legacy", _legacy_path))
+
+        # Use the first (highest-priority) candidate found
+        if _calib_candidates:
+            _calib_label, calib_path = _calib_candidates[0]
             with open(calib_path, "rb") as f:
-                calib_models = pickle.load(f)
-            print(f"[{_ts()}] 🏆 Loaded Post-Hoc Calbrators from {calib_path} ({len(calib_models)} blocks)")
+                calib_models = _calib_pickle.load(f)
+            print(f"[{_ts()}] 🏆 Loaded {_calib_label} calibrators from {calib_path} ({len(calib_models)} blocks)")
         else:
-            print(f"[{_ts()}] ⚠️ APPLY_CALIBRATION=True but no calibrator map found at {calib_path}")
+            _expected = os.path.join(CKPT_DIR, f"calibrators_v11_{_jur_name or 'UNKNOWN'}.pkl")
+            print(f"[{_ts()}] ⚠️ APPLY_CALIBRATION=True but no calibrator map found at {_expected}")
 
     progress_csv = os.path.join(run_root, "progress_log.csv")
     eval_csv = os.path.join(run_root, "backtest_eval_summary.csv")

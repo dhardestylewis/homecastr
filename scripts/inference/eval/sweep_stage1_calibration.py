@@ -681,7 +681,9 @@ SimpleScaler = _DimSafeScaler
     
     print(f"[{ts()}] OOT Split: Fitting on fully OOT origin {origin}")
     
-    new_calib_models = {}
+    # Start with existing calibrators from previous origins (to preserve long horizons)
+    # and overwrite with newly fitted short horizons.
+    new_calib_models = calib_models.copy() if calib_models else {}
     for h in range(1, MAX_HORIZON + 1):
         h_idx = h - 1
         eyr = origin + h
@@ -713,6 +715,14 @@ SimpleScaler = _DimSafeScaler
         with open(calib_save_path, "wb") as f:
             pickle.dump(new_calib_models, f)
         print(f"[{ts()}] \U0001f3c6 Saved {len(new_calib_models)} calibrators to {calib_save_path}")
+
+        # Also save a consolidated production copy (no _o{origin} suffix)
+        # so inference_pipeline.py can auto-discover it as the latest calibrator.
+        calib_prod_path = os.path.join(calib_dir, f"calibrators_{version_tag}_{jurisdiction}.pkl")
+        with open(calib_prod_path, "wb") as f:
+            pickle.dump(new_calib_models, f)
+        print(f"[{ts()}] \U0001f4e6 Saved consolidated production calibrators to {calib_prod_path}")
+
         # Flush to Modal Volume so next container can load these calibrators
         try:
             eval_volume.commit()

@@ -34,6 +34,7 @@ export async function GET(request: Request) {
     const levelStr = searchParams.get("level") || "zcta"
     const level = levelStr === "zip" ? "zcta" : levelStr
     const id = searchParams.get("id")
+    const schemaName = searchParams.get("schema") || "forecast_20260220_7f31c6e4"
 
     if (!id) {
         return NextResponse.json({ error: "id is required" }, { status: 400 })
@@ -52,7 +53,7 @@ export async function GET(request: Request) {
         const fallbackYear = originYear === 2025 ? 2024 : 2025
 
         let { data, error } = await supabase
-            .schema("forecast_20260220_7f31c6e4" as any)
+            .schema(schemaName as any)
             .from(meta.table)
             .select("horizon_m, p10, p25, p50, p75, p90, origin_year")
             .eq(meta.key, id)
@@ -62,7 +63,7 @@ export async function GET(request: Request) {
         // Fallback to alternate origin year if no data found
         if (!error && (!data || data.length === 0)) {
             const fb = await supabase
-                .schema("forecast_20260220_7f31c6e4" as any)
+                .schema(schemaName as any)
                 .from(meta.table)
                 .select("horizon_m, p10, p25, p50, p75, p90, origin_year")
                 .eq(meta.key, id)
@@ -85,7 +86,7 @@ export async function GET(request: Request) {
         if (histMeta) {
             try {
                 const { data: histData, error: histError } = await supabase
-                    .schema("forecast_20260220_7f31c6e4" as any)
+                    .schema(schemaName as any)
                     .from(histMeta.table)
                     .select("year, value, p50")
                     .eq(histMeta.key, id)

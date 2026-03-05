@@ -252,11 +252,13 @@ SAMPLER_NOISE_CLIP = 10.0    # clamp noise_hat each step
 SAMPLER_X0_CLIP = 50.0       # clamp x0_pred each step
 SAMPLER_X_CLIP = 50.0        # clamp x each step
 SAMPLER_REPORT_BAD_STEP = False    # suppresses per-step GPU→CPU syncs (.item() calls)
-# v11.2: DDIM stochasticity parameter η (Song et al. 2020, Eq. 12)
-# η=0.0 = deterministic DDIM (original, near-zero VarRatio)
-# η=1.0 = stochastic DDPM (injects noise at every reverse step)
-# This is the primary lever for opening up the scenario fan.
-SAMPLER_ETA = 0.3
+# v11.3: Direct Diffusion Hedging (Dynamic Stochasticity)
+# SAMPLER_ETA_BASE sets the foundation stochastic noise level (Song et al. 2020 Eq. 12)
+# η=0.0 = deterministic DDIM, η=1.0 = stochastic DDPM
+# SAMPLER_ETA_SLOPE linearly increases η further into the future horizon to structurally
+# widen the scenario fan where epistemic uncertainty is highest, fixing under-dispersion.
+SAMPLER_ETA_BASE = 0.3
+SAMPLER_ETA_SLOPE = 0.1
 
 # Scaled shard dtype
 SCALED_SHARDS_FLOAT16 = False  # keep float32 until stability is proven
@@ -311,6 +313,8 @@ cfg = {
     "SAMPLER_NOISE_CLIP": float(SAMPLER_NOISE_CLIP),
     "SAMPLER_X0_CLIP": float(SAMPLER_X0_CLIP),
     "SAMPLER_X_CLIP": float(SAMPLER_X_CLIP),
+    "SAMPLER_ETA_BASE": float(SAMPLER_ETA_BASE),
+    "SAMPLER_ETA_SLOPE": float(SAMPLER_ETA_SLOPE),
     "SCALED_SHARDS_FLOAT16": bool(SCALED_SHARDS_FLOAT16),
 }
 with open(os.path.join(OUT_DIR, "run_config.json"), "w") as f:
@@ -2514,21 +2518,28 @@ def sample_ddim_v11(
             x0_pred = x0_pred.clamp(-float(SAMPLER_X0_CLIP), float(SAMPLER_X0_CLIP))
 
             if (i_step + 1) < len(idx):
-                # v11.2: Stochastic DDIM (Song et al. 2020 Eq. 12)
-                # η=0 → deterministic DDIM, η=1 → DDPM
-                _eta = float(SAMPLER_ETA)
-                if _eta > 0.0:
-                    # Compute σ_t = η * √((1-ā_{t-1})/(1-ā_t)) * √(1 - ā_t/ā_{t-1})
-                    _sigma_sq = _eta ** 2 * ((1.0 - abar_prev) / (1.0 - abar).clamp(min=1e-8)) * (1.0 - abar / abar_prev.clamp(min=1e-8))
-                    _sigma = torch.sqrt(_sigma_sq.clamp(min=0.0))
-                    # Direction coefficient shrinks to maintain correct marginal
-                    _dir_coeff = torch.sqrt((1.0 - abar_prev - _sigma_sq).clamp(min=0.0))
-                    # Stochastic reverse step
-                    _eps = torch.randn_like(x)
-                    x = torch.sqrt(abar_prev).clamp(min=0.0) * x0_pred + _dir_coeff * noise_hat + _sigma * _eps
-                else:
-                    # Original deterministic DDIM
-                    x = torch.sqrt(abar_prev).clamp(min=0.0) * x0_pred + torch.sqrt(1.0 - abar_prev).clamp(min=0.0) * noise_hat
+                # v11.3: Direct Diffusion Hedging (Dynamic Stochasticity)
+                # η grows linearly with horizon to natively fix under-dispersion
+                _h_idx = torch.arange(H, device=device, dtype=torch.float32) # [H] 0..4
+                _eta_h = float(SAMPLER_ETA_BASE) + float(SAMPLER_ETA_SLOPE) * _h_idx
+                _eta_h = _eta_h.unsqueeze(0).unsqueeze(0) # [1, 1, H]
+                
+                # We need to reshape x from [N*sb_actual, H] to [N_batch, S_batch, H] 
+                # so the broadcasting of the [1, 1, H] horizon scaler works correctly.
+                # Here, N_batch = N * sb_actual, but we want the H dimension properly aligned.
+                # Since x is already [batch, H], broadcasting a [1, H] tensor works perfectly.
+                _eta_h_flat = _eta_h.squeeze(0) # [1, H]
+
+                # Compute σ_t = η * √((1-ā_{t-1})/(1-ā_t)) * √(1 - ā_t/ā_{t-1})
+                _sigma_sq = (_eta_h_flat ** 2) * ((1.0 - abar_prev) / (1.0 - abar).clamp(min=1e-8)) * (1.0 - abar / abar_prev.clamp(min=1e-8))
+                _sigma = torch.sqrt(_sigma_sq.clamp(min=0.0)) # [1, H]
+                
+                # Direction coefficient shrinks to maintain correct marginal
+                _dir_coeff = torch.sqrt((1.0 - abar_prev - _sigma_sq).clamp(min=0.0)) # [1, H]
+                
+                # Stochastic reverse step
+                _eps = torch.randn_like(x)
+                x = torch.sqrt(abar_prev).clamp(min=0.0) * x0_pred + _dir_coeff * noise_hat + _sigma * _eps
             else:
                 x = x0_pred
 

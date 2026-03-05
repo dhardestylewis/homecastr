@@ -54,6 +54,7 @@ export async function GET(
     const seriesKind = searchParams.get("seriesKind") || "forecast"
     const variantId = searchParams.get("variantId") || "__forecast__"
     const levelOverride = searchParams.get("level") || null
+    const schemaName = searchParams.get("schema") || "forecast_20260220_7f31c6e4"
 
     const rpcParams = {
         z,
@@ -75,7 +76,7 @@ export async function GET(
             const supabase = getSupabaseAdmin()
 
             const { data, error } = await supabase
-                .schema("forecast_20260220_7f31c6e4" as any)
+                .schema(schemaName as any)
                 .rpc("mvt_choropleth_forecast", rpcParams)
 
             if (error) {

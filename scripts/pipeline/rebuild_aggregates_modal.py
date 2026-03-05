@@ -28,16 +28,38 @@ AGG_LEVELS = [
     ("zcta",         "zcta5",            "metrics_zcta_forecast",         "metrics_zcta_history"),
     ("tract",        "tract_geoid20",    "metrics_tract_forecast",        "metrics_tract_history"),
     ("tabblock",     "tabblock_geoid20", "metrics_tabblock_forecast",     "metrics_tabblock_history"),
+    ("zip3",         "zip3",             "metrics_zip3_forecast",         "metrics_zip3_history"),
 ]
 
 
-def _connect():
+def _connect(max_retries=100, initial_backoff=5.0):
     import psycopg2
-    conn = psycopg2.connect(os.environ["SUPABASE_DB_URL"])
-    conn.autocommit = True
-    cur = conn.cursor()
-    cur.execute("SET statement_timeout = 0")
-    return conn, cur
+    import time
+    
+    # Try direct port 5432 if it's the pooler URL
+    url = os.environ["SUPABASE_DB_URL"]
+    if "pooler.supabase.com" in url and "6543" in url:
+        url = url.replace(":6543/", ":5432/")
+    
+    for attempt in range(max_retries):
+        try:
+            conn = psycopg2.connect(url)
+            conn.autocommit = True
+            cur = conn.cursor()
+            cur.execute("SET statement_timeout = 0")
+            return conn, cur
+        except psycopg2.OperationalError as e:
+            if attempt == max_retries - 1:
+                raise
+            
+            # If we hit max connections, just wait and retry
+            msg = str(e).lower()
+            if "max client connections" in msg or "too many clients" in msg or "connection to server" in msg:
+                wait_time = min(60.0, initial_backoff * (1.5 ** attempt))
+                print(f"  [DB Wait] Pool full, waiting {wait_time:.1f}s before retry {attempt+1}/{max_retries}")
+                time.sleep(wait_time)
+            else:
+                raise
 
 
 def _table_exists(cur, schema: str, table: str) -> bool:
@@ -57,7 +79,7 @@ def _horizon_done(cur, schema: str, table: str, horizon: int) -> bool:
     return cur.fetchone() is not None
 
 
-@app.function(image=image, secrets=[supabase_secret], timeout=3600, memory=2048)
+@app.function(image=image, secrets=[supabase_secret], timeout=3600, memory=2048, concurrency_limit=1)
 def rebuild_forecast_level_horizon(
     level_name: str, geoid_col: str, table_name: str,
     horizon: int, outlier_filter: str, force: bool = False,
@@ -75,6 +97,10 @@ def rebuild_forecast_level_horizon(
         print(f"  [{level_name}] horizon {horizon:>2}m — already done, skipping")
         return {"level": level_name, "type": f"forecast_{horizon}m", "rows": 0, "status": "already_done"}
 
+    pl_geo_col = f"pl.{geoid_col}"
+    if geoid_col == "zip3":
+        pl_geo_col = "LEFT(pl.zcta5, 3)"
+
     t0 = time.time()
     cur.execute(f"""
         INSERT INTO {SCHEMA}.{table_name}
@@ -84,7 +110,7 @@ def rebuild_forecast_level_horizon(
          as_of_date, n_scenarios, is_backtest, series_kind,
          inserted_at, updated_at)
         SELECT
-            pl.{geoid_col}, mp.origin_year, mp.horizon_m, mp.forecast_year,
+            {pl_geo_col}, mp.origin_year, mp.horizon_m, mp.forecast_year,
             AVG(mp.value)::float8, AVG(mp.p10)::float8, AVG(mp.p25)::float8,
             AVG(mp.p50)::float8, AVG(mp.p75)::float8, AVG(mp.p90)::float8,
             COUNT(*)::int, MAX(mp.run_id), MAX(mp.backtest_id),
@@ -96,8 +122,8 @@ def rebuild_forecast_level_horizon(
           AND mp.variant_id = '__forecast__'
           AND mp.horizon_m = {horizon}
           {outlier_filter}
-          AND pl.{geoid_col} IS NOT NULL
-        GROUP BY pl.{geoid_col}, mp.origin_year, mp.horizon_m, mp.forecast_year
+          AND {pl_geo_col} IS NOT NULL
+        GROUP BY {pl_geo_col}, mp.origin_year, mp.horizon_m, mp.forecast_year
         ON CONFLICT ({geoid_col}, origin_year, horizon_m, series_kind, variant_id)
         DO UPDATE SET
             forecast_year  = EXCLUDED.forecast_year,
@@ -121,7 +147,7 @@ def rebuild_forecast_level_horizon(
     return {"level": level_name, "type": f"forecast_{horizon}m", "rows": cur.rowcount, "status": "done"}
 
 
-@app.function(image=image, secrets=[supabase_secret], timeout=3600, memory=2048)
+@app.function(image=image, secrets=[supabase_secret], timeout=3600, memory=2048, concurrency_limit=3)
 def rebuild_history_level(level_name: str, geoid_col: str, table_name: str, force: bool = False):
     """Rebuild history aggregates for one geo level. DELETE+INSERT per combo."""
     import time
@@ -162,6 +188,10 @@ def rebuild_history_level(level_name: str, geoid_col: str, table_name: str, forc
 
         t0 = time.time()
 
+        pl_geo_col = f"pl.{geoid_col}"
+        if geoid_col == "zip3":
+            pl_geo_col = "LEFT(pl.zcta5, 3)"
+
         cur.execute(f"""
             DELETE FROM {SCHEMA}.{table_name}
             WHERE series_kind = %s AND variant_id = %s
@@ -176,7 +206,7 @@ def rebuild_history_level(level_name: str, geoid_col: str, table_name: str, forc
              as_of_date, series_kind,
              inserted_at, updated_at)
             SELECT
-                pl.{geoid_col},
+                {pl_geo_col},
                 mh.year,
                 AVG(mh.value)::float8,
                 AVG(mh.p50)::float8,
@@ -192,8 +222,8 @@ def rebuild_history_level(level_name: str, geoid_col: str, table_name: str, forc
             JOIN public.parcel_ladder_v1 pl USING (acct)
             WHERE mh.series_kind = %s
               AND mh.variant_id = %s
-              AND pl.{geoid_col} IS NOT NULL
-            GROUP BY pl.{geoid_col}, mh.year
+              AND {pl_geo_col} IS NOT NULL
+            GROUP BY {pl_geo_col}, mh.year
         """, (variant_id, series_kind, series_kind, variant_id))
         elapsed = time.time() - t0
         total += cur.rowcount

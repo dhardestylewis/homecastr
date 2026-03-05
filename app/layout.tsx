@@ -63,10 +63,14 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <link href="https://assets.calendly.com/assets/external/widget.css" rel="stylesheet" />
+      </head>
       <body className={`font-sans antialiased overflow-hidden`} suppressHydrationWarning>
         {children}
         <DatadogRum />
         <Toaster />
+        <script src="https://assets.calendly.com/assets/external/widget.js" async />
       </body>
     </html>
   )

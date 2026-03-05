@@ -43,6 +43,9 @@ image = (
         "wandb",
         "scipy",
     )
+    # Mount local scripts so worldmodel.py + inference_pipeline.py always match
+    # the local codebase (prevents stale GCS code/ downloads)
+    .add_local_dir("scripts", remote_path="/scripts")
 )
 
 gcs_secret = modal.Secret.from_name("gcs-creds", required_keys=["GOOGLE_APPLICATION_CREDENTIALS_JSON"])
@@ -74,6 +77,7 @@ def run_inference_shard(
     shard_idx: int,
     n_shards: int,
     suite_id: str,
+    schema: str,
 ):
     """Run inference for a single shard of accounts on its own A100."""
     import time, glob as _glob, shutil
@@ -92,8 +96,10 @@ def run_inference_shard(
     bucket.blob(f"panel/jurisdiction={jurisdiction}/part.parquet").download_to_filename(panel_path)
     print(f"[{_ts()}] Downloaded panel: {os.path.getsize(panel_path) / 1e6:.1f} MB")
 
-    # ─── 2. Download worldmodel.py ───────────────────────────────────────────
-    wm_source = bucket.blob("code/worldmodel.py").download_as_text()
+    # ─── 2. Load worldmodel.py from local mount (matches training codebase) ──
+    with open("/scripts/inference/worldmodel.py", "r") as _f:
+        wm_source = _f.read()
+    print(f"[{_ts()}] Loaded worldmodel.py from local mount")
 
     # ─── 3. Get checkpoint (always copy from volume to pick up retrains) ─────
     ckpt_dir = f"/output/{jurisdiction}_v11"
@@ -105,6 +111,15 @@ def run_inference_shard(
             dst = os.path.join(ckpt_dir, os.path.basename(src))
             shutil.copy2(src, dst)
             print(f"[{_ts()}] Copied checkpoint: {os.path.basename(src)}")
+    # Also copy calibrator .pkl files from the volume (produced by sweep_stage1_calibration.py)
+    modal_calibs = _glob.glob(os.path.join(modal_ckpt_dir, "calibrators_*.pkl")) if os.path.isdir(modal_ckpt_dir) else []
+    # Also check the output volume path (sweep writes to /output/{jur}_v11/)
+    modal_calibs += _glob.glob(os.path.join(ckpt_dir, "calibrators_*.pkl"))
+    for src in modal_calibs:
+        dst = os.path.join(ckpt_dir, os.path.basename(src))
+        if src != dst:
+            shutil.copy2(src, dst)
+            print(f"[{_ts()}] Copied calibrator: {os.path.basename(src)}")
     # Fallback: GCS
     for blob in [b for b in bucket.list_blobs(prefix=f"checkpoints/{jurisdiction}/") if b.name.endswith(".pt")]:
         fname = blob.name.split("/")[-1]
@@ -112,13 +127,22 @@ def run_inference_shard(
         if not os.path.exists(local):
             blob.download_to_filename(local)
             print(f"[{_ts()}] Downloaded checkpoint from GCS: {fname}")
+    # GCS fallback for calibrator .pkl files
+    for blob in [b for b in bucket.list_blobs(prefix=f"checkpoints/{jurisdiction}/") if b.name.endswith(".pkl")]:
+        fname = blob.name.split("/")[-1]
+        local = os.path.join(ckpt_dir, fname)
+        if not os.path.exists(local):
+            blob.download_to_filename(local)
+            print(f"[{_ts()}] Downloaded calibrator from GCS: {fname}")
 
-    # ─── 4. Download inference_pipeline.py ───────────────────────────────────
-    inf_source = bucket.blob("code/inference_pipeline.py").download_as_text()
+    # ─── 4. Load inference_pipeline.py from local mount ──────────────────────
+    with open("/scripts/inference/inference_pipeline.py", "r") as _f:
+        inf_source = _f.read()
     inf_source = inf_source.replace(
         '/content/drive/MyDrive/data_backups/world_model_v10_2_fullpanel/live_inference_runs/',
         f'/output/{jurisdiction}_inference/'
     )
+    print(f"[{_ts()}] Loaded inference_pipeline.py from local mount")
 
     # ─── 5. Preprocess panel ─────────────────────────────────────────────────
     import polars as pl
@@ -217,7 +241,7 @@ def run_inference_shard(
         "OUT_DIR": ckpt_dir,
         "FORECAST_ORIGIN_YEAR": origin_year,
         "SUPABASE_DB_URL": os.environ.get("SUPABASE_DB_URL", ""),
-        "TARGET_SCHEMA": "forecast_20260220_7f31c6e4",
+        "TARGET_SCHEMA": schema,
         "CKPT_VARIANT_SUFFIX": "SF500K",
         "RUN_FULL_BACKTEST": False,
         "H": 6,
@@ -389,6 +413,7 @@ def main(
     n_shards: int = 6,
     resume_run_id: str = "",   # pass the run_id from a cancelled job to resume from last chunk
     suite_id_override: str = "",  # pass the suite_id from a cancelled job to reuse output dir
+    schema: str = "forecast_20260220_7f31c6e4",
 ):
     """Fan out inference across N parallel A100 containers.
 
@@ -428,7 +453,7 @@ def main(
     # Fan out via Modal starmap — all shards run in parallel
     t0 = time.time()
     inputs = [
-        (jurisdiction, origin, shard, run_id, i, n_shards, suite_id)
+        (jurisdiction, origin, shard, run_id, i, n_shards, suite_id, schema)
         for i, shard in enumerate(shards)
     ]
 

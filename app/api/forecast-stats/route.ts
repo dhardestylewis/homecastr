@@ -14,6 +14,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const originYear = parseInt(searchParams.get("originYear") || "2025")
     const horizonM = parseInt(searchParams.get("horizonM") || "12")
+    const schemaName = searchParams.get("schema") || "forecast_20260220_7f31c6e4"
 
     const supabase = getSupabaseAdmin()
 
@@ -21,7 +22,7 @@ export async function GET(request: Request) {
         // Query all p50 values at tract level for the given horizon
         // Tract is a good level: enough rows for statistics, fast enough to aggregate
         const { data, error } = await supabase
-            .schema("forecast_20260220_7f31c6e4" as any)
+            .schema(schemaName as any)
             .from("metrics_tract_forecast")
             .select("p50")
             .eq("origin_year", originYear)

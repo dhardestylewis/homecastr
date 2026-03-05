@@ -15,7 +15,7 @@ import { useToast } from "@/hooks/use-toast"
 import type { PropertyForecast } from "@/app/actions/property-forecast"
 import { TimeControls } from "@/components/time-controls"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { AlertCircle, Plus, Minus, RotateCcw, ArrowLeftRight, Copy, Terminal, Activity, MessageSquare, Mic } from "lucide-react"
+import { AlertCircle, Plus, Minus, RotateCcw, ArrowLeftRight, Copy, Terminal, Activity, MessageSquare, Mic, CalendarDays } from "lucide-react"
 import { geocodeAddress, reverseGeocode } from "@/app/actions/geocode"
 
 import { cellToLatLng, latLngToCell } from "h3-js"
@@ -27,6 +27,7 @@ import { ChatPanel, type MapAction } from "@/components/chat-panel"
 import { createTavusConversation } from "@/app/actions/tavus"
 import dynamic from "next/dynamic"
 import { HomecastrLogo } from "@/components/homecastr-logo"
+import { ContactModal } from "@/components/contact-modal"
 
 // Dynamic import with SSR disabled — daily-js needs browser APIs
 const TavusMiniWindow = dynamic(
@@ -46,6 +47,7 @@ function DashboardContent() {
   const [searchBarValue, setSearchBarValue] = useState<string>("")
   const [mobileSelectionMode, setMobileSelectionMode] = useState<'replace' | 'add' | 'range'>('replace')
   const [isChatOpen, setIsChatOpen] = useState(false)
+  const [isContactOpen, setIsContactOpen] = useState(false)
   const { toast } = useToast()
 
   // Tavus Homecastr state
@@ -760,6 +762,18 @@ function DashboardContent() {
               </div>
             </button>
           )}
+
+          {/* CTA: Request custom analysis — always visible */}
+          <button
+            onClick={() => setIsContactOpen(true)}
+            className="flex items-center gap-2.5 px-5 py-3 rounded-2xl glass-panel hover:bg-accent/50 text-foreground shadow-2xl transition-all duration-300 hover:scale-105 active:scale-95 border border-[hsl(var(--primary))]/30"
+          >
+            <CalendarDays size={22} className="text-[hsl(45,80%,45%)]" />
+            <div className="flex flex-col items-start">
+              <span className="text-xs font-semibold">Request custom analysis</span>
+              <span className="text-[10px] text-muted-foreground">Bulk forecasts, API, pilots</span>
+            </div>
+          </button>
         </div>
 
         {/* Homecastr Loading Indicator */}
@@ -792,6 +806,7 @@ function DashboardContent() {
 
       {/* Cinematic onboarding intro — first-visit only */}
       <OnboardingIntro />
+      <ContactModal isOpen={isContactOpen} onClose={() => setIsContactOpen(false)} />
     </div >
   )
 }
