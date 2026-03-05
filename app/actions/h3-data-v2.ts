@@ -49,11 +49,11 @@ export async function getH3DataV2(
 
         const b = bounds
             ? {
-                  minLat: asNum(bounds.minLat),
-                  maxLat: asNum(bounds.maxLat),
-                  minLng: asNum(bounds.minLng),
-                  maxLng: asNum(bounds.maxLng),
-              }
+                minLat: asNum(bounds.minLat),
+                maxLat: asNum(bounds.maxLat),
+                minLng: asNum(bounds.minLng),
+                maxLng: asNum(bounds.maxLng),
+            }
             : null
 
         /* ---------- 1. Grid (static across years) ---------- */
@@ -74,7 +74,11 @@ export async function getH3DataV2(
         const all_grid_rows: any[] = []
         let offset = 0
         const PAGE = 1000
-        const MAX = 30000
+        // Scale the row cap by resolution — viewport bounds do the real spatial culling.
+        // res 7-9: 30k cap is fine (AOI-wide fetch)
+        // res 10: up to ~10k cells in a typical viewport; 50k gives headroom
+        // res 11: viewport is very tight at this zoom; 50k is still safe
+        const MAX = res >= 10 ? 50000 : 30000
 
         while (true) {
             const { data: page, error } = await gridQuery.range(offset, offset + PAGE - 1)
@@ -90,7 +94,8 @@ export async function getH3DataV2(
         if (ids.length === 0) return []
 
         /* ---------- 2. Data (chunked) ---------- */
-        const CHUNK = 500
+        // CHUNK=1000 → at most ~50 parallel requests at res 10/11 (down from ~100 with CHUNK=500)
+        const CHUNK = 1000
         const chunks: string[][] = []
         for (let i = 0; i < ids.length; i += CHUNK) chunks.push(ids.slice(i, i + CHUNK))
 
@@ -104,8 +109,7 @@ export async function getH3DataV2(
                         .select("h3_id, property_count, opportunity, reliability, med_predicted_value")
                         .eq("forecast_year", year)
                         .eq("h3_res", res)
-                        .in("h3_id", idChunk)
-                        .range(0, 999),
+                        .in("h3_id", idChunk),
 
                     // hex_details has alert_pct and sample_accuracy
                     supabase
@@ -113,8 +117,7 @@ export async function getH3DataV2(
                         .select("h3_id, property_count, opportunity, reliability, sample_accuracy, alert_pct, predicted_value")
                         .eq("forecast_year", year)
                         .eq("h3_res", res)
-                        .in("h3_id", idChunk)
-                        .range(0, 999),
+                        .in("h3_id", idChunk),
                 ])
 
                 if (rowsRes.error) console.error("[v0] hex_rows chunk err:", rowsRes.error.message)

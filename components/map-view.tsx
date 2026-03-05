@@ -1599,7 +1599,21 @@ export function MapView({
         } else {
             // FAST LOOKUP
             const { lat, lng } = getLatLngFromCanvas(canvasX, canvasY)
-            const cellId = latLngToCell(lat, lng, h3Resolution)
+
+            // Try current resolution first, then fall back to coarser resolutions.
+            // This prevents the tooltip from silently failing when zoomed in beyond
+            // the maximum precomputed resolution (currently res 9).
+            let cellId = latLngToCell(lat, lng, h3Resolution)
+            if (!hexPropertyMap.current.has(cellId)) {
+                const fallbackResolutions = [9, 8, 7].filter(r => r < h3Resolution)
+                for (const r of fallbackResolutions) {
+                    const fallbackId = latLngToCell(lat, lng, r)
+                    if (hexPropertyMap.current.has(fallbackId)) {
+                        cellId = fallbackId
+                        break
+                    }
+                }
+            }
 
             // Check if this cell is in our data
             if (hexPropertyMap.current.has(cellId)) {
