@@ -89,9 +89,11 @@ function DashboardContent() {
   }, [currentYear, router])
 
   // Derive origin year from map viewport — same Harris County check as forecast-map.tsx
+  // HCAD temporarily disabled — using ACS-only (origin_year=2024) everywhere
   const [mapLng, mapLat] = mapState.center
-  const isHarrisCounty = mapLat >= 29.4 && mapLat <= 30.2 && mapLng >= -95.9 && mapLng <= -94.9
-  const pageOriginYear = isHarrisCounty ? 2025 : 2024
+  // const isHarrisCounty = mapLat >= 29.4 && mapLat <= 30.2 && mapLng >= -95.9 && mapLng <= -94.9
+  const isHarrisCounty = false // HCAD off — ACS only
+  const pageOriginYear = 2024 // ACS-only: always 2024
 
   // Tavus Homecastr state
   const [tavusConversationUrl, setTavusConversationUrl] = useState<string | null>(null)

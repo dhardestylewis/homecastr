@@ -550,13 +550,14 @@ export function ForecastMap({
 
     // Dynamic origin_year based on Viewport Spatial checks
     // HCAD (Harris County) boundary: ~29.4 to 30.2 Lat, -95.9 to -94.9 Lng
-    // If the map center is inside Harris County, we have 2025 data. Otherwise, ACS is 2024.
+    // HCAD temporarily disabled — using ACS-only (origin_year=2024) everywhere
     const [mapCenter, setMapCenter] = useState<{ lat: number, lng: number } | null>(null)
-    const isHarrisCounty = mapCenter
-        ? (mapCenter.lat >= 29.4 && mapCenter.lat <= 30.2 && mapCenter.lng >= -95.9 && mapCenter.lng <= -94.9)
-        : false // Default to false on initial load since default coordinates are Manhattan
+    // const isHarrisCounty = mapCenter
+    //     ? (mapCenter.lat >= 29.4 && mapCenter.lat <= 30.2 && mapCenter.lng >= -95.9 && mapCenter.lng <= -94.9)
+    //     : false
+    const isHarrisCounty = false // HCAD off — ACS only
 
-    const originYear = isHarrisCounty ? 2025 : 2024
+    const originYear = 2024 // ACS-only: always 2024
     const horizonM = (year - originYear) * 12
 
     // Student inference state: triggers outside Harris County at z≥13
