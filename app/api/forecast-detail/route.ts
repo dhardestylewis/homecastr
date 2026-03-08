@@ -197,19 +197,33 @@ export async function GET(request: Request) {
             }
         }
 
-        // Return structured payload
+        // Provide a legacy flattened fallback layout — ONLY forecast years (2026+, h>=24)
+        // so fan chart p50[0] = 2026 forecast, not 2024 ACS baseline
+        const primaryOy = forecastVariants[2025] || forecastVariants[2024]
+        const forecastOnly = primaryOy ? (() => {
+            const idxStart = primaryOy.years.findIndex((yr: number) => yr >= 2026)
+            if (idxStart < 0) return primaryOy
+            return {
+                years: primaryOy.years.slice(idxStart),
+                p10: primaryOy.p10.slice(idxStart),
+                p25: primaryOy.p25.slice(idxStart),
+                p50: primaryOy.p50.slice(idxStart),
+                p75: primaryOy.p75.slice(idxStart),
+                p90: primaryOy.p90.slice(idxStart),
+                y_med: primaryOy.y_med.slice(idxStart),
+            }
+        })() : null
+        const empty: number[] = []
         return NextResponse.json({
             historicalValues,
-            forecastVariants, // Contains {2024: {...bands}, 2025: {...bands}} arrays dynamically
-
-            // Provide a legacy flattened fallback layout using the latest year so un-migrated frontend components don't instantly crash
-            years: forecastVariants[2025]?.years || forecastVariants[2024]?.years || [],
-            p10: forecastVariants[2025]?.p10 || forecastVariants[2024]?.p10 || [],
-            p25: forecastVariants[2025]?.p25 || forecastVariants[2024]?.p25 || [],
-            p50: forecastVariants[2025]?.p50 || forecastVariants[2024]?.p50 || [],
-            p75: forecastVariants[2025]?.p75 || forecastVariants[2024]?.p75 || [],
-            p90: forecastVariants[2025]?.p90 || forecastVariants[2024]?.p90 || [],
-            y_med: forecastVariants[2025]?.y_med || forecastVariants[2024]?.y_med || [],
+            forecastVariants,
+            years: forecastOnly?.years || empty,
+            p10: forecastOnly?.p10 || empty,
+            p25: forecastOnly?.p25 || empty,
+            p50: forecastOnly?.p50 || empty,
+            p75: forecastOnly?.p75 || empty,
+            p90: forecastOnly?.p90 || empty,
+            y_med: forecastOnly?.y_med || empty,
         }, {
             headers: {
                 "Cache-Control": "public, max-age=3600",
