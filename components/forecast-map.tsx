@@ -805,7 +805,7 @@ export function ForecastMap({
     useEffect(() => {
         if (!isLoaded || !mapRef.current) return
         const map = mapRef.current
-        const _v = "6" // bump cache buster to force URL reload — zip3 geometry fix
+        const _v = "7" // bump: f_now baseline changed from h=12 to h=24 (2026)
 
         const updateSource = (id: string) => {
             const src = map.getSource(id) as maplibregl.VectorTileSource
