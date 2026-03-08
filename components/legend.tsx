@@ -24,11 +24,10 @@ export function Legend({ className, colorMode = "growth", onColorModeChange, yea
     "linear-gradient(to right, #3b82f6, #93c5fd 30%, #f8f8f8 50%, #f59e0b 70%, #ef4444)"
   )
   const horizonM = (year - originYear) * 12
-  const absHorizonM = Math.abs(horizonM)
 
   useEffect(() => {
-    if (colorMode !== "growth" || absHorizonM === 0) return
-    fetch(`/api/forecast-stats?mode=growth&originYear=${originYear}&horizonM=${absHorizonM}`)
+    if (colorMode !== "growth" || horizonM === 0) return
+    fetch(`/api/forecast-stats?mode=growth&originYear=${originYear}&horizonM=${horizonM}`)
       .then(r => r.ok ? r.json() : null)
       .then(json => {
         if (json?.levels?.tract) {
@@ -54,7 +53,7 @@ export function Legend({ className, colorMode = "growth", onColorModeChange, yea
         }
       })
       .catch(() => { /* keep defaults */ })
-  }, [colorMode, absHorizonM, originYear])
+  }, [colorMode, horizonM, originYear])
 
   return (
     <div className={cn("glass-panel rounded-lg p-3 space-y-1 text-xs", className)}>

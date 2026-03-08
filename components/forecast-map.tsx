@@ -833,12 +833,10 @@ export function ForecastMap({
 
     // Fetch growth stats when horizon changes
     useEffect(() => {
-        // Use abs(horizonM) — distribution spread is similar whether looking backward or forward
-        const absH = Math.abs(horizonM)
-        if (absH === 0 || absH === Math.abs(growthStatsFetchedHorizon.current ?? 0)) return
+        if (horizonM === 0 || horizonM === growthStatsFetchedHorizon.current) return
         growthStatsFetchedHorizon.current = horizonM
         const schemaParam = schema ? `&schema=${schema}` : ""
-        fetch(`/api/forecast-stats?mode=growth&originYear=${originYear}&horizonM=${absH}${schemaParam}`)
+        fetch(`/api/forecast-stats?mode=growth&originYear=${originYear}&horizonM=${horizonM}${schemaParam}`)
             .then(r => r.ok ? r.json() : null)
             .then(json => {
                 if (json?.levels) {

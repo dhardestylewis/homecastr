@@ -42,14 +42,29 @@ export async function GET(request: Request) {
 
             for (const level of levels) {
                 try {
-                    // Get p50 at requested horizon and at baseline (h=12)
+                    // For historical years (negative horizonM), we compare baseline (h=24, 2026)
+                    // against an earlier forecast horizon. The growth is inverted:
+                    //   tile SQL historical: growth = (f_now_h24 - h_past) / h_past
+                    //   stats approximation: growth = (p50_h24 - p50_hX) / p50_hX where X=abs(horizonM)
+                    const isHistorical = horizonM < 24 // anything before 2026 baseline
+                    const horizonQuery = Math.abs(horizonM)
+                    const baselineH = 24 // 2026 baseline
+
+                    // Don't compare same horizon to itself
+                    if (horizonQuery === baselineH) {
+                        // For year=2026 (presentYear), growth is 0 — skip
+                        result[level.name] = { count: 0, p5: 0, p10: 0, p25: 0, p50: 0, p75: 0, p90: 0, p95: 0, min: 0, max: 0 }
+                        continue
+                    }
+
+                    // Get p50 at requested horizon and at baseline (h=24)
                     const [horizonRes, baselineRes] = await Promise.all([
                         supabase
                             .schema(schemaName as any)
                             .from(level.table)
                             .select(`${level.key}, p50`)
                             .eq("origin_year", originYear)
-                            .eq("horizon_m", horizonM)
+                            .eq("horizon_m", horizonQuery)
                             .eq("series_kind", "forecast")
                             .not("p50", "is", null),
                         supabase
@@ -57,7 +72,7 @@ export async function GET(request: Request) {
                             .from(level.table)
                             .select(`${level.key}, p50`)
                             .eq("origin_year", originYear)
-                            .eq("horizon_m", 24) // 2026 baseline (origin 2024 + 24m)
+                            .eq("horizon_m", baselineH)
                             .eq("series_kind", "forecast")
                             .not("p50", "is", null),
                     ])
@@ -68,7 +83,11 @@ export async function GET(request: Request) {
                         continue
                     }
 
-                    // Build baseline lookup
+                    // Build lookup maps
+                    const horizonMap = new Map<string, number>()
+                    for (const row of (horizonRes.data || [])) {
+                        horizonMap.set((row as any)[level.key], row.p50)
+                    }
                     const baselineMap = new Map<string, number>()
                     for (const row of (baselineRes.data || [])) {
                         baselineMap.set((row as any)[level.key], row.p50)
@@ -76,11 +95,18 @@ export async function GET(request: Request) {
 
                     // Compute growth_pct for each feature
                     const growthValues: number[] = []
-                    for (const row of (horizonRes.data || [])) {
-                        const key = (row as any)[level.key]
-                        const baseline = baselineMap.get(key)
-                        if (baseline && baseline > 0 && row.p50) {
-                            const growth = ((row.p50 - baseline) / baseline) * 100
+                    // Use all keys from the horizon result
+                    for (const [key, hVal] of horizonMap) {
+                        const bVal = baselineMap.get(key)
+                        if (bVal && bVal > 0 && hVal && hVal > 0) {
+                            let growth: number
+                            if (isHistorical) {
+                                // Historical: how much did it grow FROM hVal TO bVal (2026)
+                                growth = ((bVal - hVal) / hVal) * 100
+                            } else {
+                                // Forecast: how much will it grow FROM bVal (2026) TO hVal
+                                growth = ((hVal - bVal) / bVal) * 100
+                            }
                             // Clip extreme outliers
                             if (growth >= -100 && growth <= 500) {
                                 growthValues.push(Math.round(growth * 10) / 10)
