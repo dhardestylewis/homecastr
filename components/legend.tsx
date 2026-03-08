@@ -18,8 +18,11 @@ interface LegendProps {
 }
 
 export function Legend({ className, colorMode = "growth", onColorModeChange, year = 2026, originYear = 2024 }: LegendProps) {
-  // Data-driven growth labels from API
+  // Data-driven growth labels + gradient stops from API
   const [growthLabels, setGrowthLabels] = useState<[string, string, string]>(["-20%", "0%", "+100%+"])
+  const [growthGradient, setGrowthGradient] = useState<string>(
+    "linear-gradient(to right, #3b82f6, #93c5fd 30%, #f8f8f8 50%, #f59e0b 70%, #ef4444)"
+  )
   const horizonM = (year - originYear) * 12
   const absHorizonM = Math.abs(horizonM)
 
@@ -39,13 +42,19 @@ export function Legend({ className, colorMode = "growth", onColorModeChange, yea
             fmt(s.p50),
             fmt(s.p95),
           ])
+          // Compute proportional CSS gradient stops matching map's interpolation
+          // Map uses: p5 → blue, p25 → light blue, p50 → white, p75 → amber, p95 → red
+          const range = s.p95 - s.p5
+          if (range > 0) {
+            const pct = (v: number) => Math.round(((v - s.p5) / range) * 100)
+            setGrowthGradient(
+              `linear-gradient(to right, #3b82f6 ${pct(s.p5)}%, #93c5fd ${pct(s.p25)}%, #f8f8f8 ${pct(s.p50)}%, #f59e0b ${pct(s.p75)}%, #ef4444 ${pct(s.p95)}%)`
+            )
+          }
         }
       })
       .catch(() => { /* keep defaults */ })
   }, [colorMode, absHorizonM, originYear])
-
-  // Growth gradient: same colors as buildFillColor ramp
-  const OPPORTUNITY_GRADIENT = "linear-gradient(to right, #3b82f6, #93c5fd 30%, #f8f8f8 50%, #f59e0b 70%, #ef4444)"
 
   return (
     <div className={cn("glass-panel rounded-lg p-3 space-y-1 text-xs", className)}>
@@ -100,7 +109,7 @@ export function Legend({ className, colorMode = "growth", onColorModeChange, yea
         <div className="flex flex-col gap-1">
           <div
             className="h-3 w-full rounded-sm"
-            style={{ background: colorMode === "value" ? VALUE_GRADIENT : OPPORTUNITY_GRADIENT }}
+            style={{ background: colorMode === "value" ? VALUE_GRADIENT : growthGradient }}
           />
           <div className="flex justify-between text-[9px] text-muted-foreground font-mono px-0.5">
             {colorMode === "value" ? (

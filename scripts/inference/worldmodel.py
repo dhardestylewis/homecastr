@@ -163,12 +163,13 @@ rng = np.random.default_rng(SEED)
 np.random.seed(SEED)
 torch.manual_seed(SEED)
 
-# Time contract
-MIN_YEAR = 2005
-MAX_YEAR = 2025
-SEAM_YEAR = 2025
-H = 5
-FULL_HIST_LEN = MAX_YEAR - MIN_YEAR + 1  # 21
+# Time contract — use globals().get() so train_modal.py can inject
+# jurisdiction-specific year ranges before exec'ing this file.
+MIN_YEAR = globals().get("MIN_YEAR", 2005)
+MAX_YEAR = globals().get("MAX_YEAR", 2025)
+SEAM_YEAR = globals().get("SEAM_YEAR", MAX_YEAR)
+H = globals().get("H", 5)
+FULL_HIST_LEN = MAX_YEAR - MIN_YEAR + 1
 
 EVAL_ORIGINS = [2021, 2022, 2023, 2024]
 FULL_HORIZON_ONLY = False
