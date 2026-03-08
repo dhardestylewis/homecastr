@@ -24,13 +24,12 @@ const fmtVal = (v: number) => {
 
 const fmtPct = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`
 
-// Display cap: values beyond ±100% are flagged for review
+// Display cap: values beyond ±100% shown as >+100%
 const DISPLAY_CAP = 100
 const fmtPctCapped = (v: number) => {
-    if (Math.abs(v) > DISPLAY_CAP) return `${v >= 0 ? ">" : "<"}${v >= 0 ? "+" : "-"}${DISPLAY_CAP}% ⚠️`
+    if (Math.abs(v) > DISPLAY_CAP) return `>${v >= 0 ? "+" : "-"}${DISPLAY_CAP}%`
     return fmtPct(v)
 }
-const isOutlier = (v: number | null) => v !== null && Math.abs(v) > DISPLAY_CAP
 
 export function SortableCountyTable({ rows, state }: { rows: CountyRow[]; state: string }) {
     const [sortKey, setSortKey] = useState<SortKey>("outlook")
@@ -127,7 +126,7 @@ export function SortableCountyTable({ rows, state }: { rows: CountyRow[]; state:
                                     {c.medianValue !== null ? fmtVal(c.medianValue) : "—"}
                                 </td>
                                 <td className={`text-right py-3 px-3 font-mono font-medium tabular-nums ${c.medianAppreciation !== null
-                                    ? isOutlier(c.medianAppreciation) ? "text-yellow-500/70" : c.medianAppreciation >= 0 ? "text-chart-high" : "text-chart-negative"
+                                    ? c.medianAppreciation >= 0 ? "text-chart-high" : "text-chart-negative"
                                     : "text-muted-foreground"
                                     }`}>
                                     {c.medianAppreciation !== null ? fmtPctCapped(c.medianAppreciation) : "—"}

@@ -26,12 +26,12 @@ const fmtVal = (v: number) => {
 
 const fmtPct = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`
 
+// Display cap: values beyond ±100% shown as >+100%
 const DISPLAY_CAP = 100
 const fmtPctCapped = (v: number) => {
-    if (Math.abs(v) > DISPLAY_CAP) return `${v >= 0 ? ">" : "<"}${v >= 0 ? "+" : "-"}${DISPLAY_CAP}% ⚠️`
+    if (Math.abs(v) > DISPLAY_CAP) return `>${v >= 0 ? "+" : "-"}${DISPLAY_CAP}%`
     return fmtPct(v)
 }
-const isOutlier = (v: number | null) => v !== null && Math.abs(v) > DISPLAY_CAP
 
 export function SortableStateTable({ rows }: { rows: StateRow[] }) {
     const [sortKey, setSortKey] = useState<SortKey>("outlook")
@@ -138,7 +138,7 @@ export function SortableStateTable({ rows }: { rows: StateRow[] }) {
                                     {s.medianValue !== null ? fmtVal(s.medianValue) : "—"}
                                 </td>
                                 <td className={`text-right py-3 px-3 font-mono font-medium tabular-nums ${s.medianAppreciation !== null
-                                    ? isOutlier(s.medianAppreciation) ? "text-yellow-500/70" : s.medianAppreciation >= 0 ? "text-chart-high" : "text-chart-negative"
+                                    ? s.medianAppreciation >= 0 ? "text-chart-high" : "text-chart-negative"
                                     : "text-muted-foreground"
                                     }`}>
                                     {s.medianAppreciation !== null ? fmtPctCapped(s.medianAppreciation) : "—"}

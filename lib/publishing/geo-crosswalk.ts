@@ -995,17 +995,86 @@ export async function getCitiesForState(
 
     if (data.length === 0) return []
 
-    // Group by county FIPS (first 5 digits)
-    const countyMap = new Map<string, number>()
+    // Group by county FIPS (first 5 digits), tracking sample tract IDs per county
+    const countyMap = new Map<string, { count: number; sampleTracts: string[] }>()
     for (const row of data as any[]) {
         const county = row.tract_geoid20.substring(0, 5)
-        countyMap.set(county, (countyMap.get(county) || 0) + 1)
+        const entry = countyMap.get(county) || { count: 0, sampleTracts: [] }
+        entry.count++
+        if (entry.sampleTracts.length < 5) entry.sampleTracts.push(row.tract_geoid20)
+        countyMap.set(county, entry)
     }
 
     const cities: { city: string; citySlug: string; countyFips: string; tractCount: number }[] = []
-    for (const [countyFips, count] of countyMap) {
-        const city = COUNTY_CITY[countyFips] || COUNTY_NAMES[countyFips] || `County ${countyFips}`
-        cities.push({ city, citySlug: slugify(city), countyFips, tractCount: count })
+
+    // Collect unresolved counties for batch DB lookup
+    const unresolved = new Map<string, string[]>() // countyFips -> sampleTracts
+    for (const [countyFips, { count, sampleTracts }] of countyMap) {
+        let city = COUNTY_CITY[countyFips] || COUNTY_NAMES[countyFips]
+
+        // Try ZCTA crosswalk first
+        if (!city) {
+            for (const tractId of sampleTracts) {
+                const zcta = TRACT_ZCTA[tractId]
+                if (zcta) {
+                    const placeName = ZIP_NAMES[zcta]
+                    if (placeName) { city = placeName; break }
+                }
+            }
+        }
+
+        if (city) {
+            cities.push({ city, citySlug: slugify(city), countyFips, tractCount: count })
+        } else {
+            unresolved.set(countyFips, sampleTracts)
+        }
+    }
+
+    // Batch DB fallback for still-unresolved counties
+    if (unresolved.size > 0) {
+        try {
+            const allSampleTracts = [...unresolved.values()].flat()
+            const CHUNK = 50
+            const dbResults = new Map<string, string>() // tractId -> name
+            for (let i = 0; i < allSampleTracts.length; i += CHUNK) {
+                const chunk = allSampleTracts.slice(i, i + CHUNK)
+                const { data: ladderRows } = await supabase
+                    .from("parcel_ladder_v1")
+                    .select("tract_geoid20, neighborhood_name, zcta5, city, county_name")
+                    .in("tract_geoid20", chunk)
+                    .limit(500)
+
+                if (ladderRows) {
+                    for (const row of ladderRows as any[]) {
+                        if (!dbResults.has(row.tract_geoid20)) {
+                            const name = row.county_name
+                                || row.city
+                                || row.neighborhood_name
+                                || (row.zcta5 && ZIP_NAMES[row.zcta5])
+                                || (row.zcta5 ? `ZIP ${row.zcta5}` : null)
+                            if (name) dbResults.set(row.tract_geoid20, name)
+                        }
+                    }
+                }
+            }
+
+            for (const [countyFips, sampleTracts] of unresolved) {
+                let city: string | undefined
+                for (const tractId of sampleTracts) {
+                    const name = dbResults.get(tractId)
+                    if (name) { city = name; break }
+                }
+                const { count } = countyMap.get(countyFips)!
+                if (!city) city = `County ${countyFips}`
+                cities.push({ city, citySlug: slugify(city), countyFips, tractCount: count })
+            }
+        } catch {
+            // DB unavailable — use raw FIPS as fallback
+            for (const [countyFips] of unresolved) {
+                const { count } = countyMap.get(countyFips)!
+                cities.push({ city: `County ${countyFips}`, citySlug: `county-${countyFips}`, countyFips, tractCount: count })
+            }
+        }
     }
 
     return cities.sort((a, b) => b.tractCount - a.tractCount)
