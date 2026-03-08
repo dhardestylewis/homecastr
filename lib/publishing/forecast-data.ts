@@ -1,4 +1,5 @@
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
+import { withRedisCache } from "@/lib/redis"
 
 const SCHEMA = process.env.FORECAST_SCHEMA || "forecast_queue"
 
@@ -64,117 +65,121 @@ export async function fetchForecastPageData(
     originYear = 2025,
     schema = SCHEMA
 ): Promise<ForecastPageData | null> {
-    const supabase = getSupabaseAdmin()
+    return withRedisCache(`forecast_page:${tractGeoid}:${originYear}:${schema}`, async () => {
+        const supabase = getSupabaseAdmin()
 
-    // --- 1. Fetch all forecast horizons ---
-    let { data: forecastData, error } = await supabase
-        .schema(schema as any)
-        .from("metrics_tract_forecast")
-        .select("horizon_m, p10, p25, p50, p75, p90, origin_year")
-        .eq("tract_geoid20", tractGeoid)
-        .eq("origin_year", originYear)
-        .eq("series_kind", "forecast")
-        .order("horizon_m", { ascending: true })
-
-    // Fallback origin year
-    if (!error && (!forecastData || forecastData.length === 0)) {
-        const fallback = originYear === 2025 ? 2024 : 2025
-        const fb = await supabase
+        // --- 1. Fetch all forecast horizons ---
+        let { data: forecastData, error } = await supabase
             .schema(schema as any)
             .from("metrics_tract_forecast")
             .select("horizon_m, p10, p25, p50, p75, p90, origin_year")
             .eq("tract_geoid20", tractGeoid)
-            .eq("origin_year", fallback)
+            .eq("origin_year", originYear)
             .eq("series_kind", "forecast")
             .order("horizon_m", { ascending: true })
-        if (!fb.error && fb.data && fb.data.length > 0) {
-            forecastData = fb.data
+
+        // Fallback origin year
+        if (!error && (!forecastData || forecastData.length === 0)) {
+            const fallback = originYear === 2025 ? 2024 : 2025
+            const fb = await supabase
+                .schema(schema as any)
+                .from("metrics_tract_forecast")
+                .select("horizon_m, p10, p25, p50, p75, p90, origin_year")
+                .eq("tract_geoid20", tractGeoid)
+                .eq("origin_year", fallback)
+                .eq("series_kind", "forecast")
+                .order("horizon_m", { ascending: true })
+            if (!fb.error && fb.data && fb.data.length > 0) {
+                forecastData = fb.data
+            }
         }
-    }
 
-    if (error || !forecastData || forecastData.length === 0) return null
+        if (error || !forecastData || forecastData.length === 0) return null
 
-    const effectiveOrigin = (forecastData[0] as any).origin_year as number
-    const baseRow = forecastData.find((r: any) => r.horizon_m === 12)
-    const baselineP50 = (baseRow as any)?.p50 || (forecastData[0] as any).p50 || 1
+        const effectiveOrigin = (forecastData[0] as any).origin_year as number
+        const baseRow = forecastData.find((r: any) => r.horizon_m === 12)
+        const baselineP50 = (baseRow as any)?.p50 || (forecastData[0] as any).p50 || 1
 
-    const horizons: ForecastHorizon[] = forecastData.map((r: any) => ({
-        horizon_m: r.horizon_m,
-        forecastYear: effectiveOrigin + r.horizon_m / 12,
-        p10: r.p10 || 0,
-        p25: r.p25 || 0,
-        p50: r.p50 || 0,
-        p75: r.p75 || 0,
-        p90: r.p90 || 0,
-        spread: (r.p90 || 0) - (r.p10 || 0),
-        appreciation: baselineP50 > 0 ? (((r.p50 || 0) / baselineP50) - 1) * 100 : 0,
-    }))
+        const horizons: ForecastHorizon[] = forecastData.map((r: any) => ({
+            horizon_m: r.horizon_m,
+            forecastYear: effectiveOrigin + r.horizon_m / 12,
+            p10: r.p10 || 0,
+            p25: r.p25 || 0,
+            p50: r.p50 || 0,
+            p75: r.p75 || 0,
+            p90: r.p90 || 0,
+            spread: (r.p90 || 0) - (r.p10 || 0),
+            appreciation: baselineP50 > 0 ? (((r.p50 || 0) / baselineP50) - 1) * 100 : 0,
+        }))
 
-    // --- 2. Fetch history ---
-    const { data: histData } = await supabase
-        .schema(schema as any)
-        .from("metrics_tract_history")
-        .select("year, value, p50")
-        .eq("tract_geoid20", tractGeoid)
-        .gte("year", 2015)
-        .lte("year", 2025)
-        .order("year", { ascending: true })
+        // Fire history and rankings in parallel
+        const historyPromise = supabase
+            .schema(schema as any)
+            .from("metrics_tract_history")
+            .select("year, value, p50")
+            .eq("tract_geoid20", tractGeoid)
+            .gte("year", 2015)
+            .lte("year", 2025)
+            .order("year", { ascending: true })
 
-    const history: HistoryPoint[] = (histData || []).map((r: any) => ({
-        year: r.year,
-        value: r.p50 ?? r.value ?? 0,
-    }))
+        const rankingsPromise = computeRankings(
+            tractGeoid, effectiveOrigin, schema, supabase
+        )
 
-    // --- 3. Fetch comparables (same county first, widen to state if sparse) ---
-    const countyFips = tractGeoid.substring(0, 5)
-    const stateFips = tractGeoid.substring(0, 2)
+        // --- 3. Fetch comparables (same county first, widen to state if sparse) ---
+        const countyFips = tractGeoid.substring(0, 5)
+        const stateFips = tractGeoid.substring(0, 2)
 
-    let { data: countyTracts } = await supabase
-        .schema(schema as any)
-        .from("metrics_tract_forecast")
-        .select("tract_geoid20, p10, p50, p75, p90, horizon_m")
-        .like("tract_geoid20", `${countyFips}%`)
-        .eq("origin_year", effectiveOrigin)
-        .eq("series_kind", "forecast")
-        .in("horizon_m", [12, 60])
-        .not("p50", "is", null)
-
-    // Fallback: if county returns no comparable tracts, widen to state
-    if (!countyTracts || countyTracts.length === 0) {
-        const { data: stateTracts } = await supabase
+        let { data: countyTracts } = await supabase
             .schema(schema as any)
             .from("metrics_tract_forecast")
             .select("tract_geoid20, p10, p50, p75, p90, horizon_m")
-            .like("tract_geoid20", `${stateFips}%`)
+            .like("tract_geoid20", `${countyFips}%`)
             .eq("origin_year", effectiveOrigin)
             .eq("series_kind", "forecast")
             .in("horizon_m", [12, 60])
             .not("p50", "is", null)
-            .limit(2000)
-        if (stateTracts && stateTracts.length > 0) {
-            countyTracts = stateTracts
+
+        // Fallback: if county returns no comparable tracts, widen to state
+        if (!countyTracts || countyTracts.length === 0) {
+            const { data: stateTracts } = await supabase
+                .schema(schema as any)
+                .from("metrics_tract_forecast")
+                .select("tract_geoid20, p10, p50, p75, p90, horizon_m")
+                .like("tract_geoid20", `${stateFips}%`)
+                .eq("origin_year", effectiveOrigin)
+                .eq("series_kind", "forecast")
+                .in("horizon_m", [12, 60])
+                .not("p50", "is", null)
+                .limit(2000)
+            if (stateTracts && stateTracts.length > 0) {
+                countyTracts = stateTracts
+            }
         }
-    }
 
-    const comparables = buildComparables(
-        tractGeoid, countyTracts || [], baselineP50
-    )
+        const comparables = buildComparables(
+            tractGeoid, countyTracts || [], baselineP50
+        )
 
-    // --- 4. Compute rankings ---
-    const rankings = await computeRankings(
-        tractGeoid, effectiveOrigin, schema, supabase
-    )
+        const [{ data: histData }, rankings] = await Promise.all([historyPromise, rankingsPromise])
 
-    // --- 5. Compute unique data tokens ---
-    const uniqueDataTokens = countUniqueTokens(horizons, history, comparables, rankings)
+        // --- 2. Process history ---
+        const history: HistoryPoint[] = (histData || []).map((r: any) => ({
+            year: r.year,
+            value: r.p50 ?? r.value ?? 0,
+        }))
 
-    return {
-        forecast: { originYear: effectiveOrigin, horizons, baselineP50 },
-        history,
-        comparables,
-        rankings,
-        uniqueDataTokens,
-    }
+        // --- 5. Compute unique data tokens ---
+        const uniqueDataTokens = countUniqueTokens(horizons, history, comparables, rankings)
+
+        return {
+            forecast: { originYear: effectiveOrigin, horizons, baselineP50 },
+            history,
+            comparables,
+            rankings,
+            uniqueDataTokens,
+        }
+    })
 }
 
 // ---------------------------------------------------------------------------

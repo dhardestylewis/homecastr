@@ -66,6 +66,7 @@ ckpt_vol = modal.Volume.from_name("properlytic-checkpoints", create_if_missing=T
 # panel that training used (prevents feature/year mismatches).
 _PANEL_OVERRIDES = {
     "nyc": "panel/jurisdiction=nyc/nyc_panel_h3.parquet",
+    "florida_dor": "panels/florida_dor_panel.parquet",
 }
 
 def _resolve_panel_gcs_path(jurisdiction: str, panel_gcs_path: str = "") -> str:
@@ -85,7 +86,7 @@ def _ts():
     image=image,
     secrets=[gcs_secret, supabase_secret, wandb_secret],
     gpu="A100",
-    timeout=7200,       # 2h max per shard (was 24h for whole job)
+    timeout=21600,      # 6h max per shard (bumped from 2h — HCAD/FL timeout at ~2h)
     memory=32768,
     volumes={"/output": output_vol, "/checkpoints": ckpt_vol},
 )

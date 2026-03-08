@@ -10,6 +10,7 @@ import { InterpretationSection } from "@/components/publishing/InterpretationSec
 import { ComparablesTable } from "@/components/publishing/ComparablesTable"
 import { HistoryForecastChart } from "@/components/publishing/HistoryForecastChart"
 import { MethodCaveat } from "@/components/publishing/MethodCaveat"
+import { RequestAnalysisModal } from "@/components/request-analysis-modal"
 import Link from "next/link"
 
 // ISR: revalidate every hour so pages auto-update when ACS forecasts change
@@ -80,8 +81,21 @@ export default async function NeighborhoodForecastPage({ params, searchParams }:
     console.log(`[forecast-page] data for ${tractGeoid}: exists=${!!data} tokens=${data?.uniqueDataTokens}`)
     if (!data) notFound()
 
-    // Build JSON-LD structured data
+    // Filter out extreme outliers, matching the city hub page criteria
     const h5 = data.forecast.horizons.find(h => h.horizon_m === 60)
+    let isOutlier = false
+    if (
+        h5 &&
+        (h5.appreciation > 100 ||
+            h5.appreciation <= -95 ||
+            data.forecast.baselineP50 < 20_000 ||
+            data.forecast.baselineP50 >= 5_000_000)
+    ) {
+        console.log(`[forecast-page] tract ${tractGeoid} is defined as an outlier: appreciation=${h5.appreciation.toFixed(1)}%, baselineP50=${data.forecast.baselineP50}`)
+        isOutlier = true
+    }
+
+    // Build JSON-LD structured data
     const jsonLd = {
         "@context": "https://schema.org",
         "@type": "FAQPage",
@@ -108,118 +122,121 @@ export default async function NeighborhoodForecastPage({ params, searchParams }:
     }
 
     return (
-        <div className="space-y-10">
-            {/* JSON-LD */}
-            <script
-                type="application/ld+json"
-                dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-            />
+        <div className="relative">
+            {isOutlier && <RequestAnalysisModal neighborhoodName={geo.neighborhoodName} />}
+            <div className={`space-y-10 ${isOutlier ? "pointer-events-none blur-sm select-none opacity-80 overflow-hidden max-h-screen" : ""}`}>
+                {/* JSON-LD */}
+                <script
+                    type="application/ld+json"
+                    dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+                />
 
-            {/* Breadcrumbs */}
-            <nav aria-label="Breadcrumb" className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
-                <Link href="/forecasts" className="hover:text-foreground transition-colors">Forecasts</Link>
-                <span>/</span>
-                <Link href={`/forecasts/${state}`} className="hover:text-foreground transition-colors">
-                    {geo.stateName}
-                </Link>
-                <span>/</span>
-                <Link href={`/forecasts/${state}/${city}`} className="hover:text-foreground transition-colors">
-                    {geo.city}
-                </Link>
-                <span>/</span>
-                <span className="text-foreground/70">{geo.neighborhoodName}</span>
-            </nav>
+                {/* Breadcrumbs */}
+                <nav aria-label="Breadcrumb" className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
+                    <Link href="/forecasts" className="hover:text-foreground transition-colors">Forecasts</Link>
+                    <span>/</span>
+                    <Link href={`/forecasts/${state}`} className="hover:text-foreground transition-colors">
+                        {geo.stateName}
+                    </Link>
+                    <span>/</span>
+                    <Link href={`/forecasts/${state}/${city}`} className="hover:text-foreground transition-colors">
+                        {geo.city}
+                    </Link>
+                    <span>/</span>
+                    <span className="text-foreground/70">{geo.neighborhoodName}</span>
+                </nav>
 
-            {/* Page title */}
-            <header className="space-y-3">
-                <h1 className="text-3xl font-bold tracking-tight sm:text-4xl text-foreground">
-                    {geo.neighborhoodName} Home Price Forecast
-                </h1>
-                <p className="text-base text-muted-foreground">
-                    {geo.city}, {geo.stateAbbr} · {data.forecast.originYear}–{data.forecast.originYear + 5} outlook · Census Tract {geo.tractGeoid}
-                </p>
-                <div className="flex items-center gap-3">
-                    {data.rankings.metroRank > 0 && (
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary border border-primary/20">
-                            #{data.rankings.metroRank} of {data.rankings.metroTotal} in metro
-                        </span>
-                    )}
-                    {data.rankings.nationalPercentile > 0 && (() => {
-                        const topPct = 100 - data.rankings.nationalPercentile
-                        const rounded = topPct <= 5 ? 5 : Math.ceil(topPct / 5) * 5
-                        return (
-                            <span className="inline-flex items-center gap-1.5 rounded-full bg-accent px-3 py-1 text-xs font-medium text-accent-foreground border border-border">
-                                Top {rounded}% nationally
+                {/* Page title */}
+                <header className="space-y-3">
+                    <h1 className="text-3xl font-bold tracking-tight sm:text-4xl text-foreground">
+                        {geo.neighborhoodName} Home Price Forecast
+                    </h1>
+                    <p className="text-base text-muted-foreground">
+                        {geo.city}, {geo.stateAbbr} · {data.forecast.originYear}–{data.forecast.originYear + 5} outlook · Census Tract {geo.tractGeoid}
+                    </p>
+                    <div className="flex items-center gap-3">
+                        {data.rankings.metroRank > 0 && data.rankings.metroTotal > 1 && (
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary border border-primary/20">
+                                #{data.rankings.metroRank} of {data.rankings.metroTotal} in metro
                             </span>
-                        )
-                    })()}
-                </div>
-            </header>
+                        )}
+                        {data.rankings.nationalPercentile > 0 && (() => {
+                            const topPct = 100 - data.rankings.nationalPercentile
+                            const rounded = topPct <= 5 ? 5 : Math.ceil(topPct / 5) * 5
+                            return (
+                                <span className="inline-flex items-center gap-1.5 rounded-full bg-accent px-3 py-1 text-xs font-medium text-accent-foreground border border-border">
+                                    Top {rounded}% nationally
+                                </span>
+                            )
+                        })()}
+                    </div>
+                </header>
 
-            {/* 1. Historical Trend & Forecast (visual first) */}
-            <HistoryForecastChart
-                history={data.history}
-                horizons={data.forecast.horizons}
-                originYear={data.forecast.originYear}
-            />
+                {/* 1. Historical Trend & Forecast (visual first) */}
+                <HistoryForecastChart
+                    history={data.history}
+                    horizons={data.forecast.horizons}
+                    originYear={data.forecast.originYear}
+                />
 
-            {/* 2. Forecast Summary */}
-            <ForecastSummaryCard
-                horizons={data.forecast.horizons}
-                baselineP50={data.forecast.baselineP50}
-                neighborhoodName={geo.neighborhoodName}
-            />
+                {/* 2. Forecast Summary */}
+                <ForecastSummaryCard
+                    horizons={data.forecast.horizons}
+                    baselineP50={data.forecast.baselineP50}
+                    neighborhoodName={geo.neighborhoodName}
+                />
 
-            {/* 3. Interpretation */}
-            <InterpretationSection
-                horizons={data.forecast.horizons}
-                neighborhoodName={geo.neighborhoodName}
-                city={geo.city}
-            />
+                {/* 3. Interpretation */}
+                <InterpretationSection
+                    horizons={data.forecast.horizons}
+                    neighborhoodName={geo.neighborhoodName}
+                    city={geo.city}
+                />
 
-            {/* 4. Uncertainty Band */}
-            <UncertaintyBand horizons={data.forecast.horizons} />
+                {/* 4. Uncertainty Band */}
+                <UncertaintyBand horizons={data.forecast.horizons} />
 
-            {/* 5. Comparable Alternatives */}
-            <ComparablesTable
-                similar={data.comparables.similar}
-                higherUpside={data.comparables.higherUpside}
-                lowerRisk={data.comparables.lowerRisk}
-                currentTractGeoid={tractGeoid}
-                stateSlug={state}
-                citySlug={city}
-            />
+                {/* 5. Comparable Alternatives */}
+                <ComparablesTable
+                    similar={data.comparables.similar}
+                    higherUpside={data.comparables.higherUpside}
+                    lowerRisk={data.comparables.lowerRisk}
+                    currentTractGeoid={tractGeoid}
+                    stateSlug={state}
+                    citySlug={city}
+                />
 
-            {/* 6. Method / Caveat */}
-            <MethodCaveat
-                schemaVersion={SCHEMA}
-                originYear={data.forecast.originYear}
-            />
+                {/* 6. Method / Caveat */}
+                <MethodCaveat
+                    schemaVersion={SCHEMA}
+                    originYear={data.forecast.originYear}
+                />
 
-            {/* Internal linking */}
-            <nav className="glass-panel rounded-xl p-5 space-y-3">
-                <h2 className="text-sm font-medium text-muted-foreground">Explore More Forecasts</h2>
-                <div className="flex flex-wrap gap-2">
-                    <Link
-                        href={`/forecasts/${state}/${city}`}
-                        className="text-xs px-3 py-1.5 rounded-lg bg-secondary hover:bg-accent text-muted-foreground hover:text-foreground border border-border transition-all"
-                    >
-                        All {geo.city} neighborhoods →
-                    </Link>
-                    <Link
-                        href={`/forecasts/${state}`}
-                        className="text-xs px-3 py-1.5 rounded-lg bg-secondary hover:bg-accent text-muted-foreground hover:text-foreground border border-border transition-all"
-                    >
-                        All {geo.stateName} cities →
-                    </Link>
-                    <Link
-                        href="/"
-                        className="text-xs px-3 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 transition-all"
-                    >
-                        Explore interactive map →
-                    </Link>
-                </div>
-            </nav>
+                {/* Internal linking */}
+                <nav className="glass-panel rounded-xl p-5 space-y-3">
+                    <h2 className="text-sm font-medium text-muted-foreground">Explore More Forecasts</h2>
+                    <div className="flex flex-wrap gap-2">
+                        <Link
+                            href={`/forecasts/${state}/${city}`}
+                            className="text-xs px-3 py-1.5 rounded-lg bg-secondary hover:bg-accent text-muted-foreground hover:text-foreground border border-border transition-all"
+                        >
+                            All {geo.city} neighborhoods →
+                        </Link>
+                        <Link
+                            href={`/forecasts/${state}`}
+                            className="text-xs px-3 py-1.5 rounded-lg bg-secondary hover:bg-accent text-muted-foreground hover:text-foreground border border-border transition-all"
+                        >
+                            All {geo.stateName} cities →
+                        </Link>
+                        <Link
+                            href="/"
+                            className="text-xs px-3 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 transition-all"
+                        >
+                            Explore interactive map →
+                        </Link>
+                    </div>
+                </nav>
+            </div>
         </div>
     )
 }

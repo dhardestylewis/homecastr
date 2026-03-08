@@ -836,61 +836,84 @@ export async function resolveSlugToTract(
         return data?.tract_geoid20 || null
     }
 
+    // Fast path: if neighborhoodSlug contains "-tr-", extract the tract suffix directly
+    if (neighborhoodSlug.includes("-tr-")) {
+        const parts = neighborhoodSlug.split("-tr-")
+        const tractSuffix = parts[parts.length - 1]
+        if (countyEntry) {
+            const exactGeoid = `${countyEntry[0]}${tractSuffix}`
+            const supabase = getSupabaseAdmin()
+            const { data: exactMatch } = await supabase
+                .schema(schema as any)
+                .from("metrics_tract_forecast")
+                .select("tract_geoid20")
+                .eq("tract_geoid20", exactGeoid)
+                .limit(1)
+                .maybeSingle()
+            if (exactMatch) return exactMatch.tract_geoid20
+        }
+    }
+
     // Human-readable slug: rebuild the slug→tract mapping from enrichment
     // This mirrors the exact logic in the city hub page
     if (countyEntry) {
-        const supabase = getSupabaseAdmin()
-        const { data: allTracts } = await supabase
-            .schema(schema as any)
-            .from("metrics_tract_forecast")
-            .select("tract_geoid20")
-            .like("tract_geoid20", `${countyEntry[0]}%`)
-            .eq("horizon_m", 12)
-            .eq("series_kind", "forecast")
-            .not("p50", "is", null)
+        const mapping = await withRedisCache(`resolve_slug:${countyEntry[0]}:${schema}`, async () => {
+            const supabase = getSupabaseAdmin()
+            const { data: allTracts } = await supabase
+                .schema(schema as any)
+                .from("metrics_tract_forecast")
+                .select("tract_geoid20")
+                .gte("tract_geoid20", countyEntry[0])
+                .lt("tract_geoid20", countyEntry[0] + "z")
+                .eq("horizon_m", 12)
+                .eq("series_kind", "forecast")
+                .not("p50", "is", null)
 
-        if (!allTracts) return null
+            const slugToTract: [string, string][] = []
+            if (!allTracts) return slugToTract
 
-        const uniqueIds = [...new Set(allTracts.map((d: any) => d.tract_geoid20))]
-        const enriched = await batchEnrichTracts(uniqueIds)
+            const uniqueIds = [...new Set(allTracts.map((d: any) => d.tract_geoid20))]
+            const enriched = await batchEnrichTracts(uniqueIds)
 
-        // Build slug map with ZIP-based disambiguation (mirrors city hub page logic)
-        const nameFreq = new Map<string, number>()
-        const nameGroups = new Map<string, { tractId: string; name: string; zcta5: string }[]>()
-        for (const tractId of uniqueIds) {
-            const e = enriched.get(tractId)
-            const name = e?.name || `Tract ${tractId.substring(5)}`
-            const zcta5 = e?.zcta5 || ''
-            nameFreq.set(name, (nameFreq.get(name) || 0) + 1)
-            if (!nameGroups.has(name)) nameGroups.set(name, [])
-            nameGroups.get(name)!.push({ tractId, name, zcta5 })
-        }
+            // Build slug map with ZIP-based disambiguation (mirrors city hub page logic)
+            const nameFreq = new Map<string, number>()
+            const nameGroups = new Map<string, { tractId: string; name: string; zcta5: string }[]>()
+            for (const tractId of uniqueIds) {
+                const e = enriched.get(tractId)
+                const name = e?.name || `Tract ${tractId.substring(5)}`
+                const zcta5 = e?.zcta5 || ''
+                nameFreq.set(name, (nameFreq.get(name) || 0) + 1)
+                if (!nameGroups.has(name)) nameGroups.set(name, [])
+                nameGroups.get(name)!.push({ tractId, name, zcta5 })
+            }
 
-        const slugToTract = new Map<string, string>()
+            for (const tractId of uniqueIds) {
+                const e = enriched.get(tractId)
+                const name = e?.name || `Tract ${tractId.substring(5)}`
+                const baseSlug = slugify(name)
+                const total = nameFreq.get(name) || 1
+                const zip = e?.zcta5 || ''
 
-        for (const tractId of uniqueIds) {
-            const e = enriched.get(tractId)
-            const name = e?.name || `Tract ${tractId.substring(5)}`
-            const baseSlug = slugify(name)
-            const total = nameFreq.get(name) || 1
-            const zip = e?.zcta5 || ''
-
-            if (total === 1) {
-                slugToTract.set(baseSlug, tractId)
-            } else {
-                const group = nameGroups.get(name) || []
-                const zipFreq = group.filter(g => g.zcta5 === zip).length
-
-                if (zip && zipFreq === 1) {
-                    slugToTract.set(`${baseSlug}-${zip}`, tractId)
+                if (total === 1) {
+                    slugToTract.push([baseSlug, tractId])
                 } else {
-                    const tractSuffix = tractId.substring(5)
-                    slugToTract.set(`${baseSlug}-tr-${tractSuffix}`, tractId)
+                    const group = nameGroups.get(name) || []
+                    const zipFreq = group.filter(g => g.zcta5 === zip).length
+
+                    if (zip && zipFreq === 1) {
+                        slugToTract.push([`${baseSlug}-${zip}`, tractId])
+                    } else {
+                        const tractSuffix = tractId.substring(5)
+                        slugToTract.push([`${baseSlug}-tr-${tractSuffix}`, tractId])
+                    }
                 }
             }
-        }
 
-        return slugToTract.get(neighborhoodSlug) || null
+            return slugToTract
+        })
+
+        const slugMap = new Map<string, string>(mapping as [string, string][])
+        return slugMap.get(neighborhoodSlug) || null
     }
 
     return null
@@ -941,10 +964,12 @@ export async function getTractsForCity(
                 .schema(schema as any)
                 .from("metrics_tract_forecast")
                 .select("tract_geoid20")
-                .like("tract_geoid20", `${countyFipsPrefix}%`)
+                .gte("tract_geoid20", countyFipsPrefix)
+                .lt("tract_geoid20", countyFipsPrefix + "z")
                 .eq("horizon_m", 12)
                 .eq("series_kind", "forecast")
                 .not("p50", "is", null)
+                .order("tract_geoid20")
                 .range(offset, offset + PAGE - 1)
 
             if (!page || page.length === 0) break
@@ -985,10 +1010,12 @@ export async function getCitiesForState(
                 .schema(schema as any)
                 .from("metrics_tract_forecast")
                 .select("tract_geoid20")
-                .like("tract_geoid20", `${stateFips}%`)
+                .gte("tract_geoid20", stateFips)
+                .lt("tract_geoid20", stateFips + "z")
                 .eq("horizon_m", 12)
                 .eq("series_kind", "forecast")
                 .not("p50", "is", null)
+                .order("tract_geoid20")
                 .range(offset, offset + PAGE - 1)
 
             if (!page || page.length === 0) break
@@ -1100,11 +1127,13 @@ export async function getStatesWithData(
         const states: { stateName: string; stateAbbr: string; stateSlug: string }[] = []
 
         for (const [fips, info] of Object.entries(STATE_FIPS)) {
+            const nextFips = String(Number(fips) + 1).padStart(2, "0")
             const { count } = await supabase
                 .schema(schema as any)
                 .from("metrics_tract_forecast")
                 .select("tract_geoid20", { count: "exact", head: true })
-                .like("tract_geoid20", `${fips}%`)
+                .gte("tract_geoid20", fips)
+                .lt("tract_geoid20", nextFips)
                 .eq("horizon_m", 12)
                 .eq("series_kind", "forecast")
                 .not("p50", "is", null)

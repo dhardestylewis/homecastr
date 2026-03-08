@@ -26,8 +26,7 @@ const SLUG_TO_FIPS: Record<string, string> = {
 }
 
 /**
- * Paginated Supabase fetch — bypasses the default 1000-row server limit
- * by using .range() to fetch in chunks.
+ * Paginated Supabase fetch using efficient range queries (.gte/.lt).
  */
 async function fetchAllRows(
     queryBuilder: () => any,
@@ -48,66 +47,70 @@ async function fetchAllRows(
 }
 
 /**
- * Get county counts + neighborhood counts per state using paginated queries.
+ * Compute state-level outlook.
+ * Tries RPC first; falls back to client-side range queries (.gte/.lt)
+ * which are efficient on indexed tract_geoid20 columns.
  */
-async function getStateCounts(stateFips: string) {
-    return withRedisCache(`state_counts:${stateFips}:${SCHEMA}`, async () => {
+async function getStateOutlooksFast(stateFips: string) {
+    return withRedisCache(`state_outlooks_v2:${stateFips}:${SCHEMA}`, async () => {
         const supabase = getSupabaseAdmin()
 
-        const rows = await fetchAllRows(() =>
-            supabase
-                .schema(SCHEMA as any)
-                .from("metrics_tract_forecast")
-                .select("tract_geoid20")
-                .like("tract_geoid20", `${stateFips}%`)
-                .eq("horizon_m", 12)
-                .eq("series_kind", "forecast")
-                .not("p50", "is", null)
-        )
+        // --- Try RPC first ---
+        try {
+            const { data, error } = await supabase.rpc('get_state_outlooks', {
+                target_schema: SCHEMA,
+                state_fips: stateFips
+            })
+            if (!error && data && data.length > 0) {
+                const row = data[0]
+                return {
+                    countyCount: Number(row.county_count || 0),
+                    neighborhoodCount: Number(row.neighborhood_count || 0),
+                    medianValue: row.median_value !== null ? Number(row.median_value) : null,
+                    medianAppreciation: row.median_appreciation !== null ? Number(row.median_appreciation) : null,
+                    highestUpside: row.highest_upside !== null ? Number(row.highest_upside) : null,
+                }
+            }
+        } catch { /* fall through to client-side */ }
 
-        // Group by county (first 5 digits)
-        const counties = new Set<string>()
-        const tracts = new Set<string>()
-        for (const row of rows) {
-            counties.add(row.tract_geoid20.substring(0, 5))
-            tracts.add(row.tract_geoid20)
-        }
+        // --- Fallback: client-side range queries ---
+        // Use .gte/.lt (index-friendly) instead of .like() (full scan)
+        const nextFips = String(Number(stateFips) + 1).padStart(2, "0")
 
-        return { countyCount: counties.size, neighborhoodCount: tracts.size }
-    })
-}
-
-/**
- * Compute state-level outlook by fetching h12 and h60 data separately
- * (avoids mixed-horizon limit issues).
- */
-async function getStateOutlook(stateFips: string) {
-    return withRedisCache(`state_outlook:${stateFips}:${SCHEMA}`, async () => {
-        const supabase = getSupabaseAdmin()
-
-        // Fetch h12 and h60 separately so limit doesn't mix them up
         const [h12Rows, h60Rows] = await Promise.all([
             fetchAllRows(() =>
                 supabase
                     .schema(SCHEMA as any)
                     .from("metrics_tract_forecast")
                     .select("tract_geoid20, p50")
-                    .like("tract_geoid20", `${stateFips}%`)
+                    .gte("tract_geoid20", stateFips)
+                    .lt("tract_geoid20", nextFips)
                     .eq("horizon_m", 12)
                     .eq("series_kind", "forecast")
                     .not("p50", "is", null)
+                    .order("tract_geoid20")
             ),
             fetchAllRows(() =>
                 supabase
                     .schema(SCHEMA as any)
                     .from("metrics_tract_forecast")
                     .select("tract_geoid20, p50")
-                    .like("tract_geoid20", `${stateFips}%`)
+                    .gte("tract_geoid20", stateFips)
+                    .lt("tract_geoid20", nextFips)
                     .eq("horizon_m", 60)
                     .eq("series_kind", "forecast")
                     .not("p50", "is", null)
+                    .order("tract_geoid20")
             ),
         ])
+
+        // County & neighborhood counts from h12
+        const counties = new Set<string>()
+        const tracts = new Set<string>()
+        for (const row of h12Rows) {
+            counties.add(row.tract_geoid20.substring(0, 5))
+            tracts.add(row.tract_geoid20)
+        }
 
         if (h12Rows.length === 0) return null
 
@@ -117,33 +120,40 @@ async function getStateOutlook(stateFips: string) {
         const h60Map = new Map<string, number>()
         for (const row of h60Rows) h60Map.set(row.tract_geoid20, row.p50)
 
-        // Compute per-tract appreciation (filter out low-value outliers)
+        // Compute per-tract appreciation
         const appreciations: number[] = []
         const values: number[] = []
         for (const [tractId, h12] of h12Map) {
             const h60 = h60Map.get(tractId)
-            // Min $20K filters out vacant/institutional tracts that produce absurd %
             if (h12 >= 20_000 && h60 && h12 < 5_000_000) {
                 const appr = ((h60 - h12) / h12) * 100
-                if (appr > -95) {  // p95 display handles upper outliers
+                if (appr > -95) {
                     appreciations.push(appr)
                     values.push(h12)
                 }
             }
         }
 
-        if (appreciations.length === 0) return null
+        if (appreciations.length === 0) {
+            return {
+                countyCount: counties.size,
+                neighborhoodCount: tracts.size,
+                medianValue: null,
+                medianAppreciation: null,
+                highestUpside: null,
+            }
+        }
 
         appreciations.sort((a, b) => a - b)
         values.sort((a, b) => a - b)
-
-        // Use 95th percentile for "top upside" instead of raw max
         const p99Idx = Math.floor(appreciations.length * 0.99)
 
         return {
+            countyCount: counties.size,
+            neighborhoodCount: tracts.size,
+            medianValue: values[Math.floor(values.length / 2)],
             medianAppreciation: appreciations[Math.floor(appreciations.length / 2)],
             highestUpside: appreciations[p99Idx],
-            medianValue: values[Math.floor(values.length / 2)],
         }
     })
 }
@@ -162,14 +172,12 @@ export default async function ForecastsIndexPage() {
         const results = await Promise.all(
             batch.map(async (s) => {
                 const fips = SLUG_TO_FIPS[s.stateSlug] || "00"
-                const [counts, outlook] = await Promise.all([
-                    getStateCounts(fips),
-                    getStateOutlook(fips),
-                ])
+                const outlook = await getStateOutlooksFast(fips)
+
                 return {
                     ...s,
-                    countyCount: counts.countyCount,
-                    neighborhoodCount: counts.neighborhoodCount,
+                    countyCount: outlook?.countyCount ?? 0,
+                    neighborhoodCount: outlook?.neighborhoodCount ?? 0,
                     medianValue: outlook?.medianValue ?? null,
                     medianAppreciation: outlook?.medianAppreciation ?? null,
                     highestUpside: outlook?.highestUpside ?? null,

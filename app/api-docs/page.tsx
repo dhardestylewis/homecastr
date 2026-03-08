@@ -45,7 +45,7 @@ export default function ApiDocsPage() {
     }
 
     return (
-        <div className="min-h-screen bg-background text-foreground font-sans selection:bg-primary/20">
+        <div className="h-screen overflow-auto bg-background text-foreground font-sans selection:bg-primary/20">
             {/* Header / Nav */}
             <header className="border-b border-border/40 bg-background/80 backdrop-blur-md sticky top-0 z-50">
                 <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">

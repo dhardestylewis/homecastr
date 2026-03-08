@@ -13,7 +13,7 @@ app = modal.App("txgio-panel-builder")
 image = (
     modal.Image.debian_slim(python_version="3.11")
     .apt_install("gdal-bin", "libgdal-dev")
-    .pip_install("google-cloud-storage", "pandas", "pyarrow", "geopandas", "fiona")
+    .pip_install("google-cloud-storage", "pandas", "pyarrow", "geopandas", "fiona", "pyogrio")
 )
 gcs_secret = modal.Secret.from_name("gcs-creds")
 
@@ -47,6 +47,33 @@ def build_txgio_panel():
 
     all_years = []
 
+    # Attempt to load 2022 and 2023 from the existing parquet file so we don't redo them
+    # (Since 2019, 2021, and 2024 had fiona DBF read errors in previous runs, we rebuild those)
+    valid_existing_years = [2022, 2023]
+    try:
+        print(f"[{ts()}] Loading existing 2022 & 2023 data from part.parquet to save time...")
+        blob = bucket.blob("panel/jurisdiction=txgio_texas/part.parquet")
+        if blob.exists():
+            buf = io.BytesIO()
+            blob.download_to_file(buf)
+            buf.seek(0)
+            existing_panel = pd.read_parquet(buf)
+            # Remove growth_pct and prior_value since they rely on previous years
+            if 'growth_pct' in existing_panel.columns:
+                existing_panel = existing_panel.drop(columns=['growth_pct', 'prior_value'], errors='ignore')
+            
+            for y in valid_existing_years:
+                df_y = existing_panel[existing_panel["year"] == y].copy()
+                if not df_y.empty:
+                    all_years.append(df_y)
+                    print(f"  ✅ Loaded {len(df_y):,} rows for {y}")
+        else:
+            print("  ⚠️ Existing part.parquet not found, will rebuild all.")
+            valid_existing_years = []
+    except Exception as e:
+        print(f"  ⚠️ Could not load existing data: {e}. Will rebuild all.")
+        valid_existing_years = []
+
     for blob in txgio_blobs:
         # Extract year from filename like stratmap24-landparcels_48_lp.zip
         name = blob.name.split("/")[-1]
@@ -58,6 +85,9 @@ def build_txgio_panel():
             continue
 
         print(f"\n[{ts()}] Processing year {year} ({blob.name}, {blob.size/1e9:.1f} GB)...")
+        if year in valid_existing_years:
+            print(f"  ⏭️ Year {year} already loaded from previous cache. Skipping extraction.")
+            continue
 
         # Download zip to temp
         tmpdir = tempfile.mkdtemp()
@@ -73,17 +103,33 @@ def build_txgio_panel():
 
         # Find all .shp files
         shp_files = glob.glob(os.path.join(tmpdir, "**/*.shp"), recursive=True)
-        print(f"  Found {len(shp_files)} shapefiles")
+        gdb_dirs = [d for d in glob.glob(os.path.join(tmpdir, "**/*.gdb"), recursive=True) if os.path.isdir(d)]
+        print(f"  Found {len(shp_files)} shapefiles and {len(gdb_dirs)} GDBs")
 
         year_dfs = []
         for shp_path in shp_files:
             try:
-                gdf = gpd.read_file(shp_path, ignore_geometry=True)
+                gdf = gpd.read_file(shp_path, engine="pyogrio", use_arrow=True, ignore_geometry=True)
                 year_dfs.append(gdf)
                 if len(year_dfs) == 1:
                     print(f"  Columns: {list(gdf.columns[:20])}{'...' if len(gdf.columns) > 20 else ''}")
             except Exception as e:
                 print(f"  ⚠️ Error reading {shp_path}: {e}")
+                
+        if gdb_dirs:
+            import pyogrio
+            for gdb_path in gdb_dirs:
+                try:
+                    layers = pyogrio.list_layers(gdb_path)
+                    for layer in layers:
+                        layer_name = layer[0]
+                        print(f"  Reading GDB layer: {layer_name}")
+                        gdf = gpd.read_file(gdb_path, layer=layer_name, engine="pyogrio", use_arrow=True, ignore_geometry=True)
+                        year_dfs.append(gdf)
+                        if len(year_dfs) == 1:
+                            print(f"  Columns: {list(gdf.columns[:20])}{'...' if len(gdf.columns) > 20 else ''}")
+                except Exception as e:
+                    print(f"  ⚠️ Error reading GDB {gdb_path}: {e}")
 
         if not year_dfs:
             print(f"  ⚠️ No valid data for {year}")

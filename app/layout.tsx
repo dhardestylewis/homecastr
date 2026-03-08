@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from "next"
 import { Geist, Geist_Mono } from "next/font/google"
 import { Toaster } from "@/components/ui/toaster"
 import { DatadogRum } from "@/components/datadog-rum"
+import { CSPostHogProvider } from "@/components/posthog-provider"
 import "./globals.css"
 
 const _geist = Geist({ subsets: ["latin"] })
@@ -98,10 +99,12 @@ export default function RootLayout({
         />
       </head>
       <body className={`font-sans antialiased overflow-hidden`} suppressHydrationWarning>
-        {children}
-        <DatadogRum />
-        <Toaster />
-        <script src="https://assets.calendly.com/assets/external/widget.js" async />
+        <CSPostHogProvider>
+          {children}
+          <DatadogRum />
+          <Toaster />
+          <script src="https://assets.calendly.com/assets/external/widget.js" async />
+        </CSPostHogProvider>
       </body>
     </html>
   )

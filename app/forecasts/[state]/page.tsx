@@ -76,20 +76,24 @@ async function getCountyOutlooks(stateFips: string) {
                     .schema(SCHEMA as any)
                     .from("metrics_tract_forecast")
                     .select("tract_geoid20, p50")
-                    .like("tract_geoid20", `${stateFips}%`)
+                    .gte("tract_geoid20", stateFips)
+                    .lt("tract_geoid20", stateFips + "z")
                     .eq("horizon_m", 12)
                     .eq("series_kind", "forecast")
                     .not("p50", "is", null)
+                    .order("tract_geoid20")
             ),
             fetchAllRows(() =>
                 supabase
                     .schema(SCHEMA as any)
                     .from("metrics_tract_forecast")
                     .select("tract_geoid20, p50")
-                    .like("tract_geoid20", `${stateFips}%`)
+                    .gte("tract_geoid20", stateFips)
+                    .lt("tract_geoid20", stateFips + "z")
                     .eq("horizon_m", 60)
                     .eq("series_kind", "forecast")
                     .not("p50", "is", null)
+                    .order("tract_geoid20")
             ),
         ])
 
@@ -107,7 +111,7 @@ async function getCountyOutlooks(stateFips: string) {
 
             if (h12 >= 20_000 && h60 && h12 < 5_000_000) {
                 const appr = ((h60 - h12) / h12) * 100
-                if (appr > -95) {
+                if (appr > -95 && appr <= 100) {
                     if (!countyData.has(countyFips)) countyData.set(countyFips, { appreciations: [], values: [] })
                     const cd = countyData.get(countyFips)!
                     cd.appreciations.push(appr)

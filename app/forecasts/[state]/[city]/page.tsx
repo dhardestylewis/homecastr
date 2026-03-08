@@ -132,7 +132,7 @@ export default async function CityHubPage({ params, searchParams }: PageProps) {
             }
         })
         // Filter: must have data, and filter outliers (likely commercial/institutional tracts)
-        .filter(t => t.p50_current > 0 && t.p50_current < 5_000_000 && t.appreciation_5yr > -95)
+        .filter(t => t.p50_current >= 20_000 && t.p50_current < 5_000_000 && t.appreciation_5yr > -95 && t.appreciation_5yr <= 100)
         .sort((a, b) => b.appreciation_5yr - a.appreciation_5yr)
 
     // Two-pass disambiguation: use ZIP code as qualifier for duplicate names

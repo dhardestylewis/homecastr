@@ -435,7 +435,7 @@ export default function AboutPage() {
                                     </li>
                                     <li className="flex gap-4 items-start">
                                         <div className="w-12 h-12 rounded-lg bg-[#BF5700]/10 border border-[#BF5700]/20 flex items-center justify-center shrink-0 overflow-hidden">
-                                            <img src="/logo_utaustin.png" alt="UT Austin" className="w-8 h-8 object-contain" />
+                                            <img src="/logos/ut_austin_seal.svg" alt="UT Austin" className="w-8 h-8 object-contain" />
                                         </div>
                                         <div>
                                             <div className="font-bold text-base">Co-Instructor, UT Austin</div>
@@ -451,7 +451,7 @@ export default function AboutPage() {
                                 <ul className="space-y-6 text-sm text-foreground/80 leading-relaxed">
                                     <li className="flex gap-4 items-start">
                                         <div className="w-12 h-12 rounded-lg bg-[#2968C8]/5 border border-[#2968C8]/10 flex items-center justify-center shrink-0 overflow-hidden">
-                                            <img src="/logos/logo_columbia.png" alt="Columbia University" className="w-8 h-8 object-contain" />
+                                            <img src="/logos/columbia_crown.svg" alt="Columbia University" className="w-8 h-8 object-contain" />
                                         </div>
                                         <div>
                                             <div className="font-bold text-base">Columbia University</div>
@@ -461,7 +461,7 @@ export default function AboutPage() {
                                     </li>
                                     <li className="flex gap-4 items-start">
                                         <div className="w-12 h-12 rounded-lg bg-[#BF5700]/10 border border-[#BF5700]/20 flex items-center justify-center shrink-0 overflow-hidden">
-                                            <img src="/logo_utaustin.png" alt="UT Austin" className="w-8 h-8 object-contain" />
+                                            <img src="/logos/ut_austin_seal.svg" alt="UT Austin" className="w-8 h-8 object-contain" />
                                         </div>
                                         <div>
                                             <div className="font-bold text-base">UT Austin</div>
@@ -508,7 +508,7 @@ export default function AboutPage() {
                             className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-background border border-border/50 text-foreground font-medium hover:bg-muted/30 transition-colors shadow-sm whitespace-nowrap"
                         >
                             <Map className="w-4 h-4 text-primary" />
-                            Browse Forecast Hubs
+                            Browse Markets
                         </Link>
                     </div>
                 </section>

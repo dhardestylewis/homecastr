@@ -47,3 +47,4 @@ scripts/logs/
 
 # Scratch work
 _scratch/
+.env*.local
