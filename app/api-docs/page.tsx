@@ -175,7 +175,7 @@ export default function ApiDocsPage() {
                         <div className="grid lg:grid-cols-2 gap-12">
                             <div className="space-y-6">
                                 <p className="text-muted-foreground leading-relaxed">
-                                    Retrieve 4-year predictive forecasts for any accounted residential property in Harris County.
+                                    Retrieve 4-year predictive forecasts for any accounted residential property across the United States.
                                     Includes year-over-year valuations.
                                 </p>
 

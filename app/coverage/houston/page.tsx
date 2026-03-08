@@ -49,7 +49,7 @@ export default function HoustonCoveragePage() {
                         </div>
 
                         <div className="mt-8">
-                            <Link href="/houston-home-price-forecast" className="inline-flex items-center justify-center bg-primary text-primary-foreground px-6 py-3 rounded-md font-bold text-sm shadow-sm hover:bg-primary/90 transition-colors">
+                            <Link href="/forecasts/tx/houston" className="inline-flex items-center justify-center bg-primary text-primary-foreground px-6 py-3 rounded-md font-bold text-sm shadow-sm hover:bg-primary/90 transition-colors">
                                 View Houston Neighborhoods
                             </Link>
                         </div>
