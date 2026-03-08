@@ -141,30 +141,18 @@ export function OnboardingIntro() {
             }
 
             if (lat && lng && !cancelled) {
-                // Check if within ~100km of Houston
-                const houstonLat = 29.76
-                const houstonLng = -95.37
-                const distKm = Math.sqrt(
-                    Math.pow((lat - houstonLat) * 111, 2) +
-                    Math.pow((lng - houstonLng) * 111 * Math.cos(houstonLat * Math.PI / 180), 2)
-                )
-
-                if (distKm < 100) {
-                    // FlyTo their neighborhood
-                    const map = getMapInstance()
-                    if (map && !cancelled) {
-                        map.flyTo({
-                            center: [lng, lat],
-                            zoom: 13,
-                            duration: 2000,
-                            essential: true,
-                        })
-                        if (isDebug) {
-                            setDebugInfo(prev => prev + ` | Dist: ${distKm.toFixed(1)}km | Flying to [${lng.toFixed(4)}, ${lat.toFixed(4)}]`)
-                        }
+                // FlyTo user's detected neighborhood
+                const map = getMapInstance()
+                if (map && !cancelled) {
+                    map.flyTo({
+                        center: [lng, lat],
+                        zoom: 13,
+                        duration: 2000,
+                        essential: true,
+                    })
+                    if (isDebug) {
+                        setDebugInfo(prev => prev + ` | Flying to [${lng.toFixed(4)}, ${lat.toFixed(4)}]`)
                     }
-                } else if (isDebug) {
-                    setDebugInfo(prev => prev + ` | Too far from Houston: ${distKm.toFixed(0)}km`)
                 }
             }
         }
@@ -327,7 +315,7 @@ export function OnboardingIntro() {
     if (!shouldShow || phase === "done") return null
 
     const captions = [
-        "Explore Houston",
+        "Explore Your Neighborhood",
         featureName
             ? `This is ${featureName} — every color is a forecast`
             : "Every color is a property value forecast",

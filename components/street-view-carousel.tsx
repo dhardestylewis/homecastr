@@ -2,9 +2,9 @@
 
 import React, { useEffect, useState, useCallback, useRef } from "react"
 import useEmblaCarousel from "embla-carousel-react"
-import { ChevronLeft, ChevronRight, MapPin } from "lucide-react"
+import { ChevronLeft, ChevronRight, MapPin, ImageOff } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { getRepresentativeProperties, getSignedStreetViewUrl, type PropertyLocation } from "@/lib/utils/street-view"
+import { getRepresentativeProperties, getSignedStreetViewUrl, checkStreetViewAvailability, type PropertyLocation, type StreetViewMeta } from "@/lib/utils/street-view"
 
 interface StreetViewCarouselProps {
     h3Ids: string[]
@@ -28,6 +28,10 @@ export function StreetViewCarousel({ h3Ids, apiKey, className, coordinates, minZ
     const locationsRef = useRef<PropertyLocation[]>([])
     const loadedIdxsRef = useRef<Set<number>>(new Set())
 
+    // Track which slides have valid Street View imagery (free metadata check)
+    const [unavailableSlides, setUnavailableSlides] = useState<Set<number>>(new Set())
+    const availabilityCheckedRef = useRef(false)
+
     // Skip rendering below min zoom — street view is meaningless at county/city scale
     if (mapZoom != null && mapZoom < minZoom) return null
 
@@ -47,9 +51,11 @@ export function StreetViewCarousel({ h3Ids, apiKey, className, coordinates, minZ
             : getRepresentativeProperties(h3Ids)
         locationsRef.current = locs
         loadedIdxsRef.current = new Set()
+        availabilityCheckedRef.current = false
         setLocations(locs)
         setSignedUrls({})
         setLoadedIdxs(new Set())
+        setUnavailableSlides(new Set())
     }, [h3Key, coordKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
     /** Fetch signed URL for a single slide index (no-op if already loaded) */
@@ -65,10 +71,68 @@ export function StreetViewCarousel({ h3Ids, apiKey, className, coordinates, minZ
         setSignedUrls(prev => ({ ...prev, [key]: url }))
     }, []) // stable — reads from refs
 
-    // Load only slide 0 on mount — 1 API call, not 5
+    // Check availability for all slides in parallel (free metadata API).
+    // Road-snap coordinates to nearest panorama, dedup, then load.
     useEffect(() => {
-        if (locations.length > 0) loadSlide(0)
-    }, [locations.length, loadSlide])
+        if (locations.length === 0) return
+        if (availabilityCheckedRef.current) return
+        availabilityCheckedRef.current = true
+
+        const locs = locationsRef.current
+        Promise.all(locs.map(loc => checkStreetViewAvailability(loc.lat, loc.lng)))
+            .then(results => {
+                const unavailable = new Set<number>()
+                const seenPanos = new Set<string>()
+
+                // Road-snap coordinates and deduplicate
+                results.forEach((meta: StreetViewMeta, idx: number) => {
+                    if (!meta.available) {
+                        unavailable.add(idx)
+                        return
+                    }
+                    // Snap to actual panorama location
+                    if (meta.snappedLat != null && meta.snappedLng != null) {
+                        const panoKey = `${meta.snappedLat.toFixed(5)},${meta.snappedLng.toFixed(5)}`
+                        if (seenPanos.has(panoKey)) {
+                            // Duplicate panorama — same road location from different probe
+                            unavailable.add(idx)
+                            return
+                        }
+                        seenPanos.add(panoKey)
+                        // Update the location to the road-snapped coordinates
+                        locs[idx] = { ...locs[idx], lat: meta.snappedLat, lng: meta.snappedLng }
+                    }
+                })
+
+                // Commit snapped locations
+                locationsRef.current = [...locs]
+                setLocations([...locs])
+                setUnavailableSlides(unavailable)
+
+                // Find the first available slide
+                const firstValid = locs.findIndex((_, idx) => !unavailable.has(idx))
+                const target = firstValid >= 0 ? firstValid : 0
+
+                // Load the target slide (+ prefetch next available)
+                loadSlide(target)
+                let next = (target + 1) % locs.length
+                let attempts = 0
+                while (unavailable.has(next) && attempts < locs.length) {
+                    next = (next + 1) % locs.length
+                    attempts++
+                }
+                if (!unavailable.has(next)) loadSlide(next)
+
+                // Auto-scroll to the first valid slide
+                if (target > 0 && emblaApi) {
+                    setTimeout(() => emblaApi.scrollTo(target, true), 50)
+                }
+            })
+            .catch(() => {
+                // Fallback: just load slide 0 if metadata checks fail
+                loadSlide(0)
+            })
+    }, [locations.length, loadSlide, emblaApi]) // eslint-disable-line react-hooks/exhaustive-deps
 
     // Lazy-load on carousel navigation, prefetch +1
     const onSelect = useCallback(() => {
@@ -102,9 +166,16 @@ export function StreetViewCarousel({ h3Ids, apiKey, className, coordinates, minZ
                     {locations.map((loc, index) => {
                         const key = `${loc.lat}-${loc.lng}`
                         const url = signedUrls[key]
+                        const isUnavailable = unavailableSlides.has(index)
                         return (
                             <div key={`${key}-${index}`} className="flex-[0_0_100%] min-w-0 relative h-full bg-zinc-900">
-                                {url ? (
+                                {isUnavailable ? (
+                                    /* No Street View coverage or duplicate panorama — show clean placeholder */
+                                    <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-white/30">
+                                        <ImageOff className="w-8 h-8" />
+                                        <span className="text-[10px] uppercase tracking-wider">No Street View</span>
+                                    </div>
+                                ) : url ? (
                                     /* eslint-disable-next-line @next/next/no-img-element */
                                     <img src={url} alt={loc.label || "Property view"} className="w-full h-full object-cover" />
                                 ) : (

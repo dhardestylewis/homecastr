@@ -1,0 +1,219 @@
+{
+  "elapsed": 49.4,
+  "n_sources": 30,
+  "n_pass": 15,
+  "n_fail": 15,
+  "total_rows": 682,
+  "results": {
+    "Eurostat|HPI (all EU)": {
+      "country": "Eurostat",
+      "source": "HPI (all EU)",
+      "status": "pass",
+      "n_rows": 429,
+      "detail": "429 country-quarter HPI observations"
+    },
+    "Portugal|INE": {
+      "country": "Portugal",
+      "source": "INE",
+      "status": "pass",
+      "n_rows": 1,
+      "detail": "API returned 1315159 chars"
+    },
+    "Belgium|StatBel": {
+      "country": "Belgium",
+      "source": "StatBel",
+      "status": "fail",
+      "n_rows": 0,
+      "detail": "Timeout"
+    },
+    "Austria|Statistik GPI": {
+      "country": "Austria",
+      "source": "Statistik GPI",
+      "status": "pass",
+      "n_rows": 0,
+      "detail": "Metadata accessible"
+    },
+    "Austria|Statistik CSV": {
+      "country": "Austria",
+      "source": "Statistik CSV",
+      "status": "pass",
+      "n_rows": 252,
+      "detail": "252 rows of property price index"
+    },
+    "Greece|Bank of Greece": {
+      "country": "Greece",
+      "source": "Bank of Greece",
+      "status": "fail",
+      "n_rows": 0,
+      "detail": "Timeout"
+    },
+    "Croatia|DZS": {
+      "country": "Croatia",
+      "source": "DZS",
+      "status": "pass",
+      "n_rows": 0,
+      "detail": "Portal accessible"
+    },
+    "Romania|INS": {
+      "country": "Romania",
+      "source": "INS",
+      "status": "fail",
+      "n_rows": 0,
+      "detail": "Timeout"
+    },
+    "Hungary|KSH": {
+      "country": "Hungary",
+      "source": "KSH",
+      "status": "pass",
+      "n_rows": 0,
+      "detail": "Housing prices page"
+    },
+    "Lithuania|Registru Centras": {
+      "country": "Lithuania",
+      "source": "Registru Centras",
+      "status": "pass",
+      "n_rows": 0,
+      "detail": "Property stats portal"
+    },
+    "Latvia|CSB": {
+      "country": "Latvia",
+      "source": "CSB",
+      "status": "fail",
+      "n_rows": 0,
+      "detail": "Timeout"
+    },
+    "Slovenia|GURS ETN": {
+      "country": "Slovenia",
+      "source": "GURS ETN",
+      "status": "fail",
+      "n_rows": 0,
+      "detail": "Timeout"
+    },
+    "Luxembourg|STATEC": {
+      "country": "Luxembourg",
+      "source": "STATEC",
+      "status": "fail",
+      "n_rows": 0,
+      "detail": "Timeout"
+    },
+    "Iceland|Hagstofa": {
+      "country": "Iceland",
+      "source": "Hagstofa",
+      "status": "fail",
+      "n_rows": 0,
+      "detail": "Timeout"
+    },
+    "Turkey|TURKSTAT": {
+      "country": "Turkey",
+      "source": "TURKSTAT",
+      "status": "pass",
+      "n_rows": 0,
+      "detail": "House sales bulletin"
+    },
+    "Israel|CBS": {
+      "country": "Israel",
+      "source": "CBS",
+      "status": "pass",
+      "n_rows": 0,
+      "detail": "Dwellings page"
+    },
+    "Saudi Arabia|GASTAT": {
+      "country": "Saudi Arabia",
+      "source": "GASTAT",
+      "status": "fail",
+      "n_rows": 0,
+      "detail": "Timeout"
+    },
+    "Kenya|KNBS": {
+      "country": "Kenya",
+      "source": "KNBS",
+      "status": "fail",
+      "n_rows": 0,
+      "detail": "Timeout"
+    },
+    "Nigeria|NBS": {
+      "country": "Nigeria",
+      "source": "NBS",
+      "status": "pass",
+      "n_rows": 0,
+      "detail": "Portal"
+    },
+    "Egypt|CAPMAS": {
+      "country": "Egypt",
+      "source": "CAPMAS",
+      "status": "pass",
+      "n_rows": 0,
+      "detail": "Portal"
+    },
+    "Morocco|HCP": {
+      "country": "Morocco",
+      "source": "HCP",
+      "status": "pass",
+      "n_rows": 0,
+      "detail": "Portal"
+    },
+    "Thailand|BOT": {
+      "country": "Thailand",
+      "source": "BOT",
+      "status": "fail",
+      "n_rows": 0,
+      "detail": "Timeout"
+    },
+    "Malaysia|NAPIC": {
+      "country": "Malaysia",
+      "source": "NAPIC",
+      "status": "fail",
+      "n_rows": 0,
+      "detail": "Timeout"
+    },
+    "Indonesia|BPS": {
+      "country": "Indonesia",
+      "source": "BPS",
+      "status": "fail",
+      "n_rows": 0,
+      "detail": "Timeout"
+    },
+    "Philippines|PSA": {
+      "country": "Philippines",
+      "source": "PSA",
+      "status": "fail",
+      "n_rows": 0,
+      "detail": "Timeout"
+    },
+    "Argentina|INDEC": {
+      "country": "Argentina",
+      "source": "INDEC",
+      "status": "pass",
+      "n_rows": 0,
+      "detail": "Construction stats"
+    },
+    "Chile|INE HPI": {
+      "country": "Chile",
+      "source": "INE HPI",
+      "status": "pass",
+      "n_rows": 0,
+      "detail": "Housing price index page"
+    },
+    "Peru|BCRP": {
+      "country": "Peru",
+      "source": "BCRP",
+      "status": "fail",
+      "n_rows": 0,
+      "detail": "Timeout"
+    },
+    "Brazil|FIPE ZAP": {
+      "country": "Brazil",
+      "source": "FIPE ZAP",
+      "status": "fail",
+      "n_rows": 0,
+      "detail": "Timeout"
+    },
+    "Uruguay|INE": {
+      "country": "Uruguay",
+      "source": "INE",
+      "status": "pass",
+      "n_rows": 0,
+      "detail": "Stats portal"
+    }
+  }
+}

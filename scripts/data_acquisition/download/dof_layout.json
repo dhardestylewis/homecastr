@@ -1,0 +1,1271 @@
+[
+  {
+    "Property Master Layout": NaN,
+    "Unnamed: 1": NaN,
+    "Unnamed: 2": NaN,
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": NaN,
+    "Unnamed: 5": NaN,
+    "Unnamed: 6": NaN
+  },
+  {
+    "Property Master Layout": "No.",
+    "Unnamed: 1": "Name",
+    "Unnamed: 2": "Description",
+    "Unnamed: 3": "Data Type",
+    "Unnamed: 4": "Length",
+    "Unnamed: 5": "Sample Data",
+    "Unnamed: 6": "Notes"
+  },
+  {
+    "Property Master Layout": 1,
+    "Unnamed: 1": "PARID",
+    "Unnamed: 2": "Parcel Identifier",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 30,
+    "Unnamed: 5": "1001000001                    ",
+    "Unnamed: 6": "This field is a combination of boro, block, lot, easement, and sub-ident (only record type 3 properties have a sub-ident). "
+  },
+  {
+    "Property Master Layout": 2,
+    "Unnamed: 1": "BORO",
+    "Unnamed: 2": "Borough",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 1,
+    "Unnamed: 5": 1,
+    "Unnamed: 6": "1 = Manhattan\n2 = Bronx \n3 = Brooklyn\n4 = Queens \n5 = Staten Island"
+  },
+  {
+    "Property Master Layout": 3,
+    "Unnamed: 1": "BLOCK",
+    "Unnamed: 2": "Block",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 5,
+    "Unnamed: 5": 100,
+    "Unnamed: 6": "Valid Block Ranges:\nManhattan: 1 to 2255\nBronx: 2260 to 5958 \nBrooklyn: 1 to 8955\nQueens: 1 to 16350\nStaten Island: 1 to 8050"
+  },
+  {
+    "Property Master Layout": 4,
+    "Unnamed: 1": "LOT",
+    "Unnamed: 2": "Lot",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 4,
+    "Unnamed: 5": 1,
+    "Unnamed: 6": "Unique number within BORO/BLOCK"
+  },
+  {
+    "Property Master Layout": 5,
+    "Unnamed: 1": "EASE",
+    "Unnamed: 2": "Easement",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 1,
+    "Unnamed: 5": "E ",
+    "Unnamed: 6": "Valid Easement Codes:\nBlank = No Easement\nA = Air Rights\nB = Non-Air Rights\nE = Land Easement\nF thru M = Used when property has more than one easements\nN = Non-transit\nP = Piers\nR = Railroads\nS = Street\nU = US Government "
+  },
+  {
+    "Property Master Layout": 6,
+    "Unnamed: 1": "SUBIDENT_REUC",
+    "Unnamed: 2": "Real Estate of Utility Corporation Sub-ident",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 10,
+    "Unnamed: 5": "XXX",
+    "Unnamed: 6": "This field is applicable only for RECTYPE = 3, i.e., sub-idents."
+  },
+  {
+    "Property Master Layout": 7,
+    "Unnamed: 1": "RECTYPE",
+    "Unnamed: 2": "Record Type ",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 1,
+    "Unnamed: 5": 1,
+    "Unnamed: 6": "1 = Ordinary Real Estate\n2 = Real Estate of Utility Corporation Ident\n3 = Real Estate of Utility Corporation Sub-ident"
+  },
+  {
+    "Property Master Layout": 8,
+    "Unnamed: 1": "TAXYR",
+    "Unnamed: 2": "Tax Year",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 4,
+    "Unnamed: 5": 2023,
+    "Unnamed: 6": " "
+  },
+  {
+    "Property Master Layout": 9,
+    "Unnamed: 1": "IDENT",
+    "Unnamed: 2": "Real Estate of Utility Corporation Ident",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 10,
+    "Unnamed: 5": "1141-E1",
+    "Unnamed: 6": "This field is applicable only for RECTYPE = 2 or 3 records."
+  },
+  {
+    "Property Master Layout": 10,
+    "Unnamed: 1": "SUBIDENT",
+    "Unnamed: 2": "Real Estate of Utility Corporation Sub-ident",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 10,
+    "Unnamed: 5": "171C",
+    "Unnamed: 6": "This field is applicable only for RECTYPE = 3, i.e., sub-idents."
+  },
+  {
+    "Property Master Layout": 11,
+    "Unnamed: 1": "ROLL_SECTION",
+    "Unnamed: 2": "Roll Section",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 1,
+    "Unnamed: 5": "1",
+    "Unnamed: 6": "This field identifies the type of Real Estate of Utility Corporation parcel.\n1 = Special Franchise\n3 = Power/Gas\n5 = Communications\n7 = Railroad"
+  },
+  {
+    "Property Master Layout": 12,
+    "Unnamed: 1": "SECVOL",
+    "Unnamed: 2": "Section Volume Number (2 Digits each)",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 5,
+    "Unnamed: 5": 103,
+    "Unnamed: 6": "Valid Section Volume Codes:\nManhattan: 1 - 1 to 8 - 04\nBronx: 9 - 1 to 19 - 06\nBrooklyn: 1 - 1 to 26 - 05\nQueens: 1 - 1 to 63 - 03\nStaten Island: 1 - 1 to 32 - 03"
+  },
+  {
+    "Property Master Layout": 13,
+    "Unnamed: 1": "PYMKTLAND",
+    "Unnamed: 2": "Prior Year Market Assessed Land Value",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 10920000,
+    "Unnamed: 6": "Prior-year values are the final values from the previous year."
+  },
+  {
+    "Property Master Layout": 14,
+    "Unnamed: 1": "PYMKTTOT",
+    "Unnamed: 2": "Prior Year Market Assessed Total Value ",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 73573000,
+    "Unnamed: 6": "Prior-year values are the final values from the previous year."
+  },
+  {
+    "Property Master Layout": 15,
+    "Unnamed: 1": "PYACTLAND",
+    "Unnamed: 2": "Prior Year Actual Assessed Land Value",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 4914000,
+    "Unnamed: 6": "Prior-year values are the final values from the previous year."
+  },
+  {
+    "Property Master Layout": 16,
+    "Unnamed: 1": "PYACTTOT",
+    "Unnamed: 2": "Prior Year Actual Assessed Total Value",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 33107850,
+    "Unnamed: 6": "Prior-year values are the final values from the previous year."
+  },
+  {
+    "Property Master Layout": 17,
+    "Unnamed: 1": "PYACTEXTOT",
+    "Unnamed: 2": "Prior Year Actual Exemption Total Value",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 33107850,
+    "Unnamed: 6": "Prior-year values are the final values from the previous year. STAR benefits (initially exemptions and now abatements/credits) are included in this number."
+  },
+  {
+    "Property Master Layout": 18,
+    "Unnamed: 1": "PYTRNLAND",
+    "Unnamed: 2": "Prior Year Transitional Assessed Land Value",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 4914000,
+    "Unnamed: 6": "Prior-year values are the final values from the previous year."
+  },
+  {
+    "Property Master Layout": 19,
+    "Unnamed: 1": "PYTRNTOT",
+    "Unnamed: 2": "Prior Year Transitional Assessed Total Value",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 37467990,
+    "Unnamed: 6": "Prior-year values are the final values from the previous year."
+  },
+  {
+    "Property Master Layout": 20,
+    "Unnamed: 1": "PYTRNEXTOT",
+    "Unnamed: 2": "Prior Year Transitional Exemption Total Value",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 37467990,
+    "Unnamed: 6": "Prior-year values are the final values from the previous year. STAR benefits (initially exemptions and now abatements/credits) are included in this number."
+  },
+  {
+    "Property Master Layout": 21,
+    "Unnamed: 1": "PYTXBTOT",
+    "Unnamed: 2": "Prior Year Taxable Assessed Total Value",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 33107850,
+    "Unnamed: 6": "Prior-year values are the final values from the previous year."
+  },
+  {
+    "Property Master Layout": 22,
+    "Unnamed: 1": "PYTXBEXTOT",
+    "Unnamed: 2": "Prior Year Taxable Exemption Total Value",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 33107850,
+    "Unnamed: 6": "Prior-year values are the final values from the previous year. STAR benefits (initially exemptions and now abatements/credits) are included in this number."
+  },
+  {
+    "Property Master Layout": 23,
+    "Unnamed: 1": "PYTAXCLASS",
+    "Unnamed: 2": "Prior Year Property Tax Class",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 2,
+    "Unnamed: 5": 4,
+    "Unnamed: 6": "Prior-year values are the final values from the previous year."
+  },
+  {
+    "Property Master Layout": 24,
+    "Unnamed: 1": "TENMKTLAND",
+    "Unnamed: 2": "Tentative Market Assessed Land Value ",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 10920000,
+    "Unnamed: 6": "Tentative values are the stamped values as of the publishing of the tentative assessment roll in January."
+  },
+  {
+    "Property Master Layout": 25,
+    "Unnamed: 1": "TENMKTTOT",
+    "Unnamed: 2": "Tentative Market Assessed Total Value",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 80202000,
+    "Unnamed: 6": "Tentative values are the stamped values as of the publishing of the tentative assessment roll in January."
+  },
+  {
+    "Property Master Layout": 26,
+    "Unnamed: 1": "TENACTLAND",
+    "Unnamed: 2": "Tentative Actual Assessed Land Value",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 4914000,
+    "Unnamed: 6": "Tentative values are the stamped values as of the publishing of the tentative assessment roll in January."
+  },
+  {
+    "Property Master Layout": 27,
+    "Unnamed: 1": "TENACTTOT",
+    "Unnamed: 2": "Tentative Actual Assessed Total Value",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 36090900,
+    "Unnamed: 6": "Tentative values are the stamped values as of the publishing of the tentative assessment roll in January."
+  },
+  {
+    "Property Master Layout": 28,
+    "Unnamed: 1": "TENACTEXTOT",
+    "Unnamed: 2": "Tentative Actual Exemption Total Value",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 36090900,
+    "Unnamed: 6": "Tentative values are the stamped values as of the publishing of the tentative assessment roll in January. STAR benefits (initially exemptions and now abatements/credits) are included in this number."
+  },
+  {
+    "Property Master Layout": 29,
+    "Unnamed: 1": "TENTRNLAND",
+    "Unnamed: 2": "Tentative Transitional Assessed Land Value",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 4914000,
+    "Unnamed: 6": "Tentative values are the stamped values as of the publishing of the tentative assessment roll in January."
+  },
+  {
+    "Property Master Layout": 30,
+    "Unnamed: 1": "TENTRNTOT",
+    "Unnamed: 2": "Tentative Transitional Assessed Total Value",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 37521630,
+    "Unnamed: 6": "Tentative values are the stamped values as of the publishing of the tentative assessment roll in January."
+  },
+  {
+    "Property Master Layout": 31,
+    "Unnamed: 1": "TENTRNEXTOT",
+    "Unnamed: 2": "Tentative Transitional Exemption Total Value",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 37521630,
+    "Unnamed: 6": "Tentative values are the stamped values as of the publishing of the tentative assessment roll in January. STAR benefits (initially exemptions and now abatements/credits) are included in this number."
+  },
+  {
+    "Property Master Layout": 32,
+    "Unnamed: 1": "TENTXBTOT",
+    "Unnamed: 2": "Tentative Taxable Assessed Total",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 36090900,
+    "Unnamed: 6": "Tentative values are the stamped values as of the publishing of the tentative assessment roll in January."
+  },
+  {
+    "Property Master Layout": 33,
+    "Unnamed: 1": "TENTXBEXTOT",
+    "Unnamed: 2": "Tentative Taxable Exemption Total",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 36090900,
+    "Unnamed: 6": "Tentative values are the stamped values as of the publishing of the tentative assessment roll in January. STAR benefits (initially exemptions and now abatements/credits) are included in this number."
+  },
+  {
+    "Property Master Layout": 34,
+    "Unnamed: 1": "TENTAXCLASS",
+    "Unnamed: 2": "Tentative Property Tax Class",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 2,
+    "Unnamed: 5": 4,
+    "Unnamed: 6": "Tentative values are the stamped values as of the publishing of the tentative assessment roll in January."
+  },
+  {
+    "Property Master Layout": 35,
+    "Unnamed: 1": "CBNMKTLAND",
+    "Unnamed: 2": "Change By Notice Market Assessed Land Value",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 10920000,
+    "Unnamed: 6": "Change-by-notice values are the stamped values at the end of the Change-by-notice period in May. Change-by-notice values are blank at the publishing of the tentative assessment roll and populated at the publishing of the final assessment roll."
+  },
+  {
+    "Property Master Layout": 36,
+    "Unnamed: 1": "CBNMKTTOT",
+    "Unnamed: 2": "Change By Notice Market Assessed Total Value",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 80202000,
+    "Unnamed: 6": "Change-by-notice values are the stamped values at the end of the Change-by-notice period in May. Change-by-notice values are blank at the publishing of the tentative assessment roll and populated at the publishing of the final assessment roll."
+  },
+  {
+    "Property Master Layout": 37,
+    "Unnamed: 1": "CBNACTLAND",
+    "Unnamed: 2": "Change By Notice Actual Assessed Land Value",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 4914000,
+    "Unnamed: 6": "Change-by-notice values are the stamped values at the end of the Change-by-notice period in May. Change-by-notice values are blank at the publishing of the tentative assessment roll and populated at the publishing of the final assessment roll."
+  },
+  {
+    "Property Master Layout": 38,
+    "Unnamed: 1": "CBNACTTOT",
+    "Unnamed: 2": "Change By Notice Actual Assessed Total Value",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 36090900,
+    "Unnamed: 6": "Change-by-notice values are the stamped values at the end of the Change-by-notice period in May. Change-by-notice values are blank at the publishing of the tentative assessment roll and populated at the publishing of the final assessment roll."
+  },
+  {
+    "Property Master Layout": 39,
+    "Unnamed: 1": "CBNACTEXTOT",
+    "Unnamed: 2": "Change By Notice Actual Exemption Total Value",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 36090900,
+    "Unnamed: 6": "Change-by-notice values are the stamped values at the end of the Change-by-notice period in May. Change-by-notice values are blank at the publishing of the tentative assessment roll and populated at the publishing of the final assessment roll. STAR benefits (initially exemptions and now abatements/credits) are included in this number."
+  },
+  {
+    "Property Master Layout": 40,
+    "Unnamed: 1": "CBNTRNLAND",
+    "Unnamed: 2": "Change By Notice Transitional Assessed Land Value",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 4914000,
+    "Unnamed: 6": "Change-by-notice values are the stamped values at the end of the Change-by-notice period in May. Change-by-notice values are blank at the publishing of the tentative assessment roll and populated at the publishing of the final assessment roll."
+  },
+  {
+    "Property Master Layout": 41,
+    "Unnamed: 1": "CBNTRNTOT",
+    "Unnamed: 2": "Change By Notice Transitional Assessed Total Value",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 37521630,
+    "Unnamed: 6": "Change-by-notice values are the stamped values at the end of the Change-by-notice period in May. Change-by-notice values are blank at the publishing of the tentative assessment roll and populated at the publishing of the final assessment roll."
+  },
+  {
+    "Property Master Layout": 42,
+    "Unnamed: 1": "CBNTRNEXTOT",
+    "Unnamed: 2": "Change By Notice Transitional Exemption Total Value",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 37521630,
+    "Unnamed: 6": "Change-by-notice values are the stamped values at the end of the Change-by-notice period in May. Change-by-notice values are blank at the publishing of the tentative assessment roll and populated at the publishing of the final assessment roll. STAR benefits (initially exemptions and now abatements/credits) are included in this number."
+  },
+  {
+    "Property Master Layout": 43,
+    "Unnamed: 1": "CBNTXBTOT",
+    "Unnamed: 2": "Change By Notice Taxable Assessed Total Value",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 36090900,
+    "Unnamed: 6": "Change-by-notice values are the stamped values at the end of the Change-by-notice period in May. Change-by-notice values are blank at the publishing of the tentative assessment roll and populated at the publishing of the final assessment roll."
+  },
+  {
+    "Property Master Layout": 44,
+    "Unnamed: 1": "CBNTXBEXTOT",
+    "Unnamed: 2": "Change By Notice Taxable Exemption Total Value",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 36090900,
+    "Unnamed: 6": "Change-by-notice values are the stamped values at the end of the Change-by-notice period in May. Change-by-notice values are blank at the publishing of the tentative assessment roll and populated at the publishing of the final assessment roll. STAR benefits (initially exemptions and now abatements/credits) are included in this number."
+  },
+  {
+    "Property Master Layout": 45,
+    "Unnamed: 1": "CBNTAXCLASS",
+    "Unnamed: 2": "Change By Notice Property Tax Class",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 2,
+    "Unnamed: 5": 4,
+    "Unnamed: 6": "Change-by-notice values are the stamped values at the end of the Change-by-notice period in May. Change-by-notice values are blank at the publishing of the tentative assessment roll and populated at the publishing of the final assessment roll."
+  },
+  {
+    "Property Master Layout": 46,
+    "Unnamed: 1": "FINMKTLAND",
+    "Unnamed: 2": "Final Market Assessed Land Value",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 10920000,
+    "Unnamed: 6": "Final values are the stamped values as of the final assessment roll in May. Final values are blank at the publishing of the tentative assessment roll and populated at the publishing of the final assessment roll."
+  },
+  {
+    "Property Master Layout": 47,
+    "Unnamed: 1": "FINMKTTOT",
+    "Unnamed: 2": "Final Market Assessed Total Value",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 80202000,
+    "Unnamed: 6": "Final values are the stamped values as of the final assessment roll in May. Final values are blank at the publishing of the tentative assessment roll and populated at the publishing of the final assessment roll."
+  },
+  {
+    "Property Master Layout": 48,
+    "Unnamed: 1": "FINACTLAND",
+    "Unnamed: 2": "Final Actual Assessed Land Value",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 4914000,
+    "Unnamed: 6": "Final values are the stamped values as of the final assessment roll in May. Final values are blank at the publishing of the tentative assessment roll and populated at the publishing of the final assessment roll."
+  },
+  {
+    "Property Master Layout": 49,
+    "Unnamed: 1": "FINACTTOT",
+    "Unnamed: 2": "Final Actual Assessed Total Value",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 36090900,
+    "Unnamed: 6": "Final values are the stamped values as of the final assessment roll in May. Final values are blank at the publishing of the tentative assessment roll and populated at the publishing of the final assessment roll."
+  },
+  {
+    "Property Master Layout": 50,
+    "Unnamed: 1": "FINACTEXTOT",
+    "Unnamed: 2": "Final Actual Exemption Total Value",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 36090900,
+    "Unnamed: 6": "Final values are the stamped values as of the final assessment roll in May. Final values are blank at the publishing of the tentative assessment roll and populated at the publishing of the final assessment roll. STAR benefits (initially exemptions and now abatements/credits) are included in this number."
+  },
+  {
+    "Property Master Layout": 51,
+    "Unnamed: 1": "FINTRNLAND",
+    "Unnamed: 2": "Final Transitional Assessed Land Value",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 4914000,
+    "Unnamed: 6": "Final values are the stamped values as of the final assessment roll in May. Final values are blank at the publishing of the tentative assessment roll and populated at the publishing of the final assessment roll."
+  },
+  {
+    "Property Master Layout": 52,
+    "Unnamed: 1": "FINTRNTOT",
+    "Unnamed: 2": "Final Transitional Assessed Total Value",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 37521630,
+    "Unnamed: 6": "Final values are the stamped values as of the final assessment roll in May. Final values are blank at the publishing of the tentative assessment roll and populated at the publishing of the final assessment roll."
+  },
+  {
+    "Property Master Layout": 53,
+    "Unnamed: 1": "FINTRNEXTOT",
+    "Unnamed: 2": "Final Transitional Exemption Total Value",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 37521630,
+    "Unnamed: 6": "Final values are the stamped values as of the final assessment roll in May. Final values are blank at the publishing of the tentative assessment roll and populated at the publishing of the final assessment roll. STAR benefits (initially exemptions and now abatements/credits) are included in this number."
+  },
+  {
+    "Property Master Layout": 54,
+    "Unnamed: 1": "FINTXBTOT",
+    "Unnamed: 2": "Final Taxable Assessed Total Value",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 36090900,
+    "Unnamed: 6": "Final values are the stamped values as of the final assessment roll in May. Final values are blank at the publishing of the tentative assessment roll and populated at the publishing of the final assessment roll."
+  },
+  {
+    "Property Master Layout": 55,
+    "Unnamed: 1": "FINTXBEXTOT",
+    "Unnamed: 2": "Final Taxable Exemption Total Value",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 36090900,
+    "Unnamed: 6": "Final values are the stamped values as of the final assessment roll in May. Final values are blank at the publishing of the tentative assessment roll and populated at the publishing of the final assessment roll. STAR benefits (initially exemptions and now abatements/credits) are included in this number."
+  },
+  {
+    "Property Master Layout": 56,
+    "Unnamed: 1": "FINTAXCLASS",
+    "Unnamed: 2": "Final Property Tax Class",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 2,
+    "Unnamed: 5": 4,
+    "Unnamed: 6": "Final values are the stamped values as of the final assessment roll in May. Final values are blank at the publishing of the tentative assessment roll and populated at the publishing of the final assessment roll."
+  },
+  {
+    "Property Master Layout": 57,
+    "Unnamed: 1": "CURMKTLAND",
+    "Unnamed: 2": "Current Market Assessed Land Value",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 10920000,
+    "Unnamed: 6": "Cur% values are the most current values for the property."
+  },
+  {
+    "Property Master Layout": 58,
+    "Unnamed: 1": "CURMKTTOT",
+    "Unnamed: 2": "Current Market Assessed Total Value",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 80202000,
+    "Unnamed: 6": "Cur% values are the most current values for the property."
+  },
+  {
+    "Property Master Layout": 59,
+    "Unnamed: 1": "CURACTLAND",
+    "Unnamed: 2": "Current Actual Assessed Land Value",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 4914000,
+    "Unnamed: 6": "Cur% values are the most current values for the property."
+  },
+  {
+    "Property Master Layout": 60,
+    "Unnamed: 1": "CURACTTOT",
+    "Unnamed: 2": "Current Actual Assessed Total Value",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 36090900,
+    "Unnamed: 6": "Cur% values are the most current values for the property."
+  },
+  {
+    "Property Master Layout": 61,
+    "Unnamed: 1": "CURACTEXTOT",
+    "Unnamed: 2": "Current Actual Exemption Total Value",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 36090900,
+    "Unnamed: 6": "Cur% values are the most current values for the property. STAR benefits (initially exemptions and now abatements/credits) are included in this number."
+  },
+  {
+    "Property Master Layout": 62,
+    "Unnamed: 1": "CURTRNLAND",
+    "Unnamed: 2": "Current Transitional Assessed Land Value",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 4914000,
+    "Unnamed: 6": "Cur% values are the most current values for the property."
+  },
+  {
+    "Property Master Layout": 63,
+    "Unnamed: 1": "CURTRNTOT",
+    "Unnamed: 2": "Current Transitional Assessed Total Value",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 37521630,
+    "Unnamed: 6": "Cur% values are the most current values for the property."
+  },
+  {
+    "Property Master Layout": 64,
+    "Unnamed: 1": "CURTRNEXTOT",
+    "Unnamed: 2": "Current Transitional Exemption Total Value",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 37521630,
+    "Unnamed: 6": "Cur% values are the most current values for the property. STAR benefits (initially exemptions and now abatements/credits) are included in this number."
+  },
+  {
+    "Property Master Layout": 65,
+    "Unnamed: 1": "CURTXBTOT",
+    "Unnamed: 2": "Current Taxable Assessed Total Value",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 36090900,
+    "Unnamed: 6": "Cur% values are the most current values for the property."
+  },
+  {
+    "Property Master Layout": 66,
+    "Unnamed: 1": "CURTXBEXTOT",
+    "Unnamed: 2": "Current Taxable Exemption Total Value",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 36090900,
+    "Unnamed: 6": "Cur% values are the most current values for the property. STAR benefits (initially exemptions and now abatements/credits) are included in this number."
+  },
+  {
+    "Property Master Layout": 67,
+    "Unnamed: 1": "CURTAXCLASS",
+    "Unnamed: 2": "Current Property Tax Class",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 2,
+    "Unnamed: 5": 4,
+    "Unnamed: 6": "Cur% values are the most current values for the property."
+  },
+  {
+    "Property Master Layout": 68,
+    "Unnamed: 1": "PERIOD",
+    "Unnamed: 2": "Period ",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 1,
+    "Unnamed: 5": 3,
+    "Unnamed: 6": "Field values are as follows:\n0 = Starting value for the new Assessment Year (only the prior year fields should have values)\n1 = Tentative Roll has been published (Prior Year and Tentative fields have values)\n2 = Change by Notice Period has ended (Prior Year, Tentative, and CBN fields have values)\n3 = Final Roll has been published (Prior Year, Tentative, CBN, and final fields have values)\n4 = A Remission has been entered for this property; see Cur% columns for new values\nOnly 1 and 3 are displayed to the public."
+  },
+  {
+    "Property Master Layout": 69,
+    "Unnamed: 1": "NEWDROP",
+    "Unnamed: 2": "Indicates that the lot will be dropped at the end of the fiscal year",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 1,
+    "Unnamed: 5": 0,
+    "Unnamed: 6": "0 or \n1 = New lot"
+  },
+  {
+    "Property Master Layout": 70,
+    "Unnamed: 1": "NOAV",
+    "Unnamed: 2": "A building in progress",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 1,
+    "Unnamed: 5": 0,
+    "Unnamed: 6": "0 or \nY = A building in progress"
+  },
+  {
+    "Property Master Layout": 71,
+    "Unnamed: 1": "VALREF",
+    "Unnamed: 2": "The parcel's values are reflected in another lot",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 1,
+    "Unnamed: 5": " ",
+    "Unnamed: 6": "Y  = The parcel's values are reflected in another lot "
+  },
+  {
+    "Property Master Layout": 72,
+    "Unnamed: 1": "BLDG_CLASS",
+    "Unnamed: 2": "Building Class",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 2,
+    "Unnamed: 5": "I1",
+    "Unnamed: 6": " "
+  },
+  {
+    "Property Master Layout": 73,
+    "Unnamed: 1": "OWNER",
+    "Unnamed: 2": "Owner's Name",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 80,
+    "Unnamed: 5": "NEW YORK DOWNTOWN HOSPITAL                                                      ",
+    "Unnamed: 6": " "
+  },
+  {
+    "Property Master Layout": 74,
+    "Unnamed: 1": "ZONING",
+    "Unnamed: 2": "Zoning code from NYC Department of City Planning",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 10,
+    "Unnamed: 5": "C6-4      ",
+    "Unnamed: 6": " "
+  },
+  {
+    "Property Master Layout": 75,
+    "Unnamed: 1": "HOUSENUM_LO",
+    "Unnamed: 2": "The lowest house number of the property",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 52,
+    "Unnamed: 6": " "
+  },
+  {
+    "Property Master Layout": 76,
+    "Unnamed: 1": "HOUSENUM_HI",
+    "Unnamed: 2": "The highest house number of the property",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 60,
+    "Unnamed: 6": " "
+  },
+  {
+    "Property Master Layout": 77,
+    "Unnamed: 1": "STREET_NAME",
+    "Unnamed: 2": "Street Name for the property",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 30,
+    "Unnamed: 5": "BEEKMAN STREET                ",
+    "Unnamed: 6": " "
+  },
+  {
+    "Property Master Layout": 78,
+    "Unnamed: 1": "ZIP_CODE",
+    "Unnamed: 2": "Postal Zip code for the property",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 10,
+    "Unnamed: 5": 10038,
+    "Unnamed: 6": " "
+  },
+  {
+    "Property Master Layout": 79,
+    "Unnamed: 1": "GEOSUPPORT_RC",
+    "Unnamed: 2": "Status of the address data verification from Geosupport",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 2,
+    "Unnamed: 5": 0,
+    "Unnamed: 6": "Blank = No Geosupport processing attempted                                                                                        00 = Verified by Geosupport                                                                                                                                         All other values  = Geosupport exception existed"
+  },
+  {
+    "Property Master Layout": 80,
+    "Unnamed: 1": "STCODE",
+    "Unnamed: 2": "Street Code ",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 11301501010,
+    "Unnamed: 6": "10 Digit street code prefaced by borough code"
+  },
+  {
+    "Property Master Layout": 81,
+    "Unnamed: 1": "LOT_FRT",
+    "Unnamed: 2": "Lot Frontage in feet",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 8,
+    "Unnamed: 5": 329.71,
+    "Unnamed: 6": " "
+  },
+  {
+    "Property Master Layout": 82,
+    "Unnamed: 1": "LOT_DEP",
+    "Unnamed: 2": "Lot Depth in feet",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 8,
+    "Unnamed: 5": 190.09,
+    "Unnamed: 6": " "
+  },
+  {
+    "Property Master Layout": 83,
+    "Unnamed: 1": "LOT_IRREG",
+    "Unnamed: 2": "Irregular shaped lot",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 1,
+    "Unnamed: 5": "I",
+    "Unnamed: 6": "R: regular, I : Irregular"
+  },
+  {
+    "Property Master Layout": 84,
+    "Unnamed: 1": "BLD_FRT",
+    "Unnamed: 2": "Building Frontage in feet",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 8,
+    "Unnamed: 5": 240,
+    "Unnamed: 6": NaN
+  },
+  {
+    "Property Master Layout": 85,
+    "Unnamed: 1": "BLD_DEP",
+    "Unnamed: 2": "Building Depth in feet",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 8,
+    "Unnamed: 5": 178.5,
+    "Unnamed: 6": NaN
+  },
+  {
+    "Property Master Layout": 86,
+    "Unnamed: 1": "BLD_EXT",
+    "Unnamed: 2": "Extension",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 2,
+    "Unnamed: 5": "E ",
+    "Unnamed: 6": "E = Extension \nG = Garage\nEG = Extension and Garage"
+  },
+  {
+    "Property Master Layout": 87,
+    "Unnamed: 1": "BLD_STORY",
+    "Unnamed: 2": "The number of stories/floors for the building",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 7,
+    "Unnamed: 5": 8,
+    "Unnamed: 6": NaN
+  },
+  {
+    "Property Master Layout": 88,
+    "Unnamed: 1": "CORNER",
+    "Unnamed: 2": "The code to indicate a corner lot on two streets",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 2,
+    "Unnamed: 5": "SW",
+    "Unnamed: 6": "Values - '00', 'NE', 'NW', 'SE', 'SW', 'CR' "
+  },
+  {
+    "Property Master Layout": 89,
+    "Unnamed: 1": "LAND_AREA",
+    "Unnamed: 2": "Total Land Area",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 10,
+    "Unnamed: 5": 62645,
+    "Unnamed: 6": "If not 0, Total Land Area"
+  },
+  {
+    "Property Master Layout": 90,
+    "Unnamed: 1": "NUM_BLDGS",
+    "Unnamed: 2": "The Number of Buildings on the property",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 6,
+    "Unnamed: 5": 1,
+    "Unnamed: 6": NaN
+  },
+  {
+    "Property Master Layout": 91,
+    "Unnamed: 1": "YRBUILT",
+    "Unnamed: 2": "The year the building was constructed",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 4,
+    "Unnamed: 5": 1968,
+    "Unnamed: 6": NaN
+  },
+  {
+    "Property Master Layout": 92,
+    "Unnamed: 1": "YRBUILT_RANGE",
+    "Unnamed: 2": "The last year of the range",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 4,
+    "Unnamed: 5": 0,
+    "Unnamed: 6": "If built over several years, this last year of the range. Otherwise it is 0"
+  },
+  {
+    "Property Master Layout": 93,
+    "Unnamed: 1": "YRBUILT_FLAG",
+    "Unnamed: 2": "Year Built is an estimate",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 1,
+    "Unnamed: 5": " ",
+    "Unnamed: 6": "E = Year Built is an estimate"
+  },
+  {
+    "Property Master Layout": 94,
+    "Unnamed: 1": "YRALT1",
+    "Unnamed: 2": "Year of alteration",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 4,
+    "Unnamed: 5": 0,
+    "Unnamed: 6": NaN
+  },
+  {
+    "Property Master Layout": 95,
+    "Unnamed: 1": "YRALT1_RANGE",
+    "Unnamed: 2": "Last year of the alteration",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 4,
+    "Unnamed: 5": 0,
+    "Unnamed: 6": NaN
+  },
+  {
+    "Property Master Layout": 96,
+    "Unnamed: 1": "YRALT2",
+    "Unnamed: 2": "Year of second alteration",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 4,
+    "Unnamed: 5": 0,
+    "Unnamed: 6": NaN
+  },
+  {
+    "Property Master Layout": 97,
+    "Unnamed: 1": "YRALT2_RANGE",
+    "Unnamed: 2": "Last year of the second alteration",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 4,
+    "Unnamed: 5": 0,
+    "Unnamed: 6": NaN
+  },
+  {
+    "Property Master Layout": 98,
+    "Unnamed: 1": "COOP_APTS",
+    "Unnamed: 2": "Number of residential units",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 6,
+    "Unnamed: 5": 0,
+    "Unnamed: 6": "# of Residential Units  "
+  },
+  {
+    "Property Master Layout": 99,
+    "Unnamed: 1": "UNITS",
+    "Unnamed: 2": "Total number of units",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 6,
+    "Unnamed: 5": 0,
+    "Unnamed: 6": "Total # of Units "
+  },
+  {
+    "Property Master Layout": 100,
+    "Unnamed: 1": "REUC_REF",
+    "Unnamed: 2": "Contains the ident number (alpha/numeric) for REUC properties",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 20,
+    "Unnamed: 5": "                    ",
+    "Unnamed: 6": NaN
+  },
+  {
+    "Property Master Layout": 101,
+    "Unnamed: 1": "APTNO",
+    "Unnamed: 2": "Apartment Number for condominium properties",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 10,
+    "Unnamed: 5": "          ",
+    "Unnamed: 6": NaN
+  },
+  {
+    "Property Master Layout": 102,
+    "Unnamed: 1": "COOP_NUM",
+    "Unnamed: 2": "Coop identification number",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 7,
+    "Unnamed: 5": 0,
+    "Unnamed: 6": NaN
+  },
+  {
+    "Property Master Layout": 103,
+    "Unnamed: 1": "CPB_BORO",
+    "Unnamed: 2": "Borough code",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 1,
+    "Unnamed: 5": 1,
+    "Unnamed: 6": NaN
+  },
+  {
+    "Property Master Layout": 104,
+    "Unnamed: 1": "CPB_DIST",
+    "Unnamed: 2": "Community planning board number",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 2,
+    "Unnamed: 5": 1,
+    "Unnamed: 6": NaN
+  },
+  {
+    "Property Master Layout": 105,
+    "Unnamed: 1": "APPT_DATE",
+    "Unnamed: 2": "Date of the most recent apportionment",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 8,
+    "Unnamed: 5": 39078,
+    "Unnamed: 6": NaN
+  },
+  {
+    "Property Master Layout": 106,
+    "Unnamed: 1": "APPT_BORO",
+    "Unnamed: 2": "Apportionment Borough",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 1,
+    "Unnamed: 5": 1,
+    "Unnamed: 6": NaN
+  },
+  {
+    "Property Master Layout": 107,
+    "Unnamed: 1": "APPT_BLOCK",
+    "Unnamed: 2": "Apportionment Block",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 5,
+    "Unnamed: 5": 100,
+    "Unnamed: 6": NaN
+  },
+  {
+    "Property Master Layout": 108,
+    "Unnamed: 1": "APPT_LOT",
+    "Unnamed: 2": "Apportionment Lot",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 4,
+    "Unnamed: 5": 1,
+    "Unnamed: 6": NaN
+  },
+  {
+    "Property Master Layout": 109,
+    "Unnamed: 1": "APPT_EASE",
+    "Unnamed: 2": "Apportionment Easement",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 1,
+    "Unnamed: 5": "A",
+    "Unnamed: 6": "Possible values : A, C, E, F, G, H, I, K, N"
+  },
+  {
+    "Property Master Layout": 110,
+    "Unnamed: 1": "CONDO_NUMBER",
+    "Unnamed: 2": "Condo identification number",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 6,
+    "Unnamed: 5": "101025",
+    "Unnamed: 6": NaN
+  },
+  {
+    "Property Master Layout": 111,
+    "Unnamed: 1": "CONDO_SFX1",
+    "Unnamed: 2": "Condo Suffix",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 1,
+    "Unnamed: 5": "C",
+    "Unnamed: 6": "C = Commercial unit\nR= Residential\nBlank = Entire condo is either all residential or all commercial"
+  },
+  {
+    "Property Master Layout": 112,
+    "Unnamed: 1": "CONDO_SFX2",
+    "Unnamed: 2": "Suffix 1 sequence number",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 1,
+    "Unnamed: 5": "3",
+    "Unnamed: 6": "1-9"
+  },
+  {
+    "Property Master Layout": 113,
+    "Unnamed: 1": "CONDO_SFX3",
+    "Unnamed: 2": "Not Used",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 1,
+    "Unnamed: 5": " ",
+    "Unnamed: 6": NaN
+  },
+  {
+    "Property Master Layout": 114,
+    "Unnamed: 1": "UAF_LAND",
+    "Unnamed: 2": "Land percent of common interest in the entire condo",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 0,
+    "Unnamed: 6": NaN
+  },
+  {
+    "Property Master Layout": 115,
+    "Unnamed: 1": "UAF_BLDG",
+    "Unnamed: 2": "Building percent of common interest in the condo",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 12,
+    "Unnamed: 5": 0,
+    "Unnamed: 6": NaN
+  },
+  {
+    "Property Master Layout": 116,
+    "Unnamed: 1": "PROTEST_1",
+    "Unnamed: 2": "Protest code",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 3,
+    "Unnamed: 5": "1",
+    "Unnamed: 6": "1st character decode:\n1 = form TC101 (generally for classes 2 and 4)                                                              \n5 = form TC105 (REUC)\n6 = form TC106 (reclass) \n8 = form TC108 (class 1 ) \n9 = form TC109 (condos)\n2nd character indicates duplicate\n3rd character not used"
+  },
+  {
+    "Property Master Layout": 117,
+    "Unnamed: 1": "PROTEST_2",
+    "Unnamed: 2": "Indicates a second protest on the property",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 3,
+    "Unnamed: 5": "   ",
+    "Unnamed: 6": "Same Protest Codes"
+  },
+  {
+    "Property Master Layout": 118,
+    "Unnamed: 1": "PROTEST_OLD",
+    "Unnamed: 2": "Same codes as the protest indicator",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 3,
+    "Unnamed: 5": "8NL",
+    "Unnamed: 6": "Same Protest Codes"
+  },
+  {
+    "Property Master Layout": 119,
+    "Unnamed: 1": "ATTORNEY_GROUP1",
+    "Unnamed: 2": "Protest Attorney identification number",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 4,
+    "Unnamed: 5": "491",
+    "Unnamed: 6": NaN
+  },
+  {
+    "Property Master Layout": 120,
+    "Unnamed: 1": "ATTORNEY_GROUP2",
+    "Unnamed: 2": "Protest Attorney identification number",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 4,
+    "Unnamed: 5": "    ",
+    "Unnamed: 6": NaN
+  },
+  {
+    "Property Master Layout": 121,
+    "Unnamed: 1": "ATTORNEY_GROUP_OLD",
+    "Unnamed: 2": "Protest Attorney identification number",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 4,
+    "Unnamed: 5": "491",
+    "Unnamed: 6": NaN
+  },
+  {
+    "Property Master Layout": 122,
+    "Unnamed: 1": "GROSS_SQFT",
+    "Unnamed: 2": "Gross Square Footage of the building",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 10,
+    "Unnamed: 5": 301941,
+    "Unnamed: 6": NaN
+  },
+  {
+    "Property Master Layout": 123,
+    "Unnamed: 1": "HOTEL_AREA_GROSS",
+    "Unnamed: 2": "Hotel Area Gross Square Footage",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 9,
+    "Unnamed: 5": 0,
+    "Unnamed: 6": NaN
+  },
+  {
+    "Property Master Layout": 124,
+    "Unnamed: 1": "OFFICE_AREA_GROSS",
+    "Unnamed: 2": "Office Area Gross Square Footage",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 9,
+    "Unnamed: 5": 301941,
+    "Unnamed: 6": NaN
+  },
+  {
+    "Property Master Layout": 125,
+    "Unnamed: 1": "RESIDENTIAL_AREA_GROSS",
+    "Unnamed: 2": "Residential Area Gross Square Footage",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 9,
+    "Unnamed: 5": 0,
+    "Unnamed: 6": NaN
+  },
+  {
+    "Property Master Layout": 126,
+    "Unnamed: 1": "RETAIL_AREA_GROSS",
+    "Unnamed: 2": "Retail Area Gross Square Footage",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 9,
+    "Unnamed: 5": 0,
+    "Unnamed: 6": NaN
+  },
+  {
+    "Property Master Layout": 127,
+    "Unnamed: 1": "LOFT_AREA_GROSS",
+    "Unnamed: 2": "Loft Area Gross Square Footage",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 9,
+    "Unnamed: 5": 0,
+    "Unnamed: 6": NaN
+  },
+  {
+    "Property Master Layout": 128,
+    "Unnamed: 1": "FACTORY_AREA_GROSS",
+    "Unnamed: 2": "Factory Area Gross Square Footage",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 9,
+    "Unnamed: 5": 0,
+    "Unnamed: 6": NaN
+  },
+  {
+    "Property Master Layout": 129,
+    "Unnamed: 1": "WAREHOUSE_AREA_GROSS",
+    "Unnamed: 2": "Warehouse Area Gross Square Footage",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 9,
+    "Unnamed: 5": 0,
+    "Unnamed: 6": NaN
+  },
+  {
+    "Property Master Layout": 130,
+    "Unnamed: 1": "STORAGE_AREA_GROSS",
+    "Unnamed: 2": "Storage Area Gross Square Footage",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 9,
+    "Unnamed: 5": 0,
+    "Unnamed: 6": NaN
+  },
+  {
+    "Property Master Layout": 131,
+    "Unnamed: 1": "GARAGE_AREA",
+    "Unnamed: 2": "Garage Area Gross Square Footage",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 9,
+    "Unnamed: 5": 0,
+    "Unnamed: 6": NaN
+  },
+  {
+    "Property Master Layout": 132,
+    "Unnamed: 1": "OTHER_AREA_GROSS",
+    "Unnamed: 2": "Other Area Gross Square Footage",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 9,
+    "Unnamed: 5": 0,
+    "Unnamed: 6": NaN
+  },
+  {
+    "Property Master Layout": 133,
+    "Unnamed: 1": "REUC_DESCRIPTION",
+    "Unnamed: 2": "REUC Description",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 500,
+    "Unnamed: 5": "CITY WATER TUNNELS 1 AND 2",
+    "Unnamed: 6": NaN
+  },
+  {
+    "Property Master Layout": 134,
+    "Unnamed: 1": "EXTRACTDT",
+    "Unnamed: 2": "Data extract date",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 8,
+    "Unnamed: 5": 20220517,
+    "Unnamed: 6": NaN
+  },
+  {
+    "Property Master Layout": 135,
+    "Unnamed: 1": "PYTAXFLAG",
+    "Unnamed: 2": "Prior Year Taxable Flag",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 1,
+    "Unnamed: 5": "A",
+    "Unnamed: 6": "T' = Transitional, 'A' = Actual "
+  },
+  {
+    "Property Master Layout": 136,
+    "Unnamed: 1": "TENTAXFLAG",
+    "Unnamed: 2": "Tentative Taxable Flag",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 1,
+    "Unnamed: 5": "A",
+    "Unnamed: 6": "T' = Transitional, 'A' = Actual "
+  },
+  {
+    "Property Master Layout": 137,
+    "Unnamed: 1": "CBNTAXFLAG",
+    "Unnamed: 2": "Change By Notice Taxable Flag",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 1,
+    "Unnamed: 5": "A",
+    "Unnamed: 6": "T' = Transitional, 'A' = Actual "
+  },
+  {
+    "Property Master Layout": 138,
+    "Unnamed: 1": "FINTAXFLAG",
+    "Unnamed: 2": "Final Taxable Flag",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 1,
+    "Unnamed: 5": "A",
+    "Unnamed: 6": "T' = Transitional, 'A' = Actual "
+  },
+  {
+    "Property Master Layout": 139,
+    "Unnamed: 1": "CURTAXFLAG",
+    "Unnamed: 2": "Current Taxable Flag",
+    "Unnamed: 3": NaN,
+    "Unnamed: 4": 1,
+    "Unnamed: 5": "A",
+    "Unnamed: 6": "T' = Transitional, 'A' = Actual "
+  }
+]

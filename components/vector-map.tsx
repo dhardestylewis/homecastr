@@ -119,6 +119,10 @@ export function VectorMap({
     const searchParams = useSearchParams()
 
     // VIEW SYNC: Update URL when map moves
+    // IMPORTANT: Read current params from window.location instead of searchParams
+    // to avoid a dependency loop (searchParams changes when ANY param changes,
+    // which would re-trigger this effect causing cascading navigations and NetworkErrors).
+    const moveEndTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     useEffect(() => {
         if (!mapRef.current) return
         const map = mapRef.current
@@ -126,16 +130,22 @@ export function VectorMap({
         const onMoveEnd = () => {
             const center = map.getCenter()
             const zoom = map.getZoom()
-            const params = new URLSearchParams(searchParams.toString())
-            params.set("lat", center.lat.toFixed(5))
-            params.set("lng", center.lng.toFixed(5))
-            params.set("zoom", zoom.toFixed(2))
-            router.replace(`?${params.toString()}`, { scroll: false })
+            if (moveEndTimerRef.current) clearTimeout(moveEndTimerRef.current)
+            moveEndTimerRef.current = setTimeout(() => {
+                const params = new URLSearchParams(window.location.search)
+                params.set("lat", center.lat.toFixed(5))
+                params.set("lng", center.lng.toFixed(5))
+                params.set("zoom", zoom.toFixed(2))
+                router.replace(`?${params.toString()}`, { scroll: false })
+            }, 300)
         }
 
         map.on("moveend", onMoveEnd)
-        return () => { map.off("moveend", onMoveEnd) }
-    }, [isLoaded, searchParams, router])
+        return () => {
+            map.off("moveend", onMoveEnd)
+            if (moveEndTimerRef.current) clearTimeout(moveEndTimerRef.current)
+        }
+    }, [isLoaded, router])
 
     // TRACK MOBILE
     // TRACK MOBILE - Handled by useMapInteraction hook

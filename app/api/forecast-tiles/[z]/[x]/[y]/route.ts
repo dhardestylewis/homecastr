@@ -21,7 +21,7 @@ function emptyTile() {
 /**
  * Forecast choropleth MVT tile endpoint.
  *
- * Calls forecast_20260220_7f31c6e4.mvt_choropleth_forecast(z,x,y,origin_year,horizon_m)
+ * Calls forecast_queue.mvt_choropleth_forecast(z,x,y,origin_year,horizon_m)
  * which auto-routes by zoom:
  *   z <= 7  → ZCTA
  *   z <= 11 → Tract
@@ -54,7 +54,7 @@ export async function GET(
     const seriesKind = searchParams.get("seriesKind") || "forecast"
     const variantId = searchParams.get("variantId") || "__forecast__"
     const levelOverride = searchParams.get("level") || null
-    const schemaName = searchParams.get("schema") || "forecast_20260220_7f31c6e4"
+    const schemaName = searchParams.get("schema") || "forecast_queue"
 
     const rpcParams = {
         z,

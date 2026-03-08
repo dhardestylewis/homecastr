@@ -1,0 +1,225 @@
+import type { Metadata } from "next"
+import { notFound } from "next/navigation"
+
+import { resolveSlugToTract, parseTractGeoid, enrichWithNeighborhood } from "@/lib/publishing/geo-crosswalk"
+import { fetchForecastPageData } from "@/lib/publishing/forecast-data"
+
+import { ForecastSummaryCard } from "@/components/publishing/ForecastSummaryCard"
+import { UncertaintyBand } from "@/components/publishing/UncertaintyBand"
+import { InterpretationSection } from "@/components/publishing/InterpretationSection"
+import { ComparablesTable } from "@/components/publishing/ComparablesTable"
+import { HistoryForecastChart } from "@/components/publishing/HistoryForecastChart"
+import { MethodCaveat } from "@/components/publishing/MethodCaveat"
+import Link from "next/link"
+
+// ISR: revalidate every hour so pages auto-update when ACS forecasts change
+export const revalidate = 3600
+
+const SCHEMA = process.env.FORECAST_SCHEMA || "forecast_queue"
+
+interface PageProps {
+    params: Promise<{
+        state: string
+        city: string
+        neighborhood: string
+    }>
+    searchParams: Promise<{ schema?: string }>
+}
+
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+    const { state, city, neighborhood } = await params
+    const tractGeoid = await resolveSlugToTract(state, city, neighborhood, SCHEMA)
+    if (!tractGeoid) return { title: "Forecast Not Found" }
+
+    let geo = parseTractGeoid(tractGeoid)
+    geo = await enrichWithNeighborhood(geo)
+
+    const data = await fetchForecastPageData(tractGeoid, 2025, SCHEMA)
+    const h5 = data?.forecast.horizons.find(h => h.horizon_m === 60)
+    const appreciation = h5 ? `${h5.appreciation > 0 ? "+" : ""}${h5.appreciation.toFixed(1)}%` : ""
+
+    const title = `${geo.neighborhoodName} Home Price Forecast, 2026–2030`
+    const description = `Homecastr forecasts ${geo.neighborhoodName} (${geo.city}, ${geo.stateAbbr}) home values ${appreciation ? `to change ${appreciation}` : ""} by 2030 (p50). See upside, downside, comparables, and uncertainty.`
+
+    return {
+        title,
+        description,
+        alternates: {
+            canonical: `/forecasts/${state}/${city}/${neighborhood}/home-price-forecast`,
+        },
+        openGraph: {
+            title: `${title} | Homecastr`,
+            description,
+            type: "article",
+            siteName: "Homecastr",
+        },
+        twitter: {
+            card: "summary",
+            title: `${title} | Homecastr`,
+            description,
+        },
+    }
+}
+
+export default async function NeighborhoodForecastPage({ params, searchParams }: PageProps) {
+    const { state, city, neighborhood } = await params
+    const sp = await searchParams
+    const schema = sp.schema || SCHEMA
+
+    // Resolve URL slug → tract GeoID
+    const tractGeoid = await resolveSlugToTract(state, city, neighborhood, schema)
+    console.log(`[forecast-page] resolve: state=${state} city=${city} neighborhood=${neighborhood} → tractGeoid=${tractGeoid}`)
+    if (!tractGeoid) notFound()
+
+    // Get geo info
+    let geo = parseTractGeoid(tractGeoid)
+    geo = await enrichWithNeighborhood(geo)
+
+    // Fetch all forecast data
+    const data = await fetchForecastPageData(tractGeoid, 2025, schema)
+    console.log(`[forecast-page] data for ${tractGeoid}: exists=${!!data} tokens=${data?.uniqueDataTokens}`)
+    if (!data) notFound()
+
+    // Build JSON-LD structured data
+    const h5 = data.forecast.horizons.find(h => h.horizon_m === 60)
+    const jsonLd = {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        mainEntity: [
+            {
+                "@type": "Question",
+                name: `What is the home price forecast for ${geo.neighborhoodName}?`,
+                acceptedAnswer: {
+                    "@type": "Answer",
+                    text: `Homecastr's model forecasts ${geo.neighborhoodName} median home values at $${Math.round(data.forecast.baselineP50).toLocaleString()} currently, with a 5-year expected change of ${h5 ? `${h5.appreciation.toFixed(1)}%` : "N/A"}.`,
+                },
+            },
+            {
+                "@type": "Question",
+                name: `How confident is the ${geo.neighborhoodName} forecast?`,
+                acceptedAnswer: {
+                    "@type": "Answer",
+                    text: h5
+                        ? `The 5-year forecast range spans from $${Math.round(h5.p10).toLocaleString()} (downside) to $${Math.round(h5.p90).toLocaleString()} (upside), with a spread of ${((h5.spread / h5.p50) * 100).toFixed(0)}% of median.`
+                        : "Forecast confidence data not available.",
+                },
+            },
+        ],
+    }
+
+    return (
+        <div className="space-y-10">
+            {/* JSON-LD */}
+            <script
+                type="application/ld+json"
+                dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+            />
+
+            {/* Breadcrumbs */}
+            <nav aria-label="Breadcrumb" className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
+                <Link href="/forecasts" className="hover:text-foreground transition-colors">Forecasts</Link>
+                <span>/</span>
+                <Link href={`/forecasts/${state}`} className="hover:text-foreground transition-colors">
+                    {geo.stateName}
+                </Link>
+                <span>/</span>
+                <Link href={`/forecasts/${state}/${city}`} className="hover:text-foreground transition-colors">
+                    {geo.city}
+                </Link>
+                <span>/</span>
+                <span className="text-foreground/70">{geo.neighborhoodName}</span>
+            </nav>
+
+            {/* Page title */}
+            <header className="space-y-3">
+                <h1 className="text-3xl font-bold tracking-tight sm:text-4xl text-foreground">
+                    {geo.neighborhoodName} Home Price Forecast
+                </h1>
+                <p className="text-base text-muted-foreground">
+                    {geo.city}, {geo.stateAbbr} · {data.forecast.originYear}–{data.forecast.originYear + 5} outlook · Census Tract {geo.tractGeoid}
+                </p>
+                <div className="flex items-center gap-3">
+                    {data.rankings.metroRank > 0 && (
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary border border-primary/20">
+                            #{data.rankings.metroRank} of {data.rankings.metroTotal} in metro
+                        </span>
+                    )}
+                    {data.rankings.nationalPercentile > 0 && (() => {
+                        const topPct = 100 - data.rankings.nationalPercentile
+                        const rounded = topPct <= 5 ? 5 : Math.ceil(topPct / 5) * 5
+                        return (
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-accent px-3 py-1 text-xs font-medium text-accent-foreground border border-border">
+                                Top {rounded}% nationally
+                            </span>
+                        )
+                    })()}
+                </div>
+            </header>
+
+            {/* 1. Historical Trend & Forecast (visual first) */}
+            <HistoryForecastChart
+                history={data.history}
+                horizons={data.forecast.horizons}
+                originYear={data.forecast.originYear}
+            />
+
+            {/* 2. Forecast Summary */}
+            <ForecastSummaryCard
+                horizons={data.forecast.horizons}
+                baselineP50={data.forecast.baselineP50}
+                neighborhoodName={geo.neighborhoodName}
+            />
+
+            {/* 3. Interpretation */}
+            <InterpretationSection
+                horizons={data.forecast.horizons}
+                neighborhoodName={geo.neighborhoodName}
+                city={geo.city}
+            />
+
+            {/* 4. Uncertainty Band */}
+            <UncertaintyBand horizons={data.forecast.horizons} />
+
+            {/* 5. Comparable Alternatives */}
+            <ComparablesTable
+                similar={data.comparables.similar}
+                higherUpside={data.comparables.higherUpside}
+                lowerRisk={data.comparables.lowerRisk}
+                currentTractGeoid={tractGeoid}
+                stateSlug={state}
+                citySlug={city}
+            />
+
+            {/* 6. Method / Caveat */}
+            <MethodCaveat
+                schemaVersion={SCHEMA}
+                originYear={data.forecast.originYear}
+            />
+
+            {/* Internal linking */}
+            <nav className="glass-panel rounded-xl p-5 space-y-3">
+                <h2 className="text-sm font-medium text-muted-foreground">Explore More Forecasts</h2>
+                <div className="flex flex-wrap gap-2">
+                    <Link
+                        href={`/forecasts/${state}/${city}`}
+                        className="text-xs px-3 py-1.5 rounded-lg bg-secondary hover:bg-accent text-muted-foreground hover:text-foreground border border-border transition-all"
+                    >
+                        All {geo.city} neighborhoods →
+                    </Link>
+                    <Link
+                        href={`/forecasts/${state}`}
+                        className="text-xs px-3 py-1.5 rounded-lg bg-secondary hover:bg-accent text-muted-foreground hover:text-foreground border border-border transition-all"
+                    >
+                        All {geo.stateName} cities →
+                    </Link>
+                    <Link
+                        href="/"
+                        className="text-xs px-3 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 transition-all"
+                    >
+                        Explore interactive map →
+                    </Link>
+                </div>
+            </nav>
+        </div>
+    )
+}

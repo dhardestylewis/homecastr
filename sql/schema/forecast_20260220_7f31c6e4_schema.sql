@@ -1290,6 +1290,8 @@ returns bytea
 language plpgsql
 stable
 as $$
+declare
+  v_result bytea;
 begin
   if p_level_override is not null then
     case lower(p_level_override)
@@ -1315,9 +1317,17 @@ begin
   elsif z <= 11 then
     return forecast_20260220_7f31c6e4.mvt_tract_choropleth_forecast(z,x,y,p_origin_year,p_horizon_m,p_series_kind,p_variant_id,p_run_id,p_backtest_id);
   elsif z <= 16 then
-    return forecast_20260220_7f31c6e4.mvt_tabblock_choropleth_forecast(z,x,y,p_origin_year,p_horizon_m,p_series_kind,p_variant_id,p_run_id,p_backtest_id);
+    -- Try tabblock; fall back to tract if empty
+    v_result := forecast_20260220_7f31c6e4.mvt_tabblock_choropleth_forecast(z,x,y,p_origin_year,p_horizon_m,p_series_kind,p_variant_id,p_run_id,p_backtest_id);
+    if v_result is not null and length(v_result) > 0 then return v_result; end if;
+    return forecast_20260220_7f31c6e4.mvt_tract_choropleth_forecast(z,x,y,p_origin_year,p_horizon_m,p_series_kind,p_variant_id,p_run_id,p_backtest_id);
   else
-    return forecast_20260220_7f31c6e4.mvt_parcel_choropleth_forecast(z,x,y,p_origin_year,p_horizon_m,p_series_kind,p_variant_id,p_run_id,p_backtest_id,p_parcel_limit);
+    -- Try parcel -> tabblock -> tract
+    v_result := forecast_20260220_7f31c6e4.mvt_parcel_choropleth_forecast(z,x,y,p_origin_year,p_horizon_m,p_series_kind,p_variant_id,p_run_id,p_backtest_id,p_parcel_limit);
+    if v_result is not null and length(v_result) > 0 then return v_result; end if;
+    v_result := forecast_20260220_7f31c6e4.mvt_tabblock_choropleth_forecast(z,x,y,p_origin_year,p_horizon_m,p_series_kind,p_variant_id,p_run_id,p_backtest_id);
+    if v_result is not null and length(v_result) > 0 then return v_result; end if;
+    return forecast_20260220_7f31c6e4.mvt_tract_choropleth_forecast(z,x,y,p_origin_year,p_horizon_m,p_series_kind,p_variant_id,p_run_id,p_backtest_id);
   end if;
 end;
 $$;
@@ -1336,6 +1346,8 @@ returns bytea
 language plpgsql
 stable
 as $$
+declare
+  v_result bytea;
 begin
   if p_level_override is not null then
     case lower(p_level_override)
@@ -1361,9 +1373,17 @@ begin
   elsif z <= 11 then
     return forecast_20260220_7f31c6e4.mvt_tract_choropleth_history(z,x,y,p_year,p_series_kind,p_variant_id,p_run_id,p_backtest_id);
   elsif z <= 16 then
-    return forecast_20260220_7f31c6e4.mvt_tabblock_choropleth_history(z,x,y,p_year,p_series_kind,p_variant_id,p_run_id,p_backtest_id);
+    -- Try tabblock; fall back to tract if empty
+    v_result := forecast_20260220_7f31c6e4.mvt_tabblock_choropleth_history(z,x,y,p_year,p_series_kind,p_variant_id,p_run_id,p_backtest_id);
+    if v_result is not null and length(v_result) > 0 then return v_result; end if;
+    return forecast_20260220_7f31c6e4.mvt_tract_choropleth_history(z,x,y,p_year,p_series_kind,p_variant_id,p_run_id,p_backtest_id);
   else
-    return forecast_20260220_7f31c6e4.mvt_parcel_choropleth_history(z,x,y,p_year,p_series_kind,p_variant_id,p_run_id,p_backtest_id,p_parcel_limit);
+    -- Try parcel -> tabblock -> tract
+    v_result := forecast_20260220_7f31c6e4.mvt_parcel_choropleth_history(z,x,y,p_year,p_series_kind,p_variant_id,p_run_id,p_backtest_id,p_parcel_limit);
+    if v_result is not null and length(v_result) > 0 then return v_result; end if;
+    v_result := forecast_20260220_7f31c6e4.mvt_tabblock_choropleth_history(z,x,y,p_year,p_series_kind,p_variant_id,p_run_id,p_backtest_id);
+    if v_result is not null and length(v_result) > 0 then return v_result; end if;
+    return forecast_20260220_7f31c6e4.mvt_tract_choropleth_history(z,x,y,p_year,p_series_kind,p_variant_id,p_run_id,p_backtest_id);
   end if;
 end;
 $$;

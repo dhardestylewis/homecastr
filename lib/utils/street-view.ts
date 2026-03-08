@@ -160,3 +160,37 @@ export async function getSignedStreetViewUrl(
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY || ""
     return getStreetViewImageUrl(lat, lng, apiKey, width, height)
 }
+
+// ── Metadata availability check (FREE — $0 per call) ─────────────────────────
+
+export interface StreetViewMeta {
+    /** Whether imagery is available */
+    available: boolean
+    /** Road-snapped panorama lat/lng (only when available) */
+    snappedLat?: number
+    snappedLng?: number
+}
+
+/**
+ * Check whether Google Street View has imagery near a given location.
+ * Uses the free Street View Metadata API with a 5 km search radius.
+ * Returns the actual panorama coordinates (road-snapped) when imagery exists.
+ */
+export async function checkStreetViewAvailability(lat: number, lng: number): Promise<StreetViewMeta> {
+    try {
+        const res = await fetch(`/api/streetview-sign?lat=${lat}&lng=${lng}&meta=1`)
+        if (res.ok) {
+            const data = await res.json()
+            if (data.status === "OK" && data.location) {
+                return {
+                    available: true,
+                    snappedLat: data.location.lat,
+                    snappedLng: data.location.lng,
+                }
+            }
+            return { available: data.status === "OK" }
+        }
+    } catch { /* network error — assume available at original coords */ }
+    return { available: true } // optimistic fallback
+}
+

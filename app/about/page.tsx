@@ -3,7 +3,7 @@ import { ArrowRight, BarChart3, Globe, Layers, Sparkles, TrendingUp, Terminal } 
 import { HomecastrLogo } from '@/components/homecastr-logo'
 import { FanChart } from '@/components/fan-chart'
 
-// Static demo data for landing page FanChart — realistic Houston ~$300K property
+// Static demo data for landing page FanChart — realistic ~$300K property
 const DEMO_FAN_DATA = {
     years: [2026, 2027, 2028, 2029, 2030],
     p10: [285000, 278000, 274000, 271000, 268000],
@@ -105,7 +105,7 @@ export default function AboutPage() {
                 {/* Nav */}
                 <header className="border-b border-border/40 bg-background/80 backdrop-blur-md sticky top-0 z-50">
                     <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-                        <span className="font-bold tracking-tight text-xl">Homecastr</span>
+                        <HomecastrLogo size={28} variant="horizontal" />
                         <nav className="flex items-center gap-6">
                             <a href="#institutional" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">For Institutions</a>
                             <Link href="/support" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Support</Link>
@@ -150,7 +150,7 @@ export default function AboutPage() {
                             <div className="rounded-2xl glass-panel p-4">
                                 <div className="flex items-center gap-2 mb-2">
                                     <div className="w-2 h-2 rounded-full bg-primary" />
-                                    <span className="text-xs font-medium text-muted-foreground">Sample Forecast, Houston Heights</span>
+                                    <span className="text-xs font-medium text-muted-foreground">Sample Forecast</span>
                                 </div>
                                 <FanChart
                                     data={DEMO_FAN_DATA}
@@ -214,10 +214,10 @@ export default function AboutPage() {
                 <section className="max-w-6xl mx-auto px-6 py-24">
                     <div className="grid md:grid-cols-2 gap-16 items-center">
                         <div>
-                            <h2 className="text-3xl font-bold tracking-tight mb-6">Starting with Houston</h2>
+                            <h2 className="text-3xl font-bold tracking-tight mb-6">Nationwide Coverage</h2>
                             <p className="text-muted-foreground leading-relaxed mb-6">
-                                We&apos;re live across the greater Houston metro, including the Heights, Katy, Sugar Land,
-                                The Woodlands, and everywhere in between. More cities coming soon.
+                                We&apos;re live across the United States, covering Texas, New York,
+                                Florida, and more &mdash; with new markets added regularly.
                             </p>
                             <div className="flex gap-8">
                                 <div>
@@ -250,7 +250,7 @@ export default function AboutPage() {
                     <div className="max-w-6xl mx-auto px-6 text-center">
                         <h2 className="text-3xl font-bold tracking-tight mb-4">Ready to see your forecast?</h2>
                         <p className="text-muted-foreground mb-8 max-w-lg mx-auto">
-                            Look up any home in Houston and see where its value is headed.
+                            Look up any home and see where its value is headed.
                         </p>
                         <Link
                             href="/"
@@ -396,9 +396,9 @@ export default function AboutPage() {
                         <h2 className="text-3xl font-bold tracking-tight mb-6">Built by</h2>
                         <div className="inline-flex flex-col items-center gap-4 mb-8">
                             <img
-                                src="/dhl.jpg"
+                                src="https://media.licdn.com/dms/image/v2/C5603AQEi2jVd5TJuJQ/profile-displayphoto-shrink_800_800/profile-displayphoto-shrink_800_800/0/1583423498228?e=1723680000&v=beta&t=placeholder"
                                 alt="Daniel Hardesty Lewis"
-                                className="w-32 h-32 rounded-full object-cover border-4 border-primary/10 shadow-xl"
+                                className="w-32 h-32 rounded-full object-cover border-4 border-primary/10 shadow-xl bg-primary/10"
                             />
                             <div className="space-y-1">
                                 <div className="text-2xl font-bold">Daniel Hardesty Lewis</div>
@@ -454,9 +454,15 @@ export default function AboutPage() {
                             </div>
                         </div>
 
-                        <div className="mt-12 flex justify-center gap-4">
+                        <div className="mt-12 flex justify-center gap-3">
                             <a href="https://linkedin.com/in/dhardestylewis" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#0077b5]/10 text-[#0077b5] hover:bg-[#0077b5]/20 transition-colors text-sm font-medium">
-                                View LinkedIn Profile
+                                LinkedIn
+                            </a>
+                            <a href="https://scholar.google.com/citations?user=Vy3H9FAAAAAJ" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-muted/30 text-foreground/70 hover:bg-muted/50 transition-colors text-sm font-medium border border-border/40">
+                                Google Scholar
+                            </a>
+                            <a href="https://github.com/dhardestylewis" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-muted/30 text-foreground/70 hover:bg-muted/50 transition-colors text-sm font-medium border border-border/40">
+                                GitHub
                             </a>
                         </div>
                     </div>

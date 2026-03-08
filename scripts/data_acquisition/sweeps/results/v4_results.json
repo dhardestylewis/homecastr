@@ -1,0 +1,179 @@
+{
+  "elapsed": 96.48520302772522,
+  "sources": {
+    "AU NSW": [
+      {
+        "status": "PASS",
+        "detail": "NSW property sales dataset page accessible (1045038 bytes)"
+      }
+    ],
+    "AU NSW VG": [
+      {
+        "status": "PASS",
+        "detail": "Valuer General page loaded. Found 0 download-related links"
+      }
+    ],
+    "AU ABS": [
+      {
+        "status": "FAIL",
+        "detail": "ABS APIs returned timeout / timeout"
+      }
+    ],
+    "CA NHPI": [
+      {
+        "status": "FAIL",
+        "detail": "Direct CSV download failed: timeout"
+      }
+    ],
+    "CA NHPI Page": [
+      {
+        "status": "FAIL",
+        "detail": "Cannot access"
+      }
+    ],
+    "CA CREA MLS": [
+      {
+        "status": "PASS",
+        "detail": "CREA MLS HPI tool page accessible (129 KB)"
+      }
+    ],
+    "CH BFS": [
+      {
+        "status": "FAIL",
+        "detail": "HTTP timeout"
+      }
+    ],
+    "IT ISTAT HPI": [
+      {
+        "status": "FAIL",
+        "detail": "SDMX query failed: timeout"
+      }
+    ],
+    "IT OMI": [
+      {
+        "status": "PASS",
+        "detail": "OMI property quotations page loaded. References zones: True"
+      }
+    ],
+    "IT OMI Data": [
+      {
+        "status": "PASS",
+        "detail": "OMI data page loaded (115 KB). Download indicators: 2"
+      }
+    ],
+    "IN RBI DBIE": [
+      {
+        "status": "PASS",
+        "detail": "DBIE portal accessible (50 KB)"
+      }
+    ],
+    "IN RESIDEX": [
+      {
+        "status": "FAIL",
+        "detail": "Cannot access: timeout"
+      }
+    ],
+    "IN RESIDEX API": [
+      {
+        "status": "FAIL",
+        "detail": "API: timeout"
+      }
+    ],
+    "CO DANE": [
+      {
+        "status": "PASS",
+        "detail": "IPVN page loaded (86 KB). References cities: True"
+      }
+    ],
+    "CO DANE Files": [
+      {
+        "status": "PASS",
+        "detail": "Download/file references found: 4"
+      }
+    ],
+    "AE Dubai Pulse": [
+      {
+        "status": "PASS",
+        "detail": "Dubai Pulse accessible (0 KB)"
+      }
+    ],
+    "AE DLD Page": [
+      {
+        "status": "PASS",
+        "detail": "Open data page loaded. Transaction refs: True, download refs: 3"
+      }
+    ],
+    "DE BORIS WFS": [
+      {
+        "status": "FAIL",
+        "detail": "WFS: timeout"
+      }
+    ],
+    "DE BORIS Data": [
+      {
+        "status": "FAIL",
+        "detail": "WFS query failed: timeout"
+      }
+    ],
+    "DE Destatis": [
+      {
+        "status": "PASS",
+        "detail": "GENESIS HPI table (2936 bytes)"
+      }
+    ],
+    "KR MOLIT": [
+      {
+        "status": "FAIL",
+        "detail": "data.go.kr: timeout"
+      }
+    ],
+    "KR KOSIS": [
+      {
+        "status": "FAIL",
+        "detail": "KOSIS: timeout"
+      }
+    ],
+    "KR KOSIS API": [
+      {
+        "status": "FAIL",
+        "detail": "HTTP timeout"
+      }
+    ],
+    "NZ LINZ Titles": [
+      {
+        "status": "PASS",
+        "detail": "Property titles dataset page (11 KB). Has title/property refs: True"
+      }
+    ],
+    "NZ LINZ Addresses": [
+      {
+        "status": "PASS",
+        "detail": "Street address dataset accessible (11 KB)"
+      }
+    ],
+    "NZ Stats": [
+      {
+        "status": "FAIL",
+        "detail": "Stats NZ: timeout"
+      }
+    ],
+    "NZ RBNZ": [
+      {
+        "status": "FAIL",
+        "detail": "RBNZ: timeout"
+      }
+    ],
+    "IT OMI GIS": [
+      {
+        "status": "PASS",
+        "detail": "OMI GeoPortal accessible (10 KB)"
+      }
+    ],
+    "IT OMI Zones": [
+      {
+        "status": "FAIL",
+        "detail": "OMI REST: timeout"
+      }
+    ]
+  }
+}

@@ -1,0 +1,159 @@
+"use client"
+
+import { useState, useMemo } from "react"
+import Link from "next/link"
+import { ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react"
+
+export interface StateRow {
+    stateName: string
+    stateAbbr: string
+    stateSlug: string
+    countyCount: number
+    neighborhoodCount: number
+    medianValue: number | null
+    medianAppreciation: number | null
+    highestUpside: number | null
+}
+
+type SortKey = "name" | "counties" | "neighborhoods" | "value" | "outlook" | "upside"
+type SortDir = "asc" | "desc"
+
+const fmtVal = (v: number) => {
+    if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(2)}M`
+    if (v >= 1_000) return `$${(v / 1_000).toFixed(0)}K`
+    return `$${v.toFixed(0)}`
+}
+
+const fmtPct = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`
+
+const DISPLAY_CAP = 100
+const fmtPctCapped = (v: number) => {
+    if (Math.abs(v) > DISPLAY_CAP) return `${v >= 0 ? ">" : "<"}${v >= 0 ? "+" : "-"}${DISPLAY_CAP}% ⚠️`
+    return fmtPct(v)
+}
+const isOutlier = (v: number | null) => v !== null && Math.abs(v) > DISPLAY_CAP
+
+export function SortableStateTable({ rows }: { rows: StateRow[] }) {
+    const [sortKey, setSortKey] = useState<SortKey>("outlook")
+    const [sortDir, setSortDir] = useState<SortDir>("desc")
+
+    const sorted = useMemo(() => {
+        const nullLast = (a: number | null, b: number | null) => {
+            if (a === null && b === null) return 0
+            if (a === null) return 1
+            if (b === null) return -1
+            return a - b
+        }
+
+        const comparators: Record<SortKey, (a: StateRow, b: StateRow) => number> = {
+            name: (a, b) => a.stateName.localeCompare(b.stateName),
+            counties: (a, b) => a.countyCount - b.countyCount,
+            neighborhoods: (a, b) => a.neighborhoodCount - b.neighborhoodCount,
+            value: (a, b) => nullLast(a.medianValue, b.medianValue),
+            outlook: (a, b) => nullLast(a.medianAppreciation, b.medianAppreciation),
+            upside: (a, b) => nullLast(a.highestUpside, b.highestUpside),
+        }
+        const cmp = comparators[sortKey]
+        const dir = sortDir === "asc" ? 1 : -1
+        return [...rows].sort((a, b) => cmp(a, b) * dir)
+    }, [rows, sortKey, sortDir])
+
+    const toggleSort = (key: SortKey) => {
+        if (sortKey === key) {
+            setSortDir(d => d === "asc" ? "desc" : "asc")
+        } else {
+            setSortKey(key)
+            setSortDir(key === "name" ? "asc" : "desc")
+        }
+    }
+
+    const SortIcon = ({ col }: { col: SortKey }) => {
+        if (sortKey !== col) return <ChevronsUpDown className="w-3 h-3 opacity-30" />
+        return sortDir === "asc"
+            ? <ChevronUp className="w-3 h-3" />
+            : <ChevronDown className="w-3 h-3" />
+    }
+
+    const thClass = "py-3 px-3 cursor-pointer hover:text-foreground transition-colors select-none"
+
+    return (
+        <div className="glass-panel rounded-xl overflow-hidden">
+            <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                    <thead>
+                        <tr className="text-xs text-muted-foreground uppercase tracking-wider border-b border-border bg-secondary/30">
+                            <th className="text-left py-3 px-4 w-10">#</th>
+                            <th className={`text-left ${thClass}`} onClick={() => toggleSort("name")}>
+                                <span className="inline-flex items-center gap-1">
+                                    State <SortIcon col="name" />
+                                </span>
+                            </th>
+                            <th className={`text-right ${thClass}`} onClick={() => toggleSort("counties")}>
+                                <span className="inline-flex items-center gap-1 justify-end">
+                                    Counties <SortIcon col="counties" />
+                                </span>
+                            </th>
+                            <th className={`text-right ${thClass}`} onClick={() => toggleSort("neighborhoods")}>
+                                <span className="inline-flex items-center gap-1 justify-end">
+                                    Neighborhoods <SortIcon col="neighborhoods" />
+                                </span>
+                            </th>
+                            <th className={`text-right ${thClass}`} onClick={() => toggleSort("value")}>
+                                <span className="inline-flex items-center gap-1 justify-end">
+                                    Median Value <SortIcon col="value" />
+                                </span>
+                            </th>
+                            <th className={`text-right ${thClass}`} onClick={() => toggleSort("outlook")}>
+                                <span className="inline-flex items-center gap-1 justify-end">
+                                    5yr Outlook <SortIcon col="outlook" />
+                                </span>
+                            </th>
+                            <th className={`text-right ${thClass}`} onClick={() => toggleSort("upside")}>
+                                <span className="inline-flex items-center gap-1 justify-end">
+                                    Top Upside <SortIcon col="upside" />
+                                </span>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                        {sorted.map((s, i) => (
+                            <tr key={s.stateSlug} className="hover:bg-accent/30 transition-colors">
+                                <td className="py-3 px-4 text-muted-foreground/40 font-mono text-xs">{i + 1}</td>
+                                <td className="py-3 px-3">
+                                    <Link
+                                        href={`/forecasts/${s.stateSlug}`}
+                                        className="text-primary hover:underline transition-colors font-medium"
+                                    >
+                                        {s.stateName}
+                                    </Link>
+                                    <span className="ml-2 text-xs font-mono text-muted-foreground/40">{s.stateAbbr}</span>
+                                </td>
+                                <td className="text-right py-3 px-3 font-mono text-muted-foreground tabular-nums">
+                                    {s.countyCount}
+                                </td>
+                                <td className="text-right py-3 px-3 font-mono text-muted-foreground tabular-nums">
+                                    {s.neighborhoodCount.toLocaleString()}
+                                </td>
+                                <td className="text-right py-3 px-3 font-mono text-muted-foreground tabular-nums">
+                                    {s.medianValue !== null ? fmtVal(s.medianValue) : "—"}
+                                </td>
+                                <td className={`text-right py-3 px-3 font-mono font-medium tabular-nums ${s.medianAppreciation !== null
+                                    ? isOutlier(s.medianAppreciation) ? "text-yellow-500/70" : s.medianAppreciation >= 0 ? "text-chart-high" : "text-chart-negative"
+                                    : "text-muted-foreground"
+                                    }`}>
+                                    {s.medianAppreciation !== null ? fmtPctCapped(s.medianAppreciation) : "—"}
+                                </td>
+                                <td className={`text-right py-3 px-3 font-mono tabular-nums ${s.highestUpside !== null
+                                    ? s.highestUpside >= 0 ? "text-chart-high/70" : "text-chart-negative/70"
+                                    : "text-muted-foreground"
+                                    }`}>
+                                    {s.highestUpside !== null ? fmtPctCapped(s.highestUpside) : "—"}
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    )
+}

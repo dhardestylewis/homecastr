@@ -79,6 +79,11 @@ def train_worldmodel(
     client = storage.Client()
     bucket = client.bucket(bucket_name)
 
+    # GCS path overrides for jurisdictions with non-standard panel locations
+    PANEL_GCS_OVERRIDES = {
+        "florida_dor": "panels/florida_dor_panel.parquet",
+    }
+
     if jurisdiction == "all":
         # Grand panel: download and concatenate all jurisdiction partitions
         panel_blobs = [b for b in bucket.list_blobs(prefix="panel/jurisdiction=") if b.name.endswith("/part.parquet")]
@@ -131,7 +136,11 @@ def train_worldmodel(
         # Fall through to adaptation and training using the merged dataframe `df`
         jurisdiction_suffix = "grand_panel"
     else:
-        blob_path = panel_gcs_path if panel_gcs_path else f"panel/jurisdiction={jurisdiction}/part.parquet"
+        blob_path = (panel_gcs_path if panel_gcs_path
+                     else PANEL_GCS_OVERRIDES.get(jurisdiction,
+                          f"panel/jurisdiction={jurisdiction}/part.parquet"))
+        if jurisdiction == "nyc":
+            blob_path = "panel/jurisdiction=nyc/nyc_panel_h3.parquet"
         blob = bucket.blob(blob_path)
         if not blob.exists():
             available = [b.name for b in bucket.list_blobs(prefix="panel/")]
@@ -181,19 +190,19 @@ def train_worldmodel(
     # SECURE TARGET LEAKAGE 
     # Determine the strongest valuation signal available per row
     # Support ACS median_home_value as target
-    available_val_cols = [c for c in ["sale_price", "property_value", "assessed_value", "median_home_value", "market_value", "value"] if c in df.columns]
+    available_val_cols = [c for c in ["sale_price", "property_value", "assessed_value", "median_home_value", "market_value", "value", "total_appraised_value"] if c in df.columns]
     if available_val_cols and "tot_appr_val" not in df.columns:
         df = df.with_columns(
             pl.coalesce([pl.col(c) for c in available_val_cols]).alias("tot_appr_val")
         )
     elif "tot_appr_val" not in df.columns:
-        raise ValueError("Panel contains no sale_price, property_value, assessed_value, median_home_value, market_value, value, or tot_appr_val to form a target.")
+        raise ValueError("Panel contains no sale_price, property_value, assessed_value, median_home_value, market_value, value, total_appraised_value, or tot_appr_val to form a target.")
 
     # ─── Ensure numeric types before year gap fill ───
     # Panels built from CSV (e.g. Florida DOR) may have all-string dtypes.
     if "yr" in df.columns and df["yr"].dtype == pl.Utf8:
-        df = df.with_columns(pl.col("yr").cast(pl.Int32, strict=False))
-        print(f"[{ts()}] Cast yr: Utf8 → Int32")
+        df = df.with_columns(pl.col("yr").cast(pl.Int64, strict=False))
+        print(f"[{ts()}] Cast yr: Utf8 → Int64")
     if "tot_appr_val" in df.columns and df["tot_appr_val"].dtype == pl.Utf8:
         df = df.with_columns(pl.col("tot_appr_val").cast(pl.Float64, strict=False))
         print(f"[{ts()}] Cast tot_appr_val: Utf8 → Float64")
@@ -207,7 +216,9 @@ def train_worldmodel(
     # ─── Fill year gaps (carry forward) ───
     # TxGIO has gaps (e.g. 2019→2021, no 2020). Shard builder needs contiguous years.
     if "yr" in df.columns:
-        existing_years = sorted(int(y) for y in df["yr"].drop_nulls().unique().to_list())
+        existing_years = sorted(int(y) for y in df["yr"].drop_nulls().unique().to_list() if y > 1900)
+        if not existing_years:
+            raise ValueError("No valid years (>1900) found in panel for gap filling.")
         yr_min, yr_max = existing_years[0], existing_years[-1]
         all_years = set(range(yr_min, yr_max + 1))
         missing_years = sorted(all_years - set(existing_years))
@@ -217,14 +228,16 @@ def train_worldmodel(
                 # Find nearest prior year
                 prior = max(y for y in existing_years if y < gap_yr)
                 gap_fill = df.filter(pl.col("yr") == prior).with_columns(
-                    pl.lit(gap_yr).cast(pl.Int32).alias("yr")
+                    pl.lit(gap_yr).cast(pl.Int64).alias("yr")
                 )
                 df = pl.concat([df, gap_fill])
                 print(f"  {prior} → {gap_yr}: {len(gap_fill):,} rows carried forward")
             df = df.sort(["acct", "yr"])
 
     # Explicitly DROP all canonical valuation components to strictly prevent model leakage into the features
-    leaky_cols = ["sale_price", "property_value", "assessed_value", "land_value", "improvement_value", "median_home_value", "market_value", "value", "total_value", "prior_value", "growth_pct"]
+    leaky_cols = ["sale_price", "property_value", "assessed_value", "land_value", "improvement_value", "median_home_value", "market_value", "value", "total_value", "prior_value", "growth_pct",
+                  # NYC DOF valuation columns (all variants of the target)
+                  "CURMKTLAND", "CURMKTTOT", "CURACTTOT", "FINACTTOT", "total_appraised_value"]
     drop_leaks = [c for c in leaky_cols if c in df.columns]
     if drop_leaks:
         print(f"[{ts()}] Dropping LEAKY valuation columns from feature set: {drop_leaks}")
@@ -295,7 +308,7 @@ def train_worldmodel(
             merged = merged.sort_values("_year")
 
             # Convert to Polars and join
-            macro_pl = pl.from_pandas(merged).rename({"_year": "yr"}).cast({"yr": pl.Int32})
+            macro_pl = pl.from_pandas(merged).rename({"_year": "yr"}).cast({"yr": pl.Int64})
             n_before = len(df.columns)
             df = df.join(macro_pl, on="yr", how="left")
             n_added = len(df.columns) - n_before
@@ -348,7 +361,7 @@ def train_worldmodel(
 
     df = df.with_columns([
         pl.col("acct").cast(pl.Utf8),
-        pl.col("yr").cast(pl.Int32),
+        pl.col("yr").cast(pl.Int64),
         pl.col("tot_appr_val").cast(pl.Float64),
     ])
 
@@ -414,7 +427,7 @@ def train_worldmodel(
     import shutil
     try:
         shutil.copy("/scripts/inference/worldmodel.py", wm_local)
-        shutil.copy("/scripts/pipeline/retrain_sample_sweep.py", retrain_local)
+        shutil.copy("/scripts/pipeline/launch/retrain_sample_sweep.py", retrain_local)
         print(f"[{ts()}] Successfully copied source files to /tmp/")
     except FileNotFoundError as e:
         print(f"[{ts()}] Error: Could not find scripts at /scripts mount. Did you mount the 'scripts' directory correctly? {e}")

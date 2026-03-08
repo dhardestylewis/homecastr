@@ -14,7 +14,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const originYear = parseInt(searchParams.get("originYear") || "2025")
     const horizonM = parseInt(searchParams.get("horizonM") || "12")
-    const schemaName = searchParams.get("schema") || "forecast_20260220_7f31c6e4"
+    const schemaName = searchParams.get("schema") || "forecast_queue"
 
     const supabase = getSupabaseAdmin()
 

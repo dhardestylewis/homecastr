@@ -173,6 +173,8 @@ SimpleScaler = _DimSafeScaler
     # ─── 2.5 Load and Format Panel (Must happen BEFORE worldmodel exec) ───
     print(f"[{ts()}] Loading {jurisdiction} ground truth from panel...")
     panel_blob_path = f"panel/jurisdiction={jurisdiction}/part.parquet"
+    if jurisdiction == "nyc":
+        panel_blob_path = "panel/jurisdiction=nyc/nyc_panel_h3.parquet"
     if jurisdiction == "all":
         panel_blob_path = "panel/grand_panel/part.parquet"
         
@@ -217,6 +219,9 @@ SimpleScaler = _DimSafeScaler
         elif "tot_appr_val" in df_actuals.columns:
             df_actuals = df_actuals.with_columns(pl.col("tot_appr_val").alias("property_value"))
             print(f"[{ts()}] Using existing tot_appr_val as property_value")
+        elif "total_appraised_value" in df_actuals.columns:
+            df_actuals = df_actuals.with_columns(pl.col("total_appraised_value").alias("property_value"))
+            print(f"[{ts()}] Derived property_value from total_appraised_value")
     
     # Derive parcel_id from geoid if missing (ACS)
     if "parcel_id" not in df_actuals.columns and "acct" not in df_actuals.columns:
@@ -550,11 +555,16 @@ SimpleScaler = _DimSafeScaler
     Z_tokens = sample_token_paths(K=int(_cfg.get("K_TOKENS", 8)), H=H, phi_vec=phi_vec, S=scenarios, device=_device)
 
     # ── Dimension diagnostics & force-alignment ──
-    # Truncate hist_y to FULL_HIST_LEN (ACS may have more years than checkpoint expects)
-    _full_hist_len = int(_cfg.get("FULL_HIST_LEN", 15))
-    if ctx["hist_y"].shape[1] > _full_hist_len:
-        print(f"[{ts()}] Truncating hist_y: {ctx['hist_y'].shape[1]} → {_full_hist_len} (keeping most recent)")
-        ctx["hist_y"] = ctx["hist_y"][:, -_full_hist_len:]
+    # Force hist_y to exactly match the checkpoint's hist_len
+    _actual_hist = ctx["hist_y"].shape[1]
+    import numpy as np
+    if _actual_hist < hist_len:
+        print(f"[{ts()}] Padding hist_y: {_actual_hist} → {hist_len} (prepending zeros)")
+        pad = np.zeros((ctx["hist_y"].shape[0], hist_len - _actual_hist), dtype=ctx["hist_y"].dtype)
+        ctx["hist_y"] = np.concatenate([pad, ctx["hist_y"]], axis=1)
+    elif _actual_hist > hist_len:
+        print(f"[{ts()}] Truncating hist_y: {_actual_hist} → {hist_len} (keeping most recent)")
+        ctx["hist_y"] = ctx["hist_y"][:, -hist_len:]
     
     # Find gating network input dimension from state dict
     _gating_in_dim = None

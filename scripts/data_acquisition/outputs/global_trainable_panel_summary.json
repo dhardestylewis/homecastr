@@ -1,0 +1,14 @@
+{
+  "total_rows": 800,
+  "countries": [
+    "France"
+  ],
+  "sources": [
+    "france_dvf"
+  ],
+  "rows_with_price": 800,
+  "rows_with_coords": 800,
+  "rows_with_area": 350,
+  "model_ready_rows": 350,
+  "elapsed": 125.7
+}

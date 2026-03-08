@@ -183,68 +183,50 @@ sources:
     - sale_price
     - sale_date
   nyc:
-    gcs_prefix: nyc/assessment_roll
-    format: csv_chunked
-    verified_against:
-      method: Panel builder dry-run + API headers
-      date: 2026-02-26
-      docs: https://data.cityofnewyork.us/resource/8y4t-faws.csv
-    file: chunk_*.csv
+    gcs_prefix: panel/jurisdiction=nyc
+    format: parquet_single
+    verified: true
+    file: nyc_panel_h3.parquet
     columns_verbatim:
-    - parid
-    - boro
-    - block
-    - lot
-    - easment
-    - subident
-    - taxclass
-    - curtaxclass
-    - bldgclass
-    - curbdgclass
-    - owner
-    - housenum_lo
-    - housenum_hi
-    - street_name
-    - bldg_lot_area
-    - gross_sqft
-    - units
-    - extbdg
-    - yrbuilt
-    - mkt_land
-    - mkt_total
-    - ast_land
-    - ast_total
-    - exm_land
-    - exm_total
-    - curmkt_land
-    - curmkt_total
-    - curast_land
-    - curast_total
-    - curexm_land
-    - curexm_total
-    - val_certific
+    - parcel_id
+    - year
+    - total_appraised_value
+    - BBL
+    - FY
+    - BORO
+    - BLOCK
+    - LOT
+    - CURMKTLAND
+    - CURMKTTOT
+    - CURACTTOT
+    - FINACTTOT
+    - CURTAXCLASS
+    - BLDG_CLASS
+    - OWNER
+    - ZIP_CODE
+    - lon
+    - lat
+    - h3_12
     mapping:
-      parcel_id: parid
-      assessed_value: ast_total
-      land_value: ast_land
+      parcel_id: parcel_id
+      year: year
+      assessed_value: total_appraised_value
+      land_value: CURMKTLAND
       improvement_value: null
-      dwelling_type: bldgclass
-      sqft: gross_sqft
-      land_area: bldg_lot_area
-      year_built: yrbuilt
-      address: street_name
-      sale_date: SALE DATE
-    derived:
-      year: extract_year(sale_date)
+      dwelling_type: BLDG_CLASS
+      lat: lat
+      lon: lon
+      address: null
+      sqft: null
+      land_area: null
+      year_built: null
     missing:
     - sale_price
     - sale_date
     - bedrooms
     - bathrooms
     - stories
-    - lat
-    - lon
-    notes: NYC DoF assessment roll. Missing lat/lon will be merged with PLUTO data.
+    notes: NYC DOF Assessment Panel joined with MapPLUTO via BBL. H3 Index computed at resolution 12.
   cook_county_il:
     gcs_prefix: cook_county_il/assessed_values
     format: csv_chunked

@@ -1,0 +1,15 @@
+﻿gs://properlytic-raw-data/panel/grand_panel/
+gs://properlytic-raw-data/panel/jurisdiction=acs_nationwide/
+gs://properlytic-raw-data/panel/jurisdiction=cook_county_il/
+gs://properlytic-raw-data/panel/jurisdiction=france_dvf/
+gs://properlytic-raw-data/panel/jurisdiction=hcad_houston/
+gs://properlytic-raw-data/panel/jurisdiction=nyc/
+gs://properlytic-raw-data/panel/jurisdiction=nyc_pluto/
+gs://properlytic-raw-data/panel/jurisdiction=philly/
+gs://properlytic-raw-data/panel/jurisdiction=seattle_wa/
+gs://properlytic-raw-data/panel/jurisdiction=sf_ca/
+gs://properlytic-raw-data/panel/jurisdiction=txgio_texas/
+gs://properlytic-raw-data/panel/jurisdiction=uk_ppd/
+gs://properlytic-raw-data/panel/jurisdiction=universal_48201/
+gs://properlytic-raw-data/panel/jurisdiction=universal_48201_matched/
+gs://properlytic-raw-data/panel/jurisdiction=vancouver_bc/

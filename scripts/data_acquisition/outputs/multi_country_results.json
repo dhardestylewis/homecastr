@@ -1,0 +1,29 @@
+{
+  "random_cv_base (lat/lon/area)": 0.085,
+  "random_cv_full": -0.326,
+  "per_country_cv": {
+    "Taiwan": {
+      "r2": 0.116,
+      "n": 287
+    },
+    "Pakistan": {
+      "r2": -2.372,
+      "n": 182
+    }
+  },
+  "loco": {
+    "Taiwan": {
+      "r2": -0.07,
+      "mape": 81.1,
+      "n": 287
+    },
+    "Pakistan": {
+      "r2": -0.715,
+      "mape": 78.8,
+      "n": 182
+    }
+  },
+  "elapsed": 257.7,
+  "n_total": 469,
+  "n_countries": 2
+}

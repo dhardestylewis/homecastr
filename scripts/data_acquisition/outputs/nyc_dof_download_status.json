@@ -1,0 +1,190 @@
+{
+  "fy26_tc1": {
+    "status": "downloaded",
+    "size_mb": 67.8
+  },
+  "fy26_tc234": {
+    "status": "downloaded",
+    "size_mb": 42.0
+  },
+  "fy26_avroll1234": {
+    "status": "downloaded",
+    "size_mb": 110.3
+  },
+  "fy26_reuc": {
+    "status": "downloaded",
+    "size_mb": 0.9
+  },
+  "fy25_tc1": {
+    "status": "downloaded",
+    "size_mb": 67.4
+  },
+  "fy25_tc234": {
+    "status": "downloaded",
+    "size_mb": 41.6
+  },
+  "fy25_avroll1234": {
+    "status": "downloaded",
+    "size_mb": 109.6
+  },
+  "fy25_reuc": {
+    "status": "downloaded",
+    "size_mb": 1.0
+  },
+  "fy24_tc1": {
+    "status": "downloaded",
+    "size_mb": 67.4
+  },
+  "fy24_tc234": {
+    "status": "downloaded",
+    "size_mb": 42.1
+  },
+  "fy24_avroll1234": {
+    "status": "downloaded",
+    "size_mb": 110.0
+  },
+  "fy24_reuc": {
+    "status": "downloaded",
+    "size_mb": 1.0
+  },
+  "fy23_tc1": {
+    "status": "downloaded",
+    "size_mb": 67.4
+  },
+  "fy23_tc234": {
+    "status": "downloaded",
+    "size_mb": 41.0
+  },
+  "fy23_avroll1234": {
+    "status": "downloaded",
+    "size_mb": 108.9
+  },
+  "fy23_reuc": {
+    "status": "downloaded",
+    "size_mb": 1.0
+  },
+  "fy22_tc1": {
+    "status": "downloaded",
+    "size_mb": 67.3
+  },
+  "fy22_tc234": {
+    "status": "downloaded",
+    "size_mb": 107.9
+  },
+  "fy22_tc2": {
+    "status": "downloaded",
+    "size_mb": 40.3
+  },
+  "fy22_reuc": {
+    "status": "downloaded",
+    "size_mb": 0.9
+  },
+  "fy21_tc1": {
+    "status": "downloaded",
+    "size_mb": 67.8
+  },
+  "fy21_tc234": {
+    "status": "downloaded",
+    "size_mb": 39.8
+  },
+  "fy21_reuc": {
+    "status": "downloaded",
+    "size_mb": 0.9
+  },
+  "fy20_tc1": {
+    "status": "downloaded",
+    "size_mb": 67.6
+  },
+  "fy20_tc24": {
+    "status": "downloaded",
+    "size_mb": 38.8
+  },
+  "fy19_tc1": {
+    "status": "downloaded",
+    "size_mb": 64.7
+  },
+  "fy19_tc234": {
+    "status": "downloaded",
+    "size_mb": 37.8
+  },
+  "fy18_tc1": {
+    "status": "downloaded",
+    "size_mb": 64.6
+  },
+  "fy18_tc234": {
+    "status": "downloaded",
+    "size_mb": 37.4
+  },
+  "fy17_tc1": {
+    "status": "downloaded",
+    "size_mb": 64.3
+  },
+  "fy17_tc234": {
+    "status": "downloaded",
+    "size_mb": 37.1
+  },
+  "fy16_tc1": {
+    "status": "downloaded",
+    "size_mb": 64.3
+  },
+  "fy16_tc234": {
+    "status": "downloaded",
+    "size_mb": 36.5
+  },
+  "fy15_tc1": {
+    "status": "downloaded",
+    "size_mb": 64.6
+  },
+  "fy15_tc234": {
+    "status": "downloaded",
+    "size_mb": 36.3
+  },
+  "fy14_tc1": {
+    "status": "downloaded",
+    "size_mb": 65.5
+  },
+  "fy14_tc234": {
+    "status": "downloaded",
+    "size_mb": 36.4
+  },
+  "fy13_tc1": {
+    "status": "downloaded",
+    "size_mb": 65.0
+  },
+  "fy13_tc234": {
+    "status": "downloaded",
+    "size_mb": 35.6
+  },
+  "fy12_tc1": {
+    "status": "downloaded",
+    "size_mb": 64.2
+  },
+  "fy12_tc234": {
+    "status": "downloaded",
+    "size_mb": 35.4
+  },
+  "fy11_tc1": {
+    "status": "downloaded",
+    "size_mb": 63.2
+  },
+  "fy11_tc234": {
+    "status": "downloaded",
+    "size_mb": 34.2
+  },
+  "fy10_tc1": {
+    "status": "downloaded",
+    "size_mb": 63.6
+  },
+  "fy10_tc234": {
+    "status": "downloaded",
+    "size_mb": 33.7
+  },
+  "fy09_tc1": {
+    "status": "downloaded",
+    "size_mb": 63.1
+  },
+  "fy09_tc234": {
+    "status": "downloaded",
+    "size_mb": 32.7
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "elapsed": 92.0,
+  "n_sources": 5,
+  "n_with_data": 3,
+  "total_rows": 625,
+  "results": {
+    "Taiwan|Real Price": {
+      "country": "Taiwan",
+      "source": "Real Price",
+      "n": 300,
+      "detail": "300 transactions with verified prices"
+    },
+    "Qatar|data.gov.qa": {
+      "country": "Qatar",
+      "source": "data.gov.qa",
+      "n": 125,
+      "detail": "125 records with actual values"
+    },
+    "Cambodia|ODC": {
+      "country": "Cambodia",
+      "source": "ODC",
+      "n": 0,
+      "detail": "Timeout"
+    },
+    "Pakistan|Zameen": {
+      "country": "Pakistan",
+      "source": "Zameen",
+      "n": 200,
+      "detail": "200 listings with prices"
+    },
+    "Canada BC|Assessment": {
+      "country": "Canada BC",
+      "source": "Assessment",
+      "n": 0,
+      "detail": "Resources are API-only, not direct CSV"
+    }
+  }
+}

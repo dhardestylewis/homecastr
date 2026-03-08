@@ -1,0 +1,11 @@
+Found 10 files in checkpoints/nyc/:
+  ckpt_v11_origin_2026_SF500K.pt (3.1 mins ago)
+  ckpt_v11_origin_2026_SF500K.pt (3.1 mins ago)
+  ckpt_v11_origin_2020_SF500K.pt (3.2 mins ago)
+  ckpt_v11_origin_2020_SF500K.pt (3.2 mins ago)
+  ckpt_v11_origin_2019_SF500K.pt (3.3 mins ago)
+  ckpt_v11_origin_2019_SF500K.pt (3.3 mins ago)
+  run_config.json (10020.4 mins ago)
+  ckpt_v11_origin_2025_SF500K.pt (10020.4 mins ago)
+  ckpt_v11_origin_2022_SF500K.pt (10020.4 mins ago)
+  ckpt_v11_origin_2021_SF500K.pt (10020.5 mins ago)

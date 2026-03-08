@@ -1,0 +1,205 @@
+{
+  "elapsed": 126.3,
+  "n_sources": 28,
+  "n_pass": 10,
+  "n_fail": 18,
+  "total_rows": 565,
+  "results": {
+    "France|DVF": {
+      "country": "France",
+      "source": "DVF",
+      "status": "pass",
+      "n_rows": 320,
+      "detail": "320 notarized sales"
+    },
+    "Singapore|HDB Resale": {
+      "country": "Singapore",
+      "source": "HDB Resale",
+      "status": "fail",
+      "n_rows": 0,
+      "detail": "Timeout"
+    },
+    "Japan|MLIT": {
+      "country": "Japan",
+      "source": "MLIT",
+      "status": "fail",
+      "n_rows": 0,
+      "detail": "Timeout"
+    },
+    "UK|PPD Linked Data": {
+      "country": "UK",
+      "source": "PPD Linked Data",
+      "status": "fail",
+      "n_rows": 0,
+      "detail": "Timeout/DNS"
+    },
+    "Ireland|PPR": {
+      "country": "Ireland",
+      "source": "PPR",
+      "status": "fail",
+      "n_rows": 0,
+      "detail": "Timeout"
+    },
+    "Taiwan|Real Price Registry": {
+      "country": "Taiwan",
+      "source": "Real Price Registry",
+      "status": "fail",
+      "n_rows": 0,
+      "detail": "API not accessible"
+    },
+    "Norway|SSB Sales": {
+      "country": "Norway",
+      "source": "SSB Sales",
+      "status": "pass",
+      "n_rows": 24,
+      "detail": "24 period observations"
+    },
+    "Norway|SSB PriceIndex": {
+      "country": "Norway",
+      "source": "SSB PriceIndex",
+      "status": "pass",
+      "n_rows": 20,
+      "detail": "20 quarterly price observations"
+    },
+    "Denmark|StatBank": {
+      "country": "Denmark",
+      "source": "StatBank",
+      "status": "fail",
+      "n_rows": 0,
+      "detail": "No data returned"
+    },
+    "Finland|StatFin": {
+      "country": "Finland",
+      "source": "StatFin",
+      "status": "fail",
+      "n_rows": 0,
+      "detail": "API issue"
+    },
+    "Hong Kong|RVD Transactions": {
+      "country": "Hong Kong",
+      "source": "RVD Transactions",
+      "status": "fail",
+      "n_rows": 0,
+      "detail": "Need direct CSV URL"
+    },
+    "Netherlands|CBS Dwellings": {
+      "country": "Netherlands",
+      "source": "CBS Dwellings",
+      "status": "pass",
+      "n_rows": 100,
+      "detail": "100 avg price observations"
+    },
+    "Sweden|SCB": {
+      "country": "Sweden",
+      "source": "SCB",
+      "status": "fail",
+      "n_rows": 0,
+      "detail": "API issue"
+    },
+    "Spain|INE HPI": {
+      "country": "Spain",
+      "source": "INE HPI",
+      "status": "pass",
+      "n_rows": 100,
+      "detail": "100 regional HPI observations"
+    },
+    "Poland|GUS BDL": {
+      "country": "Poland",
+      "source": "GUS BDL",
+      "status": "fail",
+      "n_rows": 0,
+      "detail": "API issue"
+    },
+    "Australia|ABS RPP": {
+      "country": "Australia",
+      "source": "ABS RPP",
+      "status": "fail",
+      "n_rows": 0,
+      "detail": "Timeout"
+    },
+    "Canada|StatsCan NHPI": {
+      "country": "Canada",
+      "source": "StatsCan NHPI",
+      "status": "fail",
+      "n_rows": 0,
+      "detail": "Timeout"
+    },
+    "South Korea|KOSIS": {
+      "country": "South Korea",
+      "source": "KOSIS",
+      "status": "fail",
+      "n_rows": 0,
+      "detail": "Timeout/API key needed"
+    },
+    "Switzerland|BFS PxWeb": {
+      "country": "Switzerland",
+      "source": "BFS PxWeb",
+      "status": "fail",
+      "n_rows": 0,
+      "detail": "Timeout/Error"
+    },
+    "Germany|Destatis GENESIS": {
+      "country": "Germany",
+      "source": "Destatis GENESIS",
+      "status": "pass",
+      "n_rows": 1,
+      "detail": "HPI table (2936 bytes)"
+    },
+    "Estonia|Land Board": {
+      "country": "Estonia",
+      "source": "Land Board",
+      "status": "fail",
+      "n_rows": 0,
+      "detail": "Not accessible"
+    },
+    "Czech Republic|CZSO": {
+      "country": "Czech Republic",
+      "source": "CZSO",
+      "status": "fail",
+      "n_rows": 0,
+      "detail": "Not accessible"
+    },
+    "India|RESIDEX": {
+      "country": "India",
+      "source": "RESIDEX",
+      "status": "fail",
+      "n_rows": 0,
+      "detail": "Timeout"
+    },
+    "Colombia|DANE IPVN": {
+      "country": "Colombia",
+      "source": "DANE IPVN",
+      "status": "pass",
+      "n_rows": 0,
+      "detail": "Page loaded, refs cities: True"
+    },
+    "New Zealand|LINZ Titles": {
+      "country": "New Zealand",
+      "source": "LINZ Titles",
+      "status": "pass",
+      "n_rows": 0,
+      "detail": "Dataset page accessible"
+    },
+    "Mexico|SHF HPI": {
+      "country": "Mexico",
+      "source": "SHF HPI",
+      "status": "pass",
+      "n_rows": 0,
+      "detail": "Page accessible"
+    },
+    "South Africa|FNB HPI": {
+      "country": "South Africa",
+      "source": "FNB HPI",
+      "status": "fail",
+      "n_rows": 0,
+      "detail": "Not directly downloadable"
+    },
+    "UAE|DLD Open Data": {
+      "country": "UAE",
+      "source": "DLD Open Data",
+      "status": "pass",
+      "n_rows": 0,
+      "detail": "Page accessible with download links"
+    }
+  }
+}

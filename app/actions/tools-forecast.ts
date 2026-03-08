@@ -2,7 +2,7 @@
 
 import { getSupabaseServerClient } from "@/lib/supabase/server"
 
-const FORECAST_SCHEMA = "forecast_20260220_7f31c6e4"
+const FORECAST_SCHEMA = "forecast_queue"
 
 /** Geography-level table metadata */
 const LEVEL_META: Record<string, { table: string; key: string }> = {

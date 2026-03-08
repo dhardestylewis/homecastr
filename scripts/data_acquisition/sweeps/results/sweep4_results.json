@@ -1,0 +1,135 @@
+{
+  "elapsed": 134.9,
+  "n_sources": 21,
+  "n_with_data": 0,
+  "n_accessible": 7,
+  "total_rows": 0,
+  "results": {
+    "Chile|SII Portal": {
+      "country": "Chile",
+      "source": "SII Portal",
+      "n": 0,
+      "detail": "Portal accessible (212 bytes)"
+    },
+    "Colombia|IGAC cadastral": {
+      "country": "Colombia",
+      "source": "IGAC cadastral",
+      "n": 0,
+      "detail": "API needs different endpoint"
+    },
+    "Ecuador|Municipal": {
+      "country": "Ecuador",
+      "source": "Municipal",
+      "n": 0,
+      "detail": "Timeout/No datasets"
+    },
+    "Uruguay|Catastro Portal": {
+      "country": "Uruguay",
+      "source": "Catastro Portal",
+      "n": 0,
+      "detail": "Portal accessible"
+    },
+    "Paraguay|Open Data": {
+      "country": "Paraguay",
+      "source": "Open Data",
+      "n": 0,
+      "detail": "Timeout"
+    },
+    "Rwanda|RLMA": {
+      "country": "Rwanda",
+      "source": "RLMA",
+      "n": 0,
+      "detail": "Timeout"
+    },
+    "South Africa|Open Data Portal": {
+      "country": "South Africa",
+      "source": "Open Data Portal",
+      "n": 0,
+      "detail": "Found: BER Ratings Building Certs 2025 2027 FCC; Boules FCC; Board of Revision Cases; Interstates; Ww Access (OpenData)"
+    },
+    "Kenya|Open Data": {
+      "country": "Kenya",
+      "source": "Open Data",
+      "n": 0,
+      "detail": "Timeout"
+    },
+    "Ghana|Lands Commission": {
+      "country": "Ghana",
+      "source": "Lands Commission",
+      "n": 0,
+      "detail": "Timeout"
+    },
+    "Tanzania|Open Data": {
+      "country": "Tanzania",
+      "source": "Open Data",
+      "n": 0,
+      "detail": "Timeout"
+    },
+    "Vietnam|data.gov.vn": {
+      "country": "Vietnam",
+      "source": "data.gov.vn",
+      "n": 0,
+      "detail": "Timeout"
+    },
+    "Thailand|DOL": {
+      "country": "Thailand",
+      "source": "DOL",
+      "n": 0,
+      "detail": "Timeout"
+    },
+    "Malaysia|data.gov.my": {
+      "country": "Malaysia",
+      "source": "data.gov.my",
+      "n": 0,
+      "detail": "Page accessible (69KB)"
+    },
+    "Philippines|PSA": {
+      "country": "Philippines",
+      "source": "PSA",
+      "n": 0,
+      "detail": "Timeout"
+    },
+    "Bangladesh|Open Data": {
+      "country": "Bangladesh",
+      "source": "Open Data",
+      "n": 0,
+      "detail": "Timeout"
+    },
+    "Pakistan|opendata.com.pk": {
+      "country": "Pakistan",
+      "source": "opendata.com.pk",
+      "n": 0,
+      "detail": "Found 10 datasets"
+    },
+    "Mongolia|Open Data": {
+      "country": "Mongolia",
+      "source": "Open Data",
+      "n": 0,
+      "detail": "Timeout"
+    },
+    "Australia VIC|DELWP/data.vic": {
+      "country": "Australia VIC",
+      "source": "DELWP/data.vic",
+      "n": 0,
+      "detail": "Found: DFFH annual report 2020-21 - Financial statement; DH annual report 2020-21 - Financial statements; DHHS annual report 2019-20 - Financial statement; DHHS annual report 2018-19 - Financial statements"
+    },
+    "Australia QLD|data.qld": {
+      "country": "Australia QLD",
+      "source": "data.qld",
+      "n": 0,
+      "detail": "Found: Valuation Property Boundaries - Queensland; Historical cadastral map series\u2014Queensland; EPM25952 MAGENTA FINAL REPORT FOR PERIOD ENDING 28 FEBRUARY "
+    },
+    "Fiji|Open Data": {
+      "country": "Fiji",
+      "source": "Open Data",
+      "n": 0,
+      "detail": "Timeout"
+    },
+    "Papua New Guinea|Open Data": {
+      "country": "Papua New Guinea",
+      "source": "Open Data",
+      "n": 0,
+      "detail": "Timeout"
+    }
+  }
+}

@@ -66,7 +66,7 @@ export function useFilters() {
     setOrDelete("yMin", filters.medNYearsMin.toString(), filters.medNYearsMin > 0)
     setOrDelete("underperf", "false", !filters.showUnderperformers)
     setOrDelete("warnings", "false", !filters.highlightWarnings)
-    setOrDelete("mode", filters.colorMode, filters.colorMode !== "growth")
+    setOrDelete("mode", filters.colorMode, filters.colorMode === "growth")
     // PMTiles disabled locally — don't persist to URL
     params.delete("pmtiles")
     setOrDelete("vector", "true", !!filters.useVectorMap)

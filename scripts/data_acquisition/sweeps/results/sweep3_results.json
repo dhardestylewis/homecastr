@@ -1,0 +1,98 @@
+{
+  "elapsed": 228.9,
+  "n_sources": 15,
+  "n_with_data": 2,
+  "total_rows": 51,
+  "results": {
+    "South Korea|MOLIT transactions": {
+      "country": "South Korea",
+      "source": "MOLIT transactions",
+      "n": 0,
+      "detail": "Timeout"
+    },
+    "Taiwan|Real Price Registry": {
+      "country": "Taiwan",
+      "source": "Real Price Registry",
+      "n": 1,
+      "detail": "1 transactions"
+    },
+    "Slovenia|GURS ETN": {
+      "country": "Slovenia",
+      "source": "GURS ETN",
+      "n": 0,
+      "detail": "WFS not accessible"
+    },
+    "Lithuania|Registr\u0173 centras": {
+      "country": "Lithuania",
+      "source": "Registr\u0173 centras",
+      "n": 0,
+      "detail": "API needs different endpoint"
+    },
+    "Estonia|Maa-amet": {
+      "country": "Estonia",
+      "source": "Maa-amet",
+      "n": 0,
+      "detail": "Needs specific dataset ID/API"
+    },
+    "Denmark|OIS/BBR/Boliga": {
+      "country": "Denmark",
+      "source": "OIS/BBR/Boliga",
+      "n": 50,
+      "detail": "50 records"
+    },
+    "Finland|NLS Purchase Prices": {
+      "country": "Finland",
+      "source": "NLS Purchase Prices",
+      "n": 0,
+      "detail": "WFS needs API key"
+    },
+    "New Zealand|LINZ/Stats NZ": {
+      "country": "New Zealand",
+      "source": "LINZ/Stats NZ",
+      "n": 0,
+      "detail": "Needs API key / CSV URL changed"
+    },
+    "Australia NSW|Valuer General": {
+      "country": "Australia NSW",
+      "source": "Valuer General",
+      "n": 0,
+      "detail": "Needs bulk download"
+    },
+    "Brazil SP|ITBI": {
+      "country": "Brazil SP",
+      "source": "ITBI",
+      "n": 0,
+      "detail": "ITBI dataset not in CKAN search"
+    },
+    "Netherlands|Kadaster/PDOK": {
+      "country": "Netherlands",
+      "source": "Kadaster/PDOK",
+      "n": 0,
+      "detail": "API needs key"
+    },
+    "Poland|GUS per-powiat": {
+      "country": "Poland",
+      "source": "GUS per-powiat",
+      "n": 0,
+      "detail": "API error"
+    },
+    "Czech Republic|\u010c\u00daZK WFS": {
+      "country": "Czech Republic",
+      "source": "\u010c\u00daZK WFS",
+      "n": 0,
+      "detail": "WFS capabilities accessible \u2014 cadastral parcels"
+    },
+    "Latvia|VZD/data.gov.lv": {
+      "country": "Latvia",
+      "source": "VZD/data.gov.lv",
+      "n": 0,
+      "detail": "Found 10 property datasets on open data portal"
+    },
+    "Croatia|eNekretnine": {
+      "country": "Croatia",
+      "source": "eNekretnine",
+      "n": 0,
+      "detail": "Portal accessible"
+    }
+  }
+}

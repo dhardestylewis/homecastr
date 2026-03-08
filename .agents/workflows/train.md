@@ -16,8 +16,8 @@ description: How to train the world model for a jurisdiction
 modal run scripts/pipeline/train_modal.py --jurisdiction <name> --origin <year>
 ```
 
-Available jurisdictions (must match `panel/jurisdiction=<name>/part.parquet` on GCS):
-- `hcad_houston`, `acs_nationwide`, `sf_ca`, `cook_county_il`, `nyc`, `philly`, `seattle_wa`, `france_dvf`, `txgio_texas`, `uk_ppd`, `vancouver_bc`
+Available jurisdictions (must match `panel/jurisdiction=<name>/part.parquet` on GCS, or have `PANEL_GCS_OVERRIDES` entry):
+- `hcad_houston`, `acs_nationwide`, `sf_ca`, `cook_county_il`, `nyc`, `philly`, `seattle_wa`, `france_dvf`, `txgio_texas`, `uk_ppd`, `vancouver_bc`, `florida_dor`
 
 ## All jurisdictions (parallel)
 // turbo

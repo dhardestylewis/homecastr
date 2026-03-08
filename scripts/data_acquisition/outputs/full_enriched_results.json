@@ -1,0 +1,70 @@
+{
+  "random_cv": {
+    "basic": {
+      "r2": 0.335,
+      "std": 0.179
+    },
+    "geocoded": {
+      "r2": 0.324,
+      "std": 0.142
+    },
+    "geo_jitter": {
+      "r2": 0.226,
+      "std": 0.236
+    },
+    "full": {
+      "r2": 0.139,
+      "std": 0.255
+    },
+    "full_ppm2": {
+      "r2": 0.139,
+      "std": 0.255
+    }
+  },
+  "spatial_cv_basic": 0.362,
+  "spatial_cv_full": 0.266,
+  "temporal_cv": {
+    "no_lag": {
+      "r2": 0.362,
+      "mape": 53.8
+    },
+    "with_lag": {
+      "r2": 0.338,
+      "mape": 58.0
+    },
+    "train_n": 183,
+    "test_n": 104
+  },
+  "expanding_window": [
+    {
+      "cutoff": 4,
+      "train": 91,
+      "test": 196,
+      "r2": 0.346,
+      "mape": 62.7
+    },
+    {
+      "cutoff": 6,
+      "train": 128,
+      "test": 159,
+      "r2": 0.326,
+      "mape": 69.4
+    },
+    {
+      "cutoff": 8,
+      "train": 183,
+      "test": 104,
+      "r2": 0.338,
+      "mape": 58.0
+    },
+    {
+      "cutoff": 10,
+      "train": 230,
+      "test": 57,
+      "r2": 0.434,
+      "mape": 42.0
+    }
+  ],
+  "pakistan_spatial_cv": -1.885,
+  "pakistan_random_cv": -1.107
+}

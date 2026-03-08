@@ -17,13 +17,17 @@ import modal, os, sys, json
 # Parse CLI args at module level for Modal dashboard naming
 _jur = "hcad_houston"
 _origin = "2024"
+_model = "v11"
 for i, a in enumerate(sys.argv):
     if a == "--jurisdiction" and i + 1 < len(sys.argv):
         _jur = sys.argv[i + 1]
     if a == "--origin" and i + 1 < len(sys.argv):
         _origin = sys.argv[i + 1]
+    if a == "--model" and i + 1 < len(sys.argv):
+        _model = sys.argv[i + 1]
 
-app = modal.App(f"inference-parallel-{_jur}-o{_origin}")
+_model_tag = "sb" if _model == "v12_sb" else "v11"
+app = modal.App(f"inference-{_model_tag}-{_jur}-o{_origin}")
 
 image = (
     modal.Image.from_registry(
@@ -43,6 +47,7 @@ image = (
         "wandb",
         "scipy",
         "scikit-learn",
+        "POT>=0.9",  # Python Optimal Transport for SF2M (v12_sb)
     )
     # Mount local scripts so worldmodel.py + inference_pipeline.py always match
     # the local codebase (prevents stale GCS code/ downloads)
@@ -55,6 +60,20 @@ wandb_secret = modal.Secret.from_name("wandb-creds", required_keys=["WANDB_API_K
 
 output_vol = modal.Volume.from_name("inference-outputs", create_if_missing=True)
 ckpt_vol = modal.Volume.from_name("properlytic-checkpoints", create_if_missing=True)
+
+# ── Jurisdiction-specific panel path resolution ──────────────────────────────
+# Must match the overrides in train_modal_sb.py so inference uses the same
+# panel that training used (prevents feature/year mismatches).
+_PANEL_OVERRIDES = {
+    "nyc": "panel/jurisdiction=nyc/nyc_panel_h3.parquet",
+}
+
+def _resolve_panel_gcs_path(jurisdiction: str, panel_gcs_path: str = "") -> str:
+    """Return the GCS blob path for a jurisdiction's panel.
+    Priority: explicit panel_gcs_path > jurisdiction override > default."""
+    if panel_gcs_path:
+        return panel_gcs_path
+    return _PANEL_OVERRIDES.get(jurisdiction, f"panel/jurisdiction={jurisdiction}/part.parquet")
 
 
 def _ts():
@@ -80,6 +99,7 @@ def run_inference_shard(
     suite_id: str,
     schema: str,
     panel_gcs_path: str = "",
+    model: str = "v11",         # "v11" or "v12_sb"
 ):
     """Run inference for a single shard of accounts on its own A100."""
     import time, glob as _glob, shutil
@@ -95,7 +115,7 @@ def run_inference_shard(
     bucket = client.bucket("properlytic-raw-data")
 
     panel_path = f"/tmp/panel_{jurisdiction}_shard{shard_idx}.parquet"
-    _panel_blob_path = panel_gcs_path if panel_gcs_path else f"panel/jurisdiction={jurisdiction}/part.parquet"
+    _panel_blob_path = _resolve_panel_gcs_path(jurisdiction, panel_gcs_path)
     blob = bucket.blob(_panel_blob_path)
     for attempt in range(3):
         try:
@@ -108,15 +128,23 @@ def run_inference_shard(
             time.sleep(5 * (attempt + 1))
     print(f"[{_ts()}] Downloaded panel: {os.path.getsize(panel_path) / 1e6:.1f} MB")
 
-    # ─── 2. Load worldmodel.py from local mount (matches training codebase) ──
-    with open("/scripts/inference/worldmodel.py", "r") as _f:
-        wm_source = _f.read()
-    print(f"[{_ts()}] Loaded worldmodel.py from local mount")
+    # ─── 2. Load worldmodel from local mount (matches training codebase) ──
+    _use_sb = (model == "v12_sb")
+    if _use_sb:
+        # v12_sb: load the SB-specific worldmodel (includes data plumbing + SF2M architecture)
+        with open("/scripts/inference/v12_sb/worldmodel_inference_sb.py", "r") as _f:
+            wm_source = _f.read()
+        print(f"[{_ts()}] Loaded worldmodel_inference_sb.py (v12_sb) from local mount")
+    else:
+        with open("/scripts/inference/worldmodel.py", "r") as _f:
+            wm_source = _f.read()
+        print(f"[{_ts()}] Loaded worldmodel.py (v11) from local mount")
 
     # ─── 3. Get checkpoint (always copy from volume to pick up retrains) ─────
-    ckpt_dir = f"/output/{jurisdiction}_v11"
+    _ckpt_suffix = "v12sb" if _use_sb else "v11"
+    ckpt_dir = f"/output/{jurisdiction}_{_ckpt_suffix}"
     os.makedirs(ckpt_dir, exist_ok=True)
-    modal_ckpt_dir = f"/checkpoints/{jurisdiction}_v11"
+    modal_ckpt_dir = f"/checkpoints/{jurisdiction}_{_ckpt_suffix}"
     modal_ckpts = _glob.glob(os.path.join(modal_ckpt_dir, "*.pt")) if os.path.isdir(modal_ckpt_dir) else []
     if modal_ckpts:
         for src in modal_ckpts:
@@ -125,16 +153,22 @@ def run_inference_shard(
             print(f"[{_ts()}] Copied checkpoint: {os.path.basename(src)}")
     # Also copy calibrator .pkl files from the volume (produced by sweep_stage1_calibration.py)
     modal_calibs = _glob.glob(os.path.join(modal_ckpt_dir, "calibrators_*.pkl")) if os.path.isdir(modal_ckpt_dir) else []
-    # Also check the output volume path (sweep writes to /output/{jur}_v11/)
+    # Also check the output volume path (sweep writes to /output/{jur}_{suffix}/)
     modal_calibs += _glob.glob(os.path.join(ckpt_dir, "calibrators_*.pkl"))
     for src in modal_calibs:
         dst = os.path.join(ckpt_dir, os.path.basename(src))
         if src != dst:
             shutil.copy2(src, dst)
             print(f"[{_ts()}] Copied calibrator: {os.path.basename(src)}")
-    # Fallback: GCS
+    # Fallback: GCS (only download checkpoints matching the model variant)
+    _ckpt_prefix = "ckpt_v12sb_" if _use_sb else "ckpt_v11_"
     for blob in [b for b in bucket.list_blobs(prefix=f"checkpoints/{jurisdiction}/") if b.name.endswith(".pt")]:
         fname = blob.name.split("/")[-1]
+        # Skip checkpoints from wrong model variant
+        if _use_sb and not fname.startswith("ckpt_v12sb_"):
+            continue
+        if not _use_sb and fname.startswith("ckpt_v12sb_"):
+            continue
         local = os.path.join(ckpt_dir, fname)
         if not os.path.exists(local):
             blob.download_to_filename(local)
@@ -146,6 +180,17 @@ def run_inference_shard(
         if not os.path.exists(local):
             blob.download_to_filename(local)
             print(f"[{_ts()}] Downloaded calibrator from GCS: {fname}")
+
+    # Clean stale checkpoints from wrong variant (Modal volume may persist across runs)
+    for _f in os.listdir(ckpt_dir):
+        if not _f.endswith(".pt"):
+            continue
+        if _use_sb and not _f.startswith("ckpt_v12sb_"):
+            os.remove(os.path.join(ckpt_dir, _f))
+            print(f"[{_ts()}] Removed stale non-SB checkpoint: {_f}")
+        elif not _use_sb and _f.startswith("ckpt_v12sb_"):
+            os.remove(os.path.join(ckpt_dir, _f))
+            print(f"[{_ts()}] Removed stale SB checkpoint: {_f}")
 
     # ─── 4. Load inference_pipeline.py from local mount ──────────────────────
     with open("/scripts/inference/inference_pipeline.py", "r") as _f:
@@ -165,11 +210,12 @@ def run_inference_shard(
                 pl.when(pl.col(_col) < -600_000_000).then(None).otherwise(pl.col(_col)).alias(_col)
             )
     if "property_value" not in _df.columns:
-        if "median_home_value" in _df.columns:
-            _df = _df.with_columns(pl.col("median_home_value").alias("property_value"))
-        elif "assessed_value" in _df.columns:
-            _df = _df.with_columns(pl.col("assessed_value").alias("property_value"))
-            print(f"[{_ts()}] Derived property_value from assessed_value")
+        # Match training's coalesce order (train_modal_sb.py)
+        _val_fallbacks = ["total_appraised_value", "median_home_value", "assessed_value"]
+        _found_val = next((c for c in _val_fallbacks if c in _df.columns), None)
+        if _found_val:
+            _df = _df.with_columns(pl.col(_found_val).alias("property_value"))
+            print(f"[{_ts()}] Derived property_value from {_found_val}")
     if "parcel_id" not in _df.columns and "acct" not in _df.columns:
         if "global_parcel_id" in _df.columns:
             _df = _df.with_columns(pl.col("global_parcel_id").alias("parcel_id"))
@@ -178,14 +224,18 @@ def run_inference_shard(
     _rename_map = {"parcel_id": "acct", "year": "yr", "property_value": "tot_appr_val",
                    "sqft": "living_area", "land_area": "land_ar", "year_built": "yr_blt",
                    "building_area_sqft": "living_area", "land_area_sqft": "land_ar",
-                   "bedrooms": "bed_cnt", "bathrooms": "full_bath", "stories": "nbr_story"}
+                   "bedrooms": "bed_cnt", "bathrooms": "full_bath", "stories": "nbr_story",
+                   "lat": "gis_lat", "lon": "gis_lon"}
     _actual = {k: v for k, v in _rename_map.items() if k in _df.columns}
     _drop = [v for k, v in _actual.items() if v in _df.columns]
     if _drop:
         _df = _df.drop(_drop)
     _df = _df.rename(_actual)
     # Drop leaky columns AFTER deriving property_value
-    for c in ["median_home_value", "sale_price", "assessed_value", "land_value", "improvement_value"]:
+    # Must match train_modal_sb.py leaky_cols list to prevent feature leakage
+    for c in ["median_home_value", "sale_price", "assessed_value", "land_value",
+              "improvement_value", "total_appraised_value",
+              "CURMKTLAND", "CURMKTTOT", "CURACTTOT", "FINACTTOT"]:
         if c in _df.columns:
             _df = _df.drop(c)
     # Cast columns to match the checkpoint's feature architecture:
@@ -271,7 +321,9 @@ def run_inference_shard(
         "FORECAST_ORIGIN_YEAR": origin_year,
         "SUPABASE_DB_URL": os.environ.get("SUPABASE_DB_URL", ""),
         "TARGET_SCHEMA": schema,
-        "CKPT_VARIANT_SUFFIX": "SF500K",
+        "CKPT_VARIANT_SUFFIX": "" if _use_sb else "SF500K",  # SB trained on all property types — skip SF filter
+        "MODEL_VARIANT": model,
+        "APPLY_CALIBRATION": False if _use_sb else True,  # no calibrators for SB
         "RUN_FULL_BACKTEST": False,
         "H": 6,
         "S_SCENARIOS": 256,
@@ -315,7 +367,16 @@ def run_inference_shard(
         print(f"[{_ts()}] DB statement_timeout patched to 1200s (20min) for shard {shard_idx+1}")
 
     exec(wm_source, g)
-    print(f"[{_ts()}] worldmodel.py loaded")
+    print(f"[{_ts()}] {'worldmodel_inference_sb' if _use_sb else 'worldmodel'}.py loaded")
+
+    # For v12_sb: also load the SF2M training code overlay (needed for model class defs)
+    if _use_sb:
+        _wm_sb_path = "/scripts/inference/v12_sb/worldmodel_sb.py"
+        with open(_wm_sb_path, "r") as _f:
+            wm_sb_source = _f.read()
+        g["__file__"] = _wm_sb_path  # so worldmodel_sb.py resolves worldmodel_inference_sb.py
+        exec(wm_sb_source, g)
+        print(f"[{_ts()}] worldmodel_sb.py overlay loaded")
 
     # ── torch.compile safety net ──────────────────────────────────────────────
     # Even with USE_TORCH_COMPILE=False, some code paths may trigger a compile.
@@ -330,6 +391,17 @@ def run_inference_shard(
         _dynamo.config.suppress_errors = True
     except Exception:
         pass
+
+    # inference_pipeline.py expects `all_accts` in globals (set by worldmodel.py at module level).
+    # In parallel mode, each shard only has its subset — inject it before exec.
+    g["all_accts"] = shard_accts
+
+    # v12_sb: worldmodel_sb.py does not create `lf` (panel DataFrame) like v11 worldmodel.py does.
+    # inference_pipeline.py references `lf` for building inference context — inject it.
+    if _use_sb and "lf" not in g:
+        g["lf"] = pl.scan_parquet(panel_path)
+        _lf_schema = g["lf"].collect_schema()
+        print(f"[{_ts()}] Injected 'lf' panel LazyFrame: {len(_lf_schema)} cols")
 
     exec(inf_source, g)
     print(f"[{_ts()}] inference_pipeline.py loaded")
@@ -450,7 +522,7 @@ def _load_accounts(jurisdiction: str, panel_gcs_path: str = "") -> list:
     client = storage.Client.from_service_account_info(creds)
     bucket = client.bucket("properlytic-raw-data")
     panel_path = "/tmp/panel_split.parquet"
-    _panel_blob_path = panel_gcs_path if panel_gcs_path else f"panel/jurisdiction={jurisdiction}/part.parquet"
+    _panel_blob_path = _resolve_panel_gcs_path(jurisdiction, panel_gcs_path)
     blob = bucket.blob(_panel_blob_path)
     # Retry download up to 3 times — large panels can fail with PARTIAL_CONTENT
     for attempt in range(3):
@@ -479,6 +551,7 @@ def main(
     suite_id_override: str = "",  # pass the suite_id from a cancelled job to reuse output dir
     schema: str = "forecast_queue",
     panel_gcs_path: str = "",  # override GCS blob path for non-standard panels
+    model: str = "v11",        # "v11" or "v12_sb" — which worldmodel to use
 ):
     """Fan out inference across N parallel A100 containers.
 
@@ -487,7 +560,7 @@ def main(
     """
     import uuid, time, random
 
-    print(f"🚀 Parallel inference: {jurisdiction} o={origin} n_shards={n_shards}")
+    print(f"🚀 Parallel inference ({model}): {jurisdiction} o={origin} n_shards={n_shards}")
     if resume_run_id:
         print(f"🔄 RESUME mode: run_id={resume_run_id} suite_id={suite_id_override or '(new suite)'}")
 
@@ -518,7 +591,7 @@ def main(
     # Fan out via Modal starmap — all shards run in parallel
     t0 = time.time()
     inputs = [
-        (jurisdiction, origin, shard, run_id, i, n_shards, suite_id, schema, panel_gcs_path)
+        (jurisdiction, origin, shard, run_id, i, n_shards, suite_id, schema, panel_gcs_path, model)
         for i, shard in enumerate(shards)
     ]
 

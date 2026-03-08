@@ -1172,22 +1172,28 @@ def _backtest_eval_summary_for_chunk(forecast_chunk_df: pd.DataFrame, acct_chunk
 def _get_checkpoint_paths(ckpt_dir: str):
     """
     Scan ckpt_dir for checkpoint files.
-    Prefers v11 checkpoints (ckpt_v11_origin_YYYY*.pt) over v10.2.
+    Prefers v12sb checkpoints when MODEL_VARIANT=='v12_sb', else prefers v11 over v10.2.
     Returns list of (origin_year: int, path: str) tuples.
     """
     import re as _re
-    pairs = {}  # origin -> path (last wins, v11 overwrites v10.2)
-    _pat = _re.compile(r"ckpt_(?:v11_)?origin_(\d{4})")
+    _prefer_sb = globals().get("MODEL_VARIANT", "") == "v12_sb"
+    pairs = {}  # origin -> path (last wins, preferred variant overwrites)
+    _pat = _re.compile(r"ckpt_(?:v1[12](?:sb)?_)?origin_(\d{4})")
     for fn in sorted(os.listdir(ckpt_dir)):
         if not fn.endswith(".pt"):
             continue
         m = _pat.search(fn)
         if m:
             origin = int(m.group(1))
-            is_v11 = "v11" in fn
-            # v11 always wins; otherwise only set if not already present
-            if is_v11 or origin not in pairs:
-                pairs[origin] = os.path.join(ckpt_dir, fn)
+            is_v12sb = "v12sb" in fn
+            is_v11 = "v11" in fn and not is_v12sb
+            # Preferred variant always wins; otherwise only set if not already present
+            if _prefer_sb:
+                if is_v12sb or origin not in pairs:
+                    pairs[origin] = os.path.join(ckpt_dir, fn)
+            else:
+                if is_v11 or origin not in pairs:
+                    pairs[origin] = os.path.join(ckpt_dir, fn)
     return sorted(pairs.items())
 
 
@@ -1204,7 +1210,12 @@ def _load_ckpt_into_live_objects(ckpt_path: str):
     _arch = ckpt.get("arch", None)
     if _arch is None:
         # v11 checkpoints always contain gating_net_state_dict; v10.2 never does
-        _arch = "v11" if "gating_net_state_dict" in ckpt else "v10.2"
+        if "sf2m_net_state_dict" in ckpt:
+            _arch = "sf2m_v12sb"
+        elif "gating_net_state_dict" in ckpt:
+            _arch = "v11"
+        else:
+            _arch = "v10.2"
 
     # Architecture dims — pull from saved config or fall back to worldmodel.py globals
     _hist_len = int(_cfg_ckpt.get("FULL_HIST_LEN", globals().get("FULL_HIST_LEN", 21)))
@@ -1214,7 +1225,106 @@ def _load_ckpt_into_live_objects(ckpt_path: str):
 
     _device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    if _arch in ("v11", "ab1"):
+    if _arch == "sf2m_v12sb":
+        # ── v12_sb: SF2MNetwork + gating + token_persistence + coh_scale ──
+        # Detect all architecture dims from checkpoint state dict (cross-jurisdiction)
+        _sd = ckpt.get("sf2m_net_state_dict", {})
+
+        # hist_len from hist_enc input dim
+        if "hist_enc.0.weight" in _sd:
+            _ckpt_hist_len = int(_sd["hist_enc.0.weight"].shape[1])
+            if _ckpt_hist_len != _hist_len:
+                print(f"[{_ts()}] ⚠️ Cross-jurisdiction: checkpoint hist_len={_ckpt_hist_len} vs panel hist_len={_hist_len}. Using checkpoint's.")
+                _hist_len = _ckpt_hist_len
+                globals()["FULL_HIST_LEN"] = _hist_len
+
+        # num_dim from num_enc input dim
+        _ckpt_num_dim = _num_dim
+        if "num_enc.0.weight" in _sd:
+            _ckpt_num_dim = int(_sd["num_enc.0.weight"].shape[1])
+            if _ckpt_num_dim != _num_dim:
+                print(f"[{_ts()}] ⚠️ Cross-jurisdiction: checkpoint num_dim={_ckpt_num_dim} vs panel num_dim={_num_dim}. Using checkpoint's.")
+                _num_dim = _ckpt_num_dim
+                globals()["NUM_DIM"] = _num_dim
+                _num_use = globals().get("num_use", [])
+                if len(_num_use) > _num_dim:
+                    globals()["num_use"] = _num_use[:_num_dim]
+
+        # Detect actual n_cat from checkpoint weights (count cat_embs.X.weight entries)
+        _sd = ckpt.get("sf2m_net_state_dict", {})
+        _ckpt_cat_count = sum(1 for k in _sd if k.startswith("cat_embs.") and k.endswith(".weight"))
+        if _ckpt_cat_count > 0 and _ckpt_cat_count != _n_cat:
+            print(f"[{_ts()}] ⚠️ Cross-jurisdiction: checkpoint n_cat={_ckpt_cat_count} vs panel n_cat={_n_cat}. Using checkpoint's.")
+            _n_cat = _ckpt_cat_count
+            globals()["N_CAT"] = _n_cat
+        elif _cfg_ckpt.get("N_CAT") is not None and int(_cfg_ckpt["N_CAT"]) != _n_cat:
+            _n_cat = int(_cfg_ckpt["N_CAT"])
+            print(f"[{_ts()}] ⚠️ Cross-jurisdiction: checkpoint cfg N_CAT={_n_cat} vs panel n_cat. Using checkpoint's.")
+            globals()["N_CAT"] = _n_cat
+
+        _sf2m_net = create_sf2m_network(target_dim=_H, hist_len=_hist_len,
+                                         num_dim=_num_dim, n_cat=_n_cat).to(_device)
+        _sf2m_net.load_state_dict(ckpt["sf2m_net_state_dict"])
+        _sf2m_net.eval()
+
+        _gating_net = create_gating_network(hist_len=_hist_len,
+                                             num_dim=_num_dim, n_cat=_n_cat).to(_device)
+        _gating_net.load_state_dict(ckpt["gating_net_state_dict"])
+        _gating_net.eval()
+
+        _token_persistence = create_token_persistence().to(_device)
+        _token_persistence.load_state_dict(ckpt["token_persistence_state_dict"])
+        _token_persistence.eval()
+
+        _coh_scale = create_coherence_scale().to(_device)
+        if "coh_scale_state_dict" in ckpt:
+            _coh_scale.load_state_dict(ckpt["coh_scale_state_dict"])
+        _coh_scale.eval()
+
+        # AB1: load mu_backbone if checkpoint contains it
+        _mu_backbone = None
+        if ckpt.get("mu_backbone_state_dict") is not None:
+            try:
+                _mu_backbone = create_mu_backbone(
+                    hist_len=_hist_len, num_dim=_num_dim, n_cat=_n_cat, H_dim=_H
+                ).to(_device)
+                _mu_backbone.load_state_dict(ckpt["mu_backbone_state_dict"])
+                _mu_backbone.eval()
+                print(f"[{_ts()}] AB1 mu_backbone loaded ({sum(p.numel() for p in _mu_backbone.parameters()):,} params)")
+            except Exception as _bb_err:
+                print(f"[{_ts()}] ⚠️ AB1 mu_backbone failed to load (non-fatal): {_bb_err}")
+                _mu_backbone = None
+
+        # Bridge schedule for SF2M sampler
+        _bridge_sched = BridgeSchedule(device=_device)
+
+        # Publish v12_sb modules into globals
+        globals()["model"] = _sf2m_net  # alias for torch.compile compatibility
+        globals()["sf2m_net"] = _sf2m_net
+        globals()["gating_net"] = _gating_net
+        globals()["token_persistence"] = _token_persistence
+        globals()["coh_scale"] = _coh_scale
+        globals()["mu_backbone"] = _mu_backbone
+        globals()["bridge_sched"] = _bridge_sched
+        globals()["_arch_loaded"] = "sf2m_v12sb"
+
+        # Inject num_use / cat_use from checkpoint (v11 worldmodel derives these from panel;
+        # SB worldmodel doesn't — the checkpoint stores them from training)
+        if "num_use" in ckpt and globals().get("num_use") is None:
+            globals()["num_use"] = list(ckpt["num_use"])
+            print(f"[{_ts()}] Injected num_use from checkpoint: {len(globals()['num_use'])} features")
+        if "cat_use" in ckpt and globals().get("cat_use") is None:
+            globals()["cat_use"] = list(ckpt["cat_use"])
+            print(f"[{_ts()}] Injected cat_use from checkpoint: {len(globals()['cat_use'])} features")
+
+        _phi_k = _token_persistence.get_phi_list()
+        _sigma_u = _coh_scale.get_sigma()
+        print(f"[{_ts()}] Loaded sf2m_v12sb checkpoint: {os.path.basename(ckpt_path)} "
+              f"| H={_H} hist_len={_hist_len} num_dim={_num_dim} n_cat={_n_cat} "
+              f"| phi_k={[f'{p:.3f}' for p in _phi_k]} sigma_u={_sigma_u:.3f} "
+              f"| device={_device}")
+
+    elif _arch in ("v11", "ab1"):
         # ── v11: denoiser + gating + token_persistence + coh_scale ──
         # Detect actual num_dim from checkpoint weights to handle cross-jurisdiction inference
         _ckpt_num_dim = _num_dim
@@ -1271,6 +1381,8 @@ def _load_ckpt_into_live_objects(ckpt_path: str):
         globals()["token_persistence"] = _token_persistence
         globals()["coh_scale"] = _coh_scale
         globals()["mu_backbone"] = _mu_backbone  # None if not AB1
+
+        globals()["_arch_loaded"] = "v11"
 
         _phi_k = _token_persistence.get_phi_list()
         _sigma_u = _coh_scale.get_sigma()
@@ -1330,9 +1442,11 @@ def _load_ckpt_into_live_objects(ckpt_path: str):
         # Override globals to use checkpoint's hist_len (pad, don't truncate)
         globals()["FULL_HIST_LEN"] = _hist_len
 
-    _model._y_scaler = _y_scaler
-    _model._n_scaler = _n_scaler
-    _model._t_scaler = _t_scaler
+    _model = globals().get("model")
+    if _model is not None:
+        _model._y_scaler = _y_scaler
+        _model._n_scaler = _n_scaler
+        _model._t_scaler = _t_scaler
 
     globals()["y_scaler"] = _y_scaler
     globals()["n_scaler"] = _n_scaler
@@ -1435,9 +1549,110 @@ def _apply_calibration_to_batch(y_levels: np.ndarray, anchor_prices: np.ndarray,
 
 def _sample_scenarios_for_inference_context(ctx, H: int, S: int, origin: int, prop_batch_size: int, calib_models: dict = None):
     """
+    Run sampler over the inference context in account batches of prop_batch_size.
+    Routes to SF2M sampler for v12_sb or DDIM sampler for v11.
+    Returns dict with keys: acct, y_levels (N,S,H), price_levels (N,S,H).
+    """
+    import torch
+
+    # Detect which architecture is loaded
+    _use_sf2m = (globals().get("_arch_loaded") == "sf2m_v12sb") or (globals().get("sf2m_net") is not None)
+
+    if _use_sf2m:
+        return _sample_scenarios_sf2m(ctx, H, S, origin, prop_batch_size, calib_models)
+    else:
+        return _sample_scenarios_ddim_v11(ctx, H, S, origin, prop_batch_size, calib_models)
+
+
+def _sample_scenarios_sf2m(ctx, H: int, S: int, origin: int, prop_batch_size: int, calib_models: dict = None):
+    """
+    v12_sb: Run SF2M (Schrödinger Bridge) sampler over inference context.
+    """
+    import torch
+
+    _sf2m_net = globals().get("sf2m_net") or globals().get("model")
+    _gating_net = globals().get("gating_net")
+    _y_scaler = globals().get("y_scaler")
+    _token_persistence = globals().get("token_persistence")
+    _coh_scale = globals().get("coh_scale")
+    _mu_backbone = globals().get("mu_backbone")
+    _bridge_sched = globals().get("bridge_sched")
+
+    if _sf2m_net is None or _gating_net is None:
+        raise RuntimeError("SF2M model/gating_net not in globals. Call _load_ckpt_into_live_objects first.")
+
+    _device = "cuda" if torch.cuda.is_available() else "cpu"
+    N = len(ctx["acct"])
+    _H = int(H)
+    _S = int(S)
+
+    # Sample K token paths once (shared across all parcels for coherence)
+    _K = int(globals().get("K_TOKENS", 8))
+    if _token_persistence is not None:
+        Z_tokens = sample_token_paths(_K, _H, _token_persistence, _S, _device)  # [S, K, H]
+    else:
+        _phi = float(globals().get("PHI_INIT", 0.80))
+        Z_tokens = sample_token_paths(_K, _H, _phi, _S, _device)
+
+    all_y = []
+    all_price = []
+
+    for start in range(0, N, prop_batch_size):
+        end = min(start + prop_batch_size, N)
+
+        deltas = sample_sf2m_v12(
+            sf2m_net=_sf2m_net,
+            gating_net=_gating_net,
+            bridge_sched=_bridge_sched,
+            hist_y_b=ctx["hist_y"][start:end],
+            cur_num_b=ctx["cur_num"][start:end],
+            cur_cat_b=ctx["cur_cat"][start:end],
+            region_id_b=ctx["region_id"][start:end],
+            Z_tokens=Z_tokens,
+            device=_device,
+            anchor_year=origin,
+            coh_scale=_coh_scale,
+            mu_backbone=_mu_backbone,
+        )  # (end-start, S, H) numpy
+
+        # Conversion (same as v11)
+        _y_anchor_batch = ctx["y_anchor"][start:end]
+        y_levels = _y_anchor_batch[:, None, None] + np.cumsum(deltas, axis=2)
+
+        # Stage 1 Calibration
+        if calib_models and len(calib_models) > 0:
+            _anchor_prices_batch = np.expm1(_y_anchor_batch)
+            _apply_calibration_to_batch(y_levels, _anchor_prices_batch, calib_models)
+
+        price_levels = np.expm1(y_levels)
+
+        # Anchor validation
+        _anchor_prices = np.expm1(_y_anchor_batch)
+        _median_fcst = np.median(price_levels, axis=1)
+        _safe_anchor = np.maximum(_anchor_prices, 1.0)[:, None]
+        _growth_ratio = _median_fcst / _safe_anchor
+        _absurd = (_growth_ratio > 10.0) | (_growth_ratio < 0.01)
+        _n_absurd = int(_absurd.any(axis=1).sum())
+        if _n_absurd > 0:
+            print(f"[{_ts()}] ⚠️  ANCHOR VALIDATION: {_n_absurd}/{end-start} parcels have "
+                  f"implausible growth (>10× or <1% of anchor value)")
+
+        all_y.append(y_levels)
+        all_price.append(price_levels)
+
+    _anchor_prices = np.expm1(ctx["y_anchor"])
+    return {
+        "acct": ctx["acct"],
+        "y_levels": np.concatenate(all_y, axis=0),
+        "price_levels": np.concatenate(all_price, axis=0),
+        "anchor_prices": _anchor_prices,
+    }
+
+
+def _sample_scenarios_ddim_v11(ctx, H: int, S: int, origin: int, prop_batch_size: int, calib_models: dict = None):
+    """
     v11: Run DDIM sampler over the inference context in account batches of prop_batch_size.
     Uses inducing-token paths and gating network for coherent joint scenarios.
-    Returns dict with keys: acct, y_levels (N,S,H), price_levels (N,S,H).
     """
     import torch
 

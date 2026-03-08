@@ -6,15 +6,38 @@ import { useState } from 'react'
 export default function SupportPage() {
     const [sending, setSending] = useState(false)
     const [sent, setSent] = useState(false)
+    const [error, setError] = useState('')
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault()
         setSending(true)
-        // Simulate API call
-        setTimeout(() => {
-            setSending(false)
+        setError('')
+
+        const form = e.currentTarget
+        const formData = new FormData(form)
+        const payload = {
+            name: formData.get('name') as string,
+            email: formData.get('email') as string,
+            topic: formData.get('topic') as string,
+            message: formData.get('message') as string,
+        }
+
+        try {
+            const res = await fetch("/api/contact", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+            })
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}))
+                throw new Error(data.error || 'Failed to send message')
+            }
             setSent(true)
-        }, 1500)
+        } catch (err: any) {
+            setError(err.message || 'Something went wrong. Please email support@homecastr.com directly.')
+        } finally {
+            setSending(false)
+        }
     }
 
     return (
@@ -86,6 +109,7 @@ export default function SupportPage() {
                                             <label htmlFor="name" className="text-sm font-medium">Name</label>
                                             <input
                                                 id="name"
+                                                name="name"
                                                 required
                                                 className="w-full px-4 py-2 rounded-lg bg-muted/30 border border-border/50 focus:outline-none focus:ring-2 focus:ring-primary/20"
                                                 placeholder="Your name"
@@ -95,6 +119,7 @@ export default function SupportPage() {
                                             <label htmlFor="email" className="text-sm font-medium">Email</label>
                                             <input
                                                 id="email"
+                                                name="email"
                                                 type="email"
                                                 required
                                                 className="w-full px-4 py-2 rounded-lg bg-muted/30 border border-border/50 focus:outline-none focus:ring-2 focus:ring-primary/20"
@@ -107,6 +132,7 @@ export default function SupportPage() {
                                         <label htmlFor="topic" className="text-sm font-medium">Topic</label>
                                         <select
                                             id="topic"
+                                            name="topic"
                                             className="w-full px-4 py-2 rounded-lg bg-muted/30 border border-border/50 focus:outline-none focus:ring-2 focus:ring-primary/20"
                                         >
                                             <option>General Support</option>
@@ -121,12 +147,17 @@ export default function SupportPage() {
                                         <label htmlFor="message" className="text-sm font-medium">Message</label>
                                         <textarea
                                             id="message"
+                                            name="message"
                                             required
                                             rows={5}
                                             className="w-full px-4 py-2 rounded-lg bg-muted/30 border border-border/50 focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none"
                                             placeholder="How can we help?"
                                         />
                                     </div>
+
+                                    {error && (
+                                        <p className="text-sm text-red-500">{error}</p>
+                                    )}
 
                                     <button
                                         type="submit"
@@ -165,8 +196,8 @@ export default function SupportPage() {
                             <div className="p-5 rounded-xl bg-muted/20 border border-border/40">
                                 <h3 className="font-semibold text-sm mb-2">What areas do you cover?</h3>
                                 <p className="text-sm text-muted-foreground">
-                                    We currently cover residential properties across the greater Houston metro area.
-                                    Additional markets are planned for future releases.
+                                    We cover residential properties across the United States, including Texas, New York, Florida, and more.
+                                    New markets and jurisdictions are added regularly.
                                 </p>
                             </div>
 

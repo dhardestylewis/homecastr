@@ -1,0 +1,4 @@
+﻿1077050423  2026-03-06T23:42:14Z  gs://properlytic-raw-data/panel/jurisdiction=nyc/nyc_panel_h3.parquet
+ 128182926  2026-03-06T23:14:37Z  gs://properlytic-raw-data/panel/jurisdiction=nyc/nyc_panel_h3_inspect.parquet
+  33859874  2026-02-26T21:06:37Z  gs://properlytic-raw-data/panel/jurisdiction=nyc/part.parquet
+TOTAL: 3 objects, 1239093223 bytes (1.15 GiB)

@@ -20,7 +20,7 @@ const TOOLTIP_HEIGHT = 620
 
 // Geography level definitions — zoom breakpoints must match the SQL router
 const GEO_LEVELS = [
-    { name: "zip3", minzoom: 0, maxzoom: 4.99, label: "ZIP3" },
+    { name: "state", minzoom: 0, maxzoom: 4.99, label: "State" },
     { name: "zcta", minzoom: 5, maxzoom: 7.99, label: "ZIP Code" },
     { name: "tract", minzoom: 8, maxzoom: 22, label: "Tract" },  // Extends to z22 as fallback underlay
     { name: "tabblock", minzoom: 12, maxzoom: 22, label: "Block" },
@@ -311,7 +311,12 @@ export function ForecastMap({
             if (!dragRef.current) return
             const dx = e.clientX - dragRef.current.startX
             const dy = e.clientY - dragRef.current.startY
-            setFixedTooltipPos({ globalX: dragRef.current.origX + dx, globalY: dragRef.current.origY + dy })
+            const MARGIN = 10
+            const rawX = dragRef.current.origX + dx
+            const rawY = dragRef.current.origY + dy
+            const clampedX = Math.max(MARGIN, Math.min(rawX, window.innerWidth - TOOLTIP_WIDTH - MARGIN))
+            const clampedY = Math.max(MARGIN, Math.min(rawY, window.innerHeight - TOOLTIP_HEIGHT - MARGIN))
+            setFixedTooltipPos({ globalX: clampedX, globalY: clampedY })
             userDraggedRef.current = true // user chose this position
         }
         const onMouseUp = () => { dragRef.current = null }
@@ -626,6 +631,10 @@ export function ForecastMap({
     }, [originYear, schema])
 
     // VIEW SYNC: Update URL and Origin State when map moves
+    // IMPORTANT: Read current params from window.location instead of searchParams
+    // to avoid a dependency loop (searchParams changes when ANY param changes,
+    // which would re-trigger this effect causing cascading navigations and NetworkErrors).
+    const moveEndTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     useEffect(() => {
         if (!mapRef.current) return
         const map = mapRef.current
@@ -637,11 +646,15 @@ export function ForecastMap({
             // Spatial check for dynamic origin year
             setMapCenter({ lat: center.lat, lng: center.lng })
 
-            const params = new URLSearchParams(searchParams.toString())
-            params.set("lat", center.lat.toFixed(5))
-            params.set("lng", center.lng.toFixed(5))
-            params.set("zoom", zoom.toFixed(2))
-            router.replace(`?${params.toString()}`, { scroll: false })
+            // Debounce URL updates to coalesce rapid map moves
+            if (moveEndTimerRef.current) clearTimeout(moveEndTimerRef.current)
+            moveEndTimerRef.current = setTimeout(() => {
+                const params = new URLSearchParams(window.location.search)
+                params.set("lat", center.lat.toFixed(5))
+                params.set("lng", center.lng.toFixed(5))
+                params.set("zoom", zoom.toFixed(2))
+                router.replace(`?${params.toString()}`, { scroll: false })
+            }, 300)
 
             // ─── Student inference: fetch building predictions outside Harris County at z≥13 ───
             if (!studentEnabled) return  // feature flag off
@@ -739,8 +752,9 @@ export function ForecastMap({
         map.on("moveend", onMoveEnd)
         return () => {
             map.off("moveend", onMoveEnd)
+            if (moveEndTimerRef.current) clearTimeout(moveEndTimerRef.current)
         }
-    }, [isLoaded, searchParams, router])
+    }, [isLoaded, router])
 
     // HORIZON OR ORIGIN YEAR CHANGED: refresh the vector tile URLs so map grabs correct data
     useEffect(() => {

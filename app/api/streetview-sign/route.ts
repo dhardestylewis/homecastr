@@ -24,6 +24,39 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: "Missing lat/lng" }, { status: 400 })
     }
 
+    // ── 0. Metadata-only mode (FREE — no image fetch) ────────────────────────
+    // Uses radius=5000m to find the nearest panorama, even in rural areas.
+    // Returns the actual panorama location so the client can road-snap.
+    const metaOnly = searchParams.get("meta") === "1"
+    if (metaOnly) {
+        const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY
+        if (!apiKey) {
+            return NextResponse.json({ status: "OK" }) // assume available if no key
+        }
+        const radius = searchParams.get("radius") || "5000"
+        try {
+            const metaRes = await fetch(
+                `https://maps.googleapis.com/maps/api/streetview/metadata?location=${lat},${lng}&radius=${radius}&key=${apiKey}`
+            )
+            if (metaRes.ok) {
+                const meta = await metaRes.json()
+                return NextResponse.json(
+                    {
+                        status: meta.status ?? "UNKNOWN",
+                        // Return the actual panorama location (road-snapped)
+                        location: meta.location ?? null,
+                        pano_id: meta.pano_id ?? null,
+                    },
+                    { headers: { "Cache-Control": "public, max-age=86400" } }
+                )
+            }
+        } catch (err) {
+            console.warn("[SV-META] Metadata check failed:", err)
+        }
+        return NextResponse.json({ status: "OK" }) // optimistic fallback
+    }
+
+
     const lat5 = parseFloat(lat).toFixed(5)
     const lng5 = parseFloat(lng).toFixed(5)
     const bucketName = process.env.GCS_STREETVIEW_BUCKET

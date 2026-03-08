@@ -1,0 +1,29 @@
+{
+  "model_a": {
+    "features": [
+      "lat",
+      "lon",
+      "yr"
+    ],
+    "n_rows": 779,
+    "r2": 0.5489,
+    "mae_eur": 92380,
+    "cv_r2_mean": -0.2878,
+    "cv_r2_std": 0.2393
+  },
+  "model_b": {
+    "features": [
+      "lat",
+      "lon",
+      "yr",
+      "area_m2",
+      "n_rooms_f",
+      "terrain_f"
+    ],
+    "n_rows": 349,
+    "r2": 0.7176,
+    "mae_eur": 89345,
+    "cv_r2_mean": 0.5026,
+    "cv_r2_std": 0.0582
+  }
+}

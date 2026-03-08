@@ -295,15 +295,21 @@ def main(
     futures = []
 
     if acs_mode:
-        # ACS path: acct IS zcta5; no parcel_ladder join — directly copy to zcta and zip3
-        print("\n  [ACS MODE] Dispatching zcta + zip3 direct-copy tasks...")
+        # ACS path: dispatch ALL geo-level aggregation tasks
+        # - tract functions: acct=11-char GEOID → metrics_tract_forecast/history
+        # - zcta functions:  acct=5-char ZCTA   → metrics_zcta_forecast/history
+        # - zip3 crosswalk:  tract→zcta5 via parcel_ladder_v1 → metrics_zip3_forecast/history
+        # - county proxy:    LEFT(acct,5) → metrics_zip3 (simpler fallback)
+        print("\n  [ACS MODE] Dispatching tract + zcta + zip3 tasks...")
         if not skip_forecast:
             for h in HORIZONS:
+                futures.append(rebuild_acs_tract_forecast.spawn(h, force))
                 futures.append(rebuild_acs_zcta_forecast.spawn(h, force))
                 futures.append(rebuild_acs_zip3_forecast.spawn(h, force))
         if not skip_history:
             print(f"  [ACS MODE] {len(hist_combos)} history combos")
             for sk, vid, yr in hist_combos:
+                futures.append(rebuild_acs_tract_history.spawn(sk, vid, yr, force))
                 futures.append(rebuild_acs_zcta_history.spawn(sk, vid, yr, force))
                 futures.append(rebuild_acs_zip3_history.spawn(sk, vid, yr, force))
     else:
@@ -338,7 +344,7 @@ def main(
 # ─────────────────────────────────────────────────────────────────────────────
 
 @app.function(image=image, secrets=[supabase_secret], timeout=3600, memory=2048, max_containers=5)
-def rebuild_acs_zcta_forecast(horizon: int, force: bool = False):
+def rebuild_acs_tract_forecast(horizon: int, force: bool = False):
     """ACS: copy metrics_parcel_forecast (acct=tract_geoid20, len=11) → metrics_tract_forecast."""
     import time
     conn, cur = _connect()
@@ -402,8 +408,8 @@ def rebuild_acs_zcta_forecast(horizon: int, force: bool = False):
 
 
 @app.function(image=image, secrets=[supabase_secret], timeout=3600, memory=2048, max_containers=5)
-def rebuild_acs_zip3_forecast(horizon: int, force: bool = False):
-    """ACS: aggregate tract (len=11) → zip3 using LEFT(acct, 3) for forecast."""
+def rebuild_acs_county_forecast(horizon: int, force: bool = False):
+    """ACS: aggregate tract (len=11) → county-level via LEFT(acct, 5) for forecast (zip3 proxy)."""
     import time
     conn, cur = _connect()
     level, table, geo_col, acct_len = "zip3", "metrics_zip3_forecast", "zip3", 11
@@ -471,7 +477,7 @@ def rebuild_acs_zip3_forecast(horizon: int, force: bool = False):
 
 
 @app.function(image=image, secrets=[supabase_secret], timeout=3600, memory=2048, max_containers=5)
-def rebuild_acs_zcta_history(series_kind: str, variant_id: str, year: int, force: bool = False):
+def rebuild_acs_tract_history(series_kind: str, variant_id: str, year: int, force: bool = False):
     """ACS: copy metrics_parcel_history (acct=tract_geoid20, len=11) → metrics_tract_history."""
     import time
     conn, cur = _connect()
@@ -524,8 +530,8 @@ def rebuild_acs_zcta_history(series_kind: str, variant_id: str, year: int, force
 
 
 @app.function(image=image, secrets=[supabase_secret], timeout=3600, memory=2048, max_containers=5)
-def rebuild_acs_zip3_history(series_kind: str, variant_id: str, year: int, force: bool = False):
-    """ACS: aggregate tract (len=11) → county-level via LEFT(acct,5) for history."""
+def rebuild_acs_county_history(series_kind: str, variant_id: str, year: int, force: bool = False):
+    """ACS: aggregate tract (len=11) → county-level via LEFT(acct,5) for history (zip3 proxy)."""
     import time
     conn, cur = _connect()
     level, table, geo_col, acct_len = "zip3", "metrics_zip3_history", "zip3", 11
@@ -578,7 +584,7 @@ def rebuild_acs_zip3_history(series_kind: str, variant_id: str, year: int, force
 
 @app.function(image=image, secrets=[supabase_secret], timeout=3600, memory=2048, max_containers=5)
 def rebuild_acs_zcta_forecast(horizon: int, force: bool = False):
-    """ACS: copy metrics_parcel_forecast (acct=zcta5) → metrics_zcta_forecast."""
+    """ACS: aggregate tract (acct=11-char GEOID) → zcta5 via parcel_ladder_v1 crosswalk for forecast."""
     import time
     conn, cur = _connect()
 
@@ -598,10 +604,10 @@ def rebuild_acs_zcta_forecast(horizon: int, force: bool = False):
         sk_cols = ", series_kind, variant_id"
         sk_vals = ", mp.series_kind, mp.variant_id"
         sk_conflict = ", series_kind, variant_id"
-        sk_update = ""
     else:
-        sk_cols = sk_vals = sk_conflict = sk_update = ""
+        sk_cols = sk_vals = sk_conflict = ""
 
+    # Use parcel_ladder_v1 as tract→zcta5 crosswalk
     cur.execute(f"""
         INSERT INTO {SCHEMA}.metrics_zcta_forecast
             (zcta5, origin_year, horizon_m, forecast_year,
@@ -609,7 +615,7 @@ def rebuild_acs_zcta_forecast(horizon: int, force: bool = False):
              run_id, backtest_id, model_version, as_of_date, n_scenarios,
              is_backtest{sk_cols}, jurisdiction, inserted_at, updated_at)
         SELECT
-            mp.acct,
+            pl.zcta5,
             mp.origin_year, mp.horizon_m, mp.forecast_year,
             AVG(mp.value), AVG(mp.p10), AVG(mp.p25), AVG(mp.p50),
             AVG(mp.p75), AVG(mp.p90), COUNT(*),
@@ -617,11 +623,17 @@ def rebuild_acs_zcta_forecast(horizon: int, force: bool = False):
             MAX(mp.as_of_date), MAX(mp.n_scenarios)::int,
             false{sk_vals}, MAX(mp.jurisdiction), now(), now()
         FROM {SCHEMA}.metrics_parcel_forecast mp
+        JOIN (
+            SELECT DISTINCT tract_geoid20, zcta5
+            FROM public.parcel_ladder_v1
+            WHERE tract_geoid20 IS NOT NULL AND zcta5 IS NOT NULL
+        ) pl ON pl.tract_geoid20 = mp.acct
         WHERE mp.series_kind = 'forecast'
           AND mp.variant_id = '__forecast__'
           AND mp.horizon_m = {horizon}
-          AND LENGTH(mp.acct) = 5
-        GROUP BY mp.acct, mp.origin_year, mp.horizon_m, mp.forecast_year{sk_vals}
+          AND LENGTH(mp.acct) = 11
+          AND pl.zcta5 IS NOT NULL
+        GROUP BY pl.zcta5, mp.origin_year, mp.horizon_m, mp.forecast_year{sk_vals}
         ON CONFLICT (zcta5, origin_year, horizon_m{sk_conflict})
         DO UPDATE SET
             forecast_year = EXCLUDED.forecast_year,
@@ -712,7 +724,7 @@ def rebuild_acs_zip3_forecast(horizon: int, force: bool = False):
 
 @app.function(image=image, secrets=[supabase_secret], timeout=3600, memory=2048, max_containers=5)
 def rebuild_acs_zcta_history(series_kind: str, variant_id: str, year: int, force: bool = False):
-    """ACS: copy metrics_parcel_history (acct=zcta5) → metrics_zcta_history."""
+    """ACS: aggregate tract (acct=11-char GEOID) → zcta5 via parcel_ladder_v1 crosswalk for history."""
     import time
     conn, cur = _connect()
 
@@ -737,20 +749,27 @@ def rebuild_acs_zcta_history(series_kind: str, variant_id: str, year: int, force
     else:
         sk_cols = sk_vals = ""
 
+    # Use parcel_ladder_v1 as tract→zcta5 crosswalk
     cur.execute(f"""
         INSERT INTO {SCHEMA}.metrics_zcta_history
             (zcta5, year, value, p50, n, run_id, backtest_id,
              model_version, as_of_date{sk_cols}, jurisdiction, inserted_at, updated_at)
         SELECT
-            mh.acct, mh.year,
+            pl.zcta5, mh.year,
             AVG(mh.value), AVG(mh.p50), COUNT(*),
             MAX(mh.run_id), MAX(mh.backtest_id),
             MAX(mh.model_version), MAX(mh.as_of_date){sk_vals},
             MAX(mh.jurisdiction), now(), now()
         FROM {SCHEMA}.metrics_parcel_history mh
+        JOIN (
+            SELECT DISTINCT tract_geoid20, zcta5
+            FROM public.parcel_ladder_v1
+            WHERE tract_geoid20 IS NOT NULL AND zcta5 IS NOT NULL
+        ) pl ON pl.tract_geoid20 = mh.acct
         WHERE mh.series_kind = %s AND mh.variant_id = %s AND mh.year = %s
-          AND LENGTH(mh.acct) = 5
-        GROUP BY mh.acct, mh.year{sk_vals}
+          AND LENGTH(mh.acct) = 11
+          AND pl.zcta5 IS NOT NULL
+        GROUP BY pl.zcta5, mh.year{sk_vals}
         ON CONFLICT (zcta5, year{sk_cols})
         DO UPDATE SET value = EXCLUDED.value, p50 = EXCLUDED.p50,
                       jurisdiction = EXCLUDED.jurisdiction, updated_at = now()

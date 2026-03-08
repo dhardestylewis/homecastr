@@ -1,0 +1,68 @@
+{
+  "elapsed": 137.5,
+  "n_sources": 10,
+  "n_with_data": 5,
+  "total_rows": 405,
+  "results": {
+    "Canada BC|Assessment": {
+      "country": "Canada BC",
+      "source": "Assessment",
+      "n": 0,
+      "detail": "Catalog found but resources not directly downloadable"
+    },
+    "Australia NSW|VG": {
+      "country": "Australia NSW",
+      "source": "VG",
+      "n": 0,
+      "detail": "Package search returned no downloadable resources"
+    },
+    "Australia QLD|Valuations": {
+      "country": "Australia QLD",
+      "source": "Valuations",
+      "n": 0,
+      "detail": "No downloadable resources found"
+    },
+    "Taiwan|Real Price CSV": {
+      "country": "Taiwan",
+      "source": "Real Price CSV",
+      "n": 200,
+      "detail": "200 transactions"
+    },
+    "Panama|pa_open_data": {
+      "country": "Panama",
+      "source": "pa_open_data",
+      "n": 4,
+      "detail": "4 records downloaded"
+    },
+    "Cambodia|kh_odc": {
+      "country": "Cambodia",
+      "source": "kh_odc",
+      "n": 1,
+      "detail": "1 records downloaded"
+    },
+    "Pakistan|pk_open_data": {
+      "country": "Pakistan",
+      "source": "pk_open_data",
+      "n": 100,
+      "detail": "100 records downloaded"
+    },
+    "Latvia|lv_data_gov": {
+      "country": "Latvia",
+      "source": "lv_data_gov",
+      "n": 0,
+      "detail": "No downloadable data found"
+    },
+    "Dominican Republic|do_datos": {
+      "country": "Dominican Republic",
+      "source": "do_datos",
+      "n": 0,
+      "detail": "No downloadable data found"
+    },
+    "Qatar|qa_data_gov": {
+      "country": "Qatar",
+      "source": "qa_data_gov",
+      "n": 100,
+      "detail": "100 records downloaded"
+    }
+  }
+}

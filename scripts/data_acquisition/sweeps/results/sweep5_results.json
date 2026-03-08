@@ -1,0 +1,153 @@
+{
+  "elapsed": 55.8,
+  "n_sources": 24,
+  "n_with_data": 0,
+  "n_accessible": 5,
+  "total_rows": 0,
+  "results": {
+    "Canada BC|BC Assessment": {
+      "country": "Canada BC",
+      "source": "BC Assessment",
+      "n": 0,
+      "detail": "Found: Metadata for BC Property Assessment; BC Assessment - Property Values View; BC Assessment - Property Descriptions View; BC Assessment - Property Sales View; Property Transfer Tax Data 2019"
+    },
+    "Puerto Rico|CRIM": {
+      "country": "Puerto Rico",
+      "source": "CRIM",
+      "n": 0,
+      "detail": "Timeout"
+    },
+    "Costa Rica|Open Data": {
+      "country": "Costa Rica",
+      "source": "Open Data",
+      "n": 0,
+      "detail": "Timeout"
+    },
+    "Panama|Open Data": {
+      "country": "Panama",
+      "source": "Open Data",
+      "n": 0,
+      "detail": "Found 10 datasets"
+    },
+    "Jamaica|NLA": {
+      "country": "Jamaica",
+      "source": "NLA",
+      "n": 0,
+      "detail": "Timeout"
+    },
+    "Dominican Republic|datos.gob.do": {
+      "country": "Dominican Republic",
+      "source": "datos.gob.do",
+      "n": 0,
+      "detail": "Found 3 datasets"
+    },
+    "Trinidad & Tobago|Open Data": {
+      "country": "Trinidad & Tobago",
+      "source": "Open Data",
+      "n": 0,
+      "detail": "Timeout"
+    },
+    "Guatemala|Open Data": {
+      "country": "Guatemala",
+      "source": "Open Data",
+      "n": 0,
+      "detail": "Timeout"
+    },
+    "Kuwait|Open Data": {
+      "country": "Kuwait",
+      "source": "Open Data",
+      "n": 0,
+      "detail": "Timeout"
+    },
+    "Qatar|data.gov.qa": {
+      "country": "Qatar",
+      "source": "data.gov.qa",
+      "n": 0,
+      "detail": "Found 3 datasets"
+    },
+    "Bahrain|Open Data": {
+      "country": "Bahrain",
+      "source": "Open Data",
+      "n": 0,
+      "detail": "Timeout"
+    },
+    "Oman|NCSI": {
+      "country": "Oman",
+      "source": "NCSI",
+      "n": 0,
+      "detail": "Timeout"
+    },
+    "Jordan|Open Data": {
+      "country": "Jordan",
+      "source": "Open Data",
+      "n": 0,
+      "detail": "Timeout"
+    },
+    "Georgia|NAPR": {
+      "country": "Georgia",
+      "source": "NAPR",
+      "n": 0,
+      "detail": "Timeout"
+    },
+    "Kazakhstan|Open Data": {
+      "country": "Kazakhstan",
+      "source": "Open Data",
+      "n": 0,
+      "detail": "Timeout"
+    },
+    "Armenia|Open Data": {
+      "country": "Armenia",
+      "source": "Open Data",
+      "n": 0,
+      "detail": "Timeout"
+    },
+    "Sri Lanka|Open Data": {
+      "country": "Sri Lanka",
+      "source": "Open Data",
+      "n": 0,
+      "detail": "Timeout"
+    },
+    "Nepal|Open Data": {
+      "country": "Nepal",
+      "source": "Open Data",
+      "n": 0,
+      "detail": "Timeout"
+    },
+    "Cambodia|ODC": {
+      "country": "Cambodia",
+      "source": "ODC",
+      "n": 0,
+      "detail": "Found 10 datasets"
+    },
+    "Tunisia|Open Data": {
+      "country": "Tunisia",
+      "source": "Open Data",
+      "n": 0,
+      "detail": "Timeout"
+    },
+    "Ethiopia|Open Data": {
+      "country": "Ethiopia",
+      "source": "Open Data",
+      "n": 0,
+      "detail": "Timeout"
+    },
+    "Mauritius|Open Data": {
+      "country": "Mauritius",
+      "source": "Open Data",
+      "n": 0,
+      "detail": "Timeout"
+    },
+    "Botswana|Open Data": {
+      "country": "Botswana",
+      "source": "Open Data",
+      "n": 0,
+      "detail": "Timeout"
+    },
+    "Senegal|Open Data": {
+      "country": "Senegal",
+      "source": "Open Data",
+      "n": 0,
+      "detail": "Timeout"
+    }
+  }
+}

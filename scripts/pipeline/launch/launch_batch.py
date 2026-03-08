@@ -25,13 +25,15 @@ def run_modal(args_list: list[str], label: str) -> bool:
     return ok
 
 
-def train_jurisdiction(jurisdiction: str, origins: list[int], epochs: int = 60, sample: int = 500_000):
+def train_jurisdiction(jurisdiction: str, origins: list[int], epochs: int = 60, sample: int = 500_000, model: str = "v12_sb"):
     """Train one jurisdiction across multiple origins SEQUENTIALLY."""
+    script = ("scripts/pipeline/training/train_modal_sb.py" if model == "v12_sb"
+              else "scripts/pipeline/training/train_modal.py")
     results = {}
     for origin in origins:
-        label = f"train-{jurisdiction}-o{origin}"
+        label = f"train-{model}-{jurisdiction}-o{origin}"
         ok = run_modal(
-            ["scripts/train_modal.py",
+            [script,
              "--jurisdiction", jurisdiction,
              "--origin", str(origin),
              "--epochs", str(epochs),
@@ -42,20 +44,21 @@ def train_jurisdiction(jurisdiction: str, origins: list[int], epochs: int = 60, 
         # Brief pause between runs to let Modal clean up containers
         time.sleep(5)
 
-    print(f"\n📋 Training summary for {jurisdiction}:")
+    print(f"\n📋 Training summary for {jurisdiction} ({model}):")
     for k, v in results.items():
         print(f"  {v} {k}")
     return results
 
 
-def eval_jurisdiction(jurisdiction: str):
-    """Eval one jurisdiction (launches 6 origins in parallel inside Modal)."""
-    label = f"eval-{jurisdiction}"
-    ok = run_modal(
-        ["scripts/inference/eval_modal.py",
-         "--jurisdiction", jurisdiction],
-        label
-    )
+def eval_jurisdiction(jurisdiction: str, origins: list[int] = None, model: str = "v12_sb"):
+    """Eval one jurisdiction (launches origins in parallel inside Modal)."""
+    script = ("scripts/inference/eval/eval_modal_sb.py" if model == "v12_sb"
+              else "scripts/inference/eval/eval_modal.py")
+    label = f"eval-{model}-{jurisdiction}"
+    args = [script, "--jurisdiction", jurisdiction]
+    if origins:
+        args.extend(["--origins", ",".join(str(o) for o in origins)])
+    ok = run_modal(args, label)
     return ok
 
 
@@ -68,15 +71,17 @@ def main():
                         help="Comma-separated origin years")
     parser.add_argument("--epochs", type=int, default=60)
     parser.add_argument("--sample-size", type=int, default=500_000)
+    parser.add_argument("--model", choices=["v11", "v12_sb"], default="v12_sb",
+                        help="Model variant: v11 (original diffusion) or v12_sb (Schrödinger Bridge)")
     args = parser.parse_args()
 
     origins = [int(o) for o in args.origins.split(",")]
 
     if args.mode == "train":
-        train_jurisdiction(args.jurisdiction, origins, args.epochs, args.sample_size)
+        train_jurisdiction(args.jurisdiction, origins, args.epochs, args.sample_size, model=args.model)
 
     elif args.mode == "eval":
-        eval_jurisdiction(args.jurisdiction)
+        eval_jurisdiction(args.jurisdiction, origins, model=args.model)
 
     elif args.mode == "all":
         jurisdictions = args.jurisdictions.split(",") if args.jurisdictions else [args.jurisdiction]
@@ -86,10 +91,10 @@ def main():
             print(f"{'#'*60}")
 
             # Train all origins sequentially (1 GPU at a time)
-            train_jurisdiction(jur, origins, args.epochs, args.sample_size)
+            train_jurisdiction(jur, origins, args.epochs, args.sample_size, model=args.model)
 
-            # Then eval (up to 6 parallel, but only after training is done)
-            eval_jurisdiction(jur)
+            # Then eval (parallel inside Modal, but only after training is done)
+            eval_jurisdiction(jur, origins, model=args.model)
 
             print(f"\n✅ {jur} complete!")
 

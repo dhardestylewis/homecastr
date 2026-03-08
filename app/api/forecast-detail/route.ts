@@ -14,6 +14,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin"
  */
 
 const LEVEL_TABLE: Record<string, { table: string; key: string }> = {
+    state: { table: "metrics_state_forecast", key: "state_fips" },
     zip3: { table: "metrics_zip3_forecast", key: "zip3" },
     zcta: { table: "metrics_zcta_forecast", key: "zcta5" },
     tract: { table: "metrics_tract_forecast", key: "tract_geoid20" },
@@ -22,6 +23,7 @@ const LEVEL_TABLE: Record<string, { table: string; key: string }> = {
 }
 
 const HISTORY_TABLE: Record<string, { table: string; key: string }> = {
+    state: { table: "metrics_state_history", key: "state_fips" },
     zip3: { table: "metrics_zip3_history", key: "zip3" },
     zcta: { table: "metrics_zcta_history", key: "zcta5" },
     tract: { table: "metrics_tract_history", key: "tract_geoid20" },
@@ -34,7 +36,7 @@ export async function GET(request: Request) {
     const levelStr = searchParams.get("level") || "zcta"
     const level = levelStr === "zip" ? "zcta" : levelStr
     const id = searchParams.get("id")
-    const schemaName = searchParams.get("schema") || "forecast_20260220_7f31c6e4"
+    const schemaName = searchParams.get("schema") || "forecast_queue"
 
     if (!id) {
         return NextResponse.json({ error: "id is required" }, { status: 400 })

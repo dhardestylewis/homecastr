@@ -178,6 +178,8 @@ SimpleScaler = _DimSafeScaler
     # ─── 2.5 Load and Format Panel (Must happen BEFORE worldmodel exec) ───
     print(f"[{ts()}] Loading {jurisdiction} ground truth from panel...")
     panel_blob_path = panel_gcs_path if panel_gcs_path else f"panel/jurisdiction={jurisdiction}/part.parquet"
+    if jurisdiction == "nyc":
+        panel_blob_path = "panel/jurisdiction=nyc/nyc_panel_h3.parquet"
     if not panel_gcs_path and jurisdiction == "all":
         panel_blob_path = "panel/grand_panel/part.parquet"
         
@@ -222,6 +224,9 @@ SimpleScaler = _DimSafeScaler
         elif "tot_appr_val" in df_actuals.columns:
             df_actuals = df_actuals.with_columns(pl.col("tot_appr_val").alias("property_value"))
             print(f"[{ts()}] Using existing tot_appr_val as property_value")
+        elif "total_appraised_value" in df_actuals.columns:
+            df_actuals = df_actuals.with_columns(pl.col("total_appraised_value").alias("property_value"))
+            print(f"[{ts()}] Derived property_value from total_appraised_value")
     
     # Derive parcel_id from geoid if missing (ACS)
     if "parcel_id" not in df_actuals.columns and "acct" not in df_actuals.columns:

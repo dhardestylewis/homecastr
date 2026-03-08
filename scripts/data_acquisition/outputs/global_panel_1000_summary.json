@@ -1,0 +1,42 @@
+{
+  "total_rows": 1000,
+  "n_countries": 20,
+  "countries": [
+    "Australia",
+    "Brazil",
+    "Canada",
+    "France",
+    "Germany",
+    "India",
+    "Italy",
+    "Japan",
+    "Mexico",
+    "Netherlands",
+    "New Zealand",
+    "Norway",
+    "Singapore",
+    "South Africa",
+    "South Korea",
+    "Spain",
+    "Sweden",
+    "Switzerland",
+    "United Kingdom",
+    "United States"
+  ],
+  "n_sources": 4,
+  "sources": [
+    "bis_hpi_fred",
+    "es_ine",
+    "ms_buildings",
+    "nl_cbs"
+  ],
+  "rows_with_price": 145,
+  "rows_with_coords": 262,
+  "rows_with_bis_hpi": 590,
+  "rows_with_area": 262,
+  "rows_with_year": 735,
+  "rows_with_lulc": 33,
+  "rows_with_dem": 33,
+  "temporal_range": "2015-2025",
+  "elapsed_seconds": 146.3
+}
