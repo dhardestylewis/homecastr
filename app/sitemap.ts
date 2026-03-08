@@ -37,18 +37,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
                     changeFrequency: "weekly",
                     priority: 0.7,
                 })
-
-                // Individual neighborhood forecast pages
-                const tracts = await getTractsForCity(state.stateSlug, city.citySlug, SCHEMA)
-
-                for (const tract of tracts) {
-                    entries.push({
-                        url: `${BASE_URL}/forecasts/${state.stateSlug}/${city.citySlug}/${tract.neighborhoodSlug}/home-price-forecast`,
-                        lastModified: new Date(),
-                        changeFrequency: "weekly",
-                        priority: 0.6,
-                    })
-                }
             }
         }
     } catch (err) {
