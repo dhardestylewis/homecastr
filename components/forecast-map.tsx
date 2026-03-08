@@ -856,7 +856,7 @@ export function ForecastMap({
     const buildFillColor = (colorMode?: string): any => {
         if (colorMode === "growth") {
             const presentYear = originYear + 2  // 2026 (origin 2024 + 2yr)
-            if (year === presentYear) return "#e5e5e5" // Present year: growth=0 → flat neutral
+            if (year === presentYear || year === originYear) return "#e5e5e5" // No growth relative to self
 
             // Pick the right level stats based on zoom
             const zoom = mapRef.current?.getZoom() ?? 10
@@ -2822,8 +2822,11 @@ export function ForecastMap({
                                         </div>
                                     ) : null}
 
-                                    {/* P-values overlay — top-right corner, year-aware */}
+                                    {/* P-values overlay — only for forecast years (2027+), not historical/present */}
                                     {(() => {
+                                        // P-values represent model uncertainty — only meaningful for forecast years
+                                        const presentYear = originYear + 2  // 2026
+                                        if (year <= presentYear) return null
                                         // Index into fanChartData for the current slider year
                                         const yIdx = fanChartData?.years?.indexOf(year) ?? -1
                                         const pv = {
