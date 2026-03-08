@@ -1,5 +1,6 @@
 import type { Metadata } from "next"
 import { getStatesWithData } from "@/lib/publishing/geo-crosswalk"
+import { withRedisCache } from "@/lib/redis"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
 import { SortableStateTable, type StateRow } from "@/components/publishing/SortableStateTable"
 
@@ -50,28 +51,30 @@ async function fetchAllRows(
  * Get county counts + neighborhood counts per state using paginated queries.
  */
 async function getStateCounts(stateFips: string) {
-    const supabase = getSupabaseAdmin()
+    return withRedisCache(`state_counts:${stateFips}:${SCHEMA}`, async () => {
+        const supabase = getSupabaseAdmin()
 
-    const rows = await fetchAllRows(() =>
-        supabase
-            .schema(SCHEMA as any)
-            .from("metrics_tract_forecast")
-            .select("tract_geoid20")
-            .like("tract_geoid20", `${stateFips}%`)
-            .eq("horizon_m", 12)
-            .eq("series_kind", "forecast")
-            .not("p50", "is", null)
-    )
+        const rows = await fetchAllRows(() =>
+            supabase
+                .schema(SCHEMA as any)
+                .from("metrics_tract_forecast")
+                .select("tract_geoid20")
+                .like("tract_geoid20", `${stateFips}%`)
+                .eq("horizon_m", 12)
+                .eq("series_kind", "forecast")
+                .not("p50", "is", null)
+        )
 
-    // Group by county (first 5 digits)
-    const counties = new Set<string>()
-    const tracts = new Set<string>()
-    for (const row of rows) {
-        counties.add(row.tract_geoid20.substring(0, 5))
-        tracts.add(row.tract_geoid20)
-    }
+        // Group by county (first 5 digits)
+        const counties = new Set<string>()
+        const tracts = new Set<string>()
+        for (const row of rows) {
+            counties.add(row.tract_geoid20.substring(0, 5))
+            tracts.add(row.tract_geoid20)
+        }
 
-    return { countyCount: counties.size, neighborhoodCount: tracts.size }
+        return { countyCount: counties.size, neighborhoodCount: tracts.size }
+    })
 }
 
 /**
@@ -79,68 +82,70 @@ async function getStateCounts(stateFips: string) {
  * (avoids mixed-horizon limit issues).
  */
 async function getStateOutlook(stateFips: string) {
-    const supabase = getSupabaseAdmin()
+    return withRedisCache(`state_outlook:${stateFips}:${SCHEMA}`, async () => {
+        const supabase = getSupabaseAdmin()
 
-    // Fetch h12 and h60 separately so limit doesn't mix them up
-    const [h12Rows, h60Rows] = await Promise.all([
-        fetchAllRows(() =>
-            supabase
-                .schema(SCHEMA as any)
-                .from("metrics_tract_forecast")
-                .select("tract_geoid20, p50")
-                .like("tract_geoid20", `${stateFips}%`)
-                .eq("horizon_m", 12)
-                .eq("series_kind", "forecast")
-                .not("p50", "is", null)
-        ),
-        fetchAllRows(() =>
-            supabase
-                .schema(SCHEMA as any)
-                .from("metrics_tract_forecast")
-                .select("tract_geoid20, p50")
-                .like("tract_geoid20", `${stateFips}%`)
-                .eq("horizon_m", 60)
-                .eq("series_kind", "forecast")
-                .not("p50", "is", null)
-        ),
-    ])
+        // Fetch h12 and h60 separately so limit doesn't mix them up
+        const [h12Rows, h60Rows] = await Promise.all([
+            fetchAllRows(() =>
+                supabase
+                    .schema(SCHEMA as any)
+                    .from("metrics_tract_forecast")
+                    .select("tract_geoid20, p50")
+                    .like("tract_geoid20", `${stateFips}%`)
+                    .eq("horizon_m", 12)
+                    .eq("series_kind", "forecast")
+                    .not("p50", "is", null)
+            ),
+            fetchAllRows(() =>
+                supabase
+                    .schema(SCHEMA as any)
+                    .from("metrics_tract_forecast")
+                    .select("tract_geoid20, p50")
+                    .like("tract_geoid20", `${stateFips}%`)
+                    .eq("horizon_m", 60)
+                    .eq("series_kind", "forecast")
+                    .not("p50", "is", null)
+            ),
+        ])
 
-    if (h12Rows.length === 0) return null
+        if (h12Rows.length === 0) return null
 
-    // Build lookup maps
-    const h12Map = new Map<string, number>()
-    for (const row of h12Rows) h12Map.set(row.tract_geoid20, row.p50)
-    const h60Map = new Map<string, number>()
-    for (const row of h60Rows) h60Map.set(row.tract_geoid20, row.p50)
+        // Build lookup maps
+        const h12Map = new Map<string, number>()
+        for (const row of h12Rows) h12Map.set(row.tract_geoid20, row.p50)
+        const h60Map = new Map<string, number>()
+        for (const row of h60Rows) h60Map.set(row.tract_geoid20, row.p50)
 
-    // Compute per-tract appreciation (filter out low-value outliers)
-    const appreciations: number[] = []
-    const values: number[] = []
-    for (const [tractId, h12] of h12Map) {
-        const h60 = h60Map.get(tractId)
-        // Min $20K filters out vacant/institutional tracts that produce absurd %
-        if (h12 >= 20_000 && h60 && h12 < 5_000_000) {
-            const appr = ((h60 - h12) / h12) * 100
-            if (appr > -95) {  // p95 display handles upper outliers
-                appreciations.push(appr)
-                values.push(h12)
+        // Compute per-tract appreciation (filter out low-value outliers)
+        const appreciations: number[] = []
+        const values: number[] = []
+        for (const [tractId, h12] of h12Map) {
+            const h60 = h60Map.get(tractId)
+            // Min $20K filters out vacant/institutional tracts that produce absurd %
+            if (h12 >= 20_000 && h60 && h12 < 5_000_000) {
+                const appr = ((h60 - h12) / h12) * 100
+                if (appr > -95) {  // p95 display handles upper outliers
+                    appreciations.push(appr)
+                    values.push(h12)
+                }
             }
         }
-    }
 
-    if (appreciations.length === 0) return null
+        if (appreciations.length === 0) return null
 
-    appreciations.sort((a, b) => a - b)
-    values.sort((a, b) => a - b)
+        appreciations.sort((a, b) => a - b)
+        values.sort((a, b) => a - b)
 
-    // Use 95th percentile for "top upside" instead of raw max
-    const p99Idx = Math.floor(appreciations.length * 0.99)
+        // Use 95th percentile for "top upside" instead of raw max
+        const p99Idx = Math.floor(appreciations.length * 0.99)
 
-    return {
-        medianAppreciation: appreciations[Math.floor(appreciations.length / 2)],
-        highestUpside: appreciations[p99Idx],
-        medianValue: values[Math.floor(values.length / 2)],
-    }
+        return {
+            medianAppreciation: appreciations[Math.floor(appreciations.length / 2)],
+            highestUpside: appreciations[p99Idx],
+            medianValue: values[Math.floor(values.length / 2)],
+        }
+    })
 }
 
 const fmtPct = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`

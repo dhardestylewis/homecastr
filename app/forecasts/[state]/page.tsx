@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 import Link from "next/link"
 import { getCitiesForState, getStatesWithData } from "@/lib/publishing/geo-crosswalk"
+import { withRedisCache } from "@/lib/redis"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
 import { SortableCountyTable, type CountyRow } from "@/components/publishing/SortableCountyTable"
 
@@ -66,70 +67,72 @@ async function fetchAllRows(queryBuilder: () => any, pageSize = 1000): Promise<a
  * Compute per-county outlook from tract-level forecasts for a given state.
  */
 async function getCountyOutlooks(stateFips: string) {
-    const supabase = getSupabaseAdmin()
+    return withRedisCache(`county_outlooks:${stateFips}:${SCHEMA}`, async () => {
+        const supabase = getSupabaseAdmin()
 
-    const [h12Rows, h60Rows] = await Promise.all([
-        fetchAllRows(() =>
-            supabase
-                .schema(SCHEMA as any)
-                .from("metrics_tract_forecast")
-                .select("tract_geoid20, p50")
-                .like("tract_geoid20", `${stateFips}%`)
-                .eq("horizon_m", 12)
-                .eq("series_kind", "forecast")
-                .not("p50", "is", null)
-        ),
-        fetchAllRows(() =>
-            supabase
-                .schema(SCHEMA as any)
-                .from("metrics_tract_forecast")
-                .select("tract_geoid20, p50")
-                .like("tract_geoid20", `${stateFips}%`)
-                .eq("horizon_m", 60)
-                .eq("series_kind", "forecast")
-                .not("p50", "is", null)
-        ),
-    ])
+        const [h12Rows, h60Rows] = await Promise.all([
+            fetchAllRows(() =>
+                supabase
+                    .schema(SCHEMA as any)
+                    .from("metrics_tract_forecast")
+                    .select("tract_geoid20, p50")
+                    .like("tract_geoid20", `${stateFips}%`)
+                    .eq("horizon_m", 12)
+                    .eq("series_kind", "forecast")
+                    .not("p50", "is", null)
+            ),
+            fetchAllRows(() =>
+                supabase
+                    .schema(SCHEMA as any)
+                    .from("metrics_tract_forecast")
+                    .select("tract_geoid20, p50")
+                    .like("tract_geoid20", `${stateFips}%`)
+                    .eq("horizon_m", 60)
+                    .eq("series_kind", "forecast")
+                    .not("p50", "is", null)
+            ),
+        ])
 
-    const h12Map = new Map<string, number>()
-    for (const row of h12Rows) h12Map.set(row.tract_geoid20, row.p50)
-    const h60Map = new Map<string, number>()
-    for (const row of h60Rows) h60Map.set(row.tract_geoid20, row.p50)
+        const h12Map = new Map<string, number>()
+        for (const row of h12Rows) h12Map.set(row.tract_geoid20, row.p50)
+        const h60Map = new Map<string, number>()
+        for (const row of h60Rows) h60Map.set(row.tract_geoid20, row.p50)
 
-    // Group by county FIPS and compute appreciation
-    const countyData = new Map<string, { appreciations: number[]; values: number[] }>()
+        // Group by county FIPS and compute appreciation
+        const countyData = new Map<string, { appreciations: number[]; values: number[] }>()
 
-    for (const [tractId, h12] of h12Map) {
-        const h60 = h60Map.get(tractId)
-        const countyFips = tractId.substring(0, 5)
+        for (const [tractId, h12] of h12Map) {
+            const h60 = h60Map.get(tractId)
+            const countyFips = tractId.substring(0, 5)
 
-        if (h12 >= 20_000 && h60 && h12 < 5_000_000) {
-            const appr = ((h60 - h12) / h12) * 100
-            if (appr > -95) {
-                if (!countyData.has(countyFips)) countyData.set(countyFips, { appreciations: [], values: [] })
-                const cd = countyData.get(countyFips)!
-                cd.appreciations.push(appr)
-                cd.values.push(h12)
+            if (h12 >= 20_000 && h60 && h12 < 5_000_000) {
+                const appr = ((h60 - h12) / h12) * 100
+                if (appr > -95) {
+                    if (!countyData.has(countyFips)) countyData.set(countyFips, { appreciations: [], values: [] })
+                    const cd = countyData.get(countyFips)!
+                    cd.appreciations.push(appr)
+                    cd.values.push(h12)
+                }
             }
         }
-    }
 
-    const result = new Map<string, { medianAppreciation: number; highestUpside: number; medianValue: number }>()
+        const result: Record<string, { medianAppreciation: number; highestUpside: number; medianValue: number }> = {}
 
-    for (const [countyFips, data] of countyData) {
-        if (data.appreciations.length === 0) continue
-        data.appreciations.sort((a, b) => a - b)
-        data.values.sort((a, b) => a - b)
-        const p99Idx = Math.min(Math.floor(data.appreciations.length * 0.99), data.appreciations.length - 1)
+        for (const [countyFips, data] of countyData) {
+            if (data.appreciations.length === 0) continue
+            data.appreciations.sort((a, b) => a - b)
+            data.values.sort((a, b) => a - b)
+            const p99Idx = Math.min(Math.floor(data.appreciations.length * 0.99), data.appreciations.length - 1)
 
-        result.set(countyFips, {
-            medianAppreciation: data.appreciations[Math.floor(data.appreciations.length / 2)],
-            highestUpside: data.appreciations[p99Idx],
-            medianValue: data.values[Math.floor(data.values.length / 2)],
-        })
-    }
+            result[countyFips] = {
+                medianAppreciation: data.appreciations[Math.floor(data.appreciations.length / 2)],
+                highestUpside: data.appreciations[p99Idx],
+                medianValue: data.values[Math.floor(data.values.length / 2)],
+            }
+        }
 
-    return result
+        return result
+    })
 }
 
 const fmtPct = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`
@@ -164,7 +167,7 @@ export default async function StateHubPage({ params }: PageProps) {
 
     // Build rows with outlook data, using countyFips for direct lookup
     const countyRows: CountyRow[] = cities.map(c => {
-        const outlook = countyOutlooks.get(c.countyFips)
+        const outlook = countyOutlooks[c.countyFips]
         return {
             city: c.city,
             citySlug: c.citySlug,

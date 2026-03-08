@@ -7,6 +7,29 @@ const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://homecastr.com"
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const entries: MetadataRoute.Sitemap = []
 
+    // Static Routes
+    entries.push({
+        url: `${BASE_URL}`,
+        lastModified: new Date(),
+        changeFrequency: "weekly",
+        priority: 1.0,
+    })
+    entries.push({
+        url: `${BASE_URL}/app`,
+        lastModified: new Date(),
+        changeFrequency: "daily",
+        priority: 0.9,
+    })
+    const staticBaseRoutes = ['/methodology', '/coverage/houston', '/faq', '/for-investors', '/for-agents']
+    for (const route of staticBaseRoutes) {
+        entries.push({
+            url: `${BASE_URL}${route}`,
+            lastModified: new Date(),
+            changeFrequency: "monthly",
+            priority: 0.8,
+        })
+    }
+
     // Forecasts index
     entries.push({
         url: `${BASE_URL}/forecasts`,

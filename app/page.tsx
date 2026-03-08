@@ -1,1049 +1,531 @@
-"use client"
-
-import React, { useState, useCallback, Suspense, useEffect, useRef } from "react"
-import { MapView } from "@/components/map-view"
-import { VectorMap } from "@/components/vector-map"
-import { ForecastMap } from "@/components/forecast-map"
-import H3Map from "@/components/h3-map"
-import { Legend } from "@/components/legend"
-import { cn, getZoomForRes } from "@/lib/utils"
-
-import { SearchBox } from "@/components/search-box"
-import { useFilters } from "@/hooks/use-filters"
-import { useMapState } from "@/hooks/use-map-state"
-import { useToast } from "@/hooks/use-toast"
-import type { PropertyForecast } from "@/app/actions/property-forecast"
-import { TimeControls } from "@/components/time-controls"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { AlertCircle, Plus, Minus, RotateCcw, ArrowLeftRight, Copy, Terminal, Activity, MessageSquare, Mic, CalendarDays, Link2, FileDown, Check } from "lucide-react"
-import { useSearchParams, useRouter } from "next/navigation"
-import { geocodeAddress, reverseGeocode } from "@/app/actions/geocode"
-
-import { cellToLatLng, latLngToCell } from "h3-js"
-import { getH3CellDetails } from "@/app/actions/h3-details"
-// import { ExplainerPopup } from "@/components/explainer-popup"  // Deactivated — replaced by OnboardingIntro
-import { OnboardingIntro } from "@/components/onboarding-intro"
-import { ChatPanel, type MapAction } from "@/components/chat-panel"
-
-import { createTavusConversation } from "@/app/actions/tavus"
-import dynamic from "next/dynamic"
-import { HomecastrLogo } from "@/components/homecastr-logo"
-import { ContactModal } from "@/components/contact-modal"
-import { generateForecastPDF } from "@/lib/generate-pdf"
-
-// Dynamic import with SSR disabled — daily-js needs browser APIs
-const TavusMiniWindow = dynamic(
-  () => import("@/components/tavus-mini-window").then((mod) => mod.TavusMiniWindow),
-  { ssr: false }
-) as React.ComponentType<{ conversationUrl: string; onClose: () => void; chatOpen?: boolean; forecastMode?: boolean }>
-
-
-
-function DashboardContent() {
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const { filters, setFilters, resetFilters } = useFilters()
-  const { mapState, setMapState, selectFeature, hoverFeature } = useMapState()
-  const [forecastData, setForecastData] = useState<{ acct: string; data: PropertyForecast[] } | null>(null)
-  const [currentYear, setCurrentYear] = useState(() => {
-    const yrParam = searchParams.get("yr")
-    return yrParam ? Math.max(2019, Math.min(2030, parseInt(yrParam, 10))) : 2027
-  })
-  const [hasManuallySetYear, setHasManuallySetYear] = useState(false)
-  const [isUsingMockData, setIsUsingMockData] = useState(false)
-  const [searchBarValue, setSearchBarValue] = useState<string>("")
-  const [mobileSelectionMode, setMobileSelectionMode] = useState<'replace' | 'add' | 'range'>('replace')
-  const [compareMode, setCompareMode] = useState(false)
-  const [pinnedCount, setPinnedCount] = useState(0)
-  const [isChatOpen, setIsChatOpen] = useState(false)
-  const [isContactOpen, setIsContactOpen] = useState(false)
-  const [linkCopied, setLinkCopied] = useState(false)
-  const { toast } = useToast()
-
-  // Auto-open contact form and/or enable compare mode from URL params (post-hydration)
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    if (params.get("contact") === "1") {
-      setIsContactOpen(true)
-      params.delete("contact")
-      const newUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ""}${window.location.hash}`
-      window.history.replaceState({}, "", newUrl)
-    }
-    if (params.has("compare")) {
-      setCompareMode(true)
-    }
-  }, [])
-
-  // Sync currentYear to URL
-  const prevYearRef = useRef(currentYear)
-  useEffect(() => {
-    if (prevYearRef.current === currentYear) return
-    prevYearRef.current = currentYear
-    const params = new URLSearchParams(window.location.search)
-    if (currentYear !== 2027) {
-      params.set("yr", currentYear.toString())
-    } else {
-      params.delete("yr")
-    }
-    router.replace(`?${params.toString()}`, { scroll: false })
-  }, [currentYear, router])
-
-  // Derive origin year from map viewport — same Harris County check as forecast-map.tsx
-  // HCAD temporarily disabled — using ACS-only (origin_year=2024) everywhere
-  const [mapLng, mapLat] = mapState.center
-  // const isHarrisCounty = mapLat >= 29.4 && mapLat <= 30.2 && mapLng >= -95.9 && mapLng <= -94.9
-  const isHarrisCounty = false // HCAD off — ACS only
-  const pageOriginYear = 2024 // ACS-only: always 2024
-
-  // Tavus Homecastr state
-  const [tavusConversationUrl, setTavusConversationUrl] = useState<string | null>(null)
-  const [isTavusLoading, setIsTavusLoading] = useState(false)
-
-  // Handle map actions from chat (smooth fly-to)
-  const handleChatMapAction = useCallback((action: MapAction) => {
-    // Handle clear_selection action
-    if ((action as any).action === 'clear_selection') {
-      console.log('[PAGE] clear_selection from chat')
-      setMapState(prev => ({
-        ...prev,
-        selectedId: null,
-        highlightedIds: undefined
-      }))
-      // Dispatch window event so forecast-map clears MapLibre feature state (border/highlight)
-      window.dispatchEvent(new CustomEvent("tavus-map-action", {
-        detail: { action: "clear_selection" }
-      }))
-      toast({ title: "Selection cleared", duration: 2000 })
-      return
-    }
-
-    // Handle clear_comparison action (keep primary selection, clear comparison overlay)
-    if ((action as any).action === 'clear_comparison') {
-      console.log('[PAGE] clear_comparison from chat')
-      window.dispatchEvent(new CustomEvent("tavus-map-action", {
-        detail: { action: "clear_comparison" }
-      }))
-      toast({ title: "Comparison cleared", duration: 2000 })
-      return
-    }
-
-    // Handle set_color_mode — switch between value and growth views
-    if ((action as any).action === 'set_color_mode') {
-      const mode = (action as any).mode === 'growth' ? 'growth' : 'value'
-      console.log('[PAGE] set_color_mode from chat:', mode)
-      setFilters({ colorMode: mode })
-      toast({ title: `Map view: ${mode}`, duration: 2000 })
-      return
-    }
-
-    // Handle set_forecast_year — change the timeline year
-    if ((action as any).action === 'set_forecast_year') {
-      const yr = Math.max(2019, Math.min(2030, (action as any).year || 2029))
-      console.log('[PAGE] set_forecast_year from chat:', yr)
-      setCurrentYear(yr)
-      toast({ title: `Timeline set to ${yr}`, duration: 2000 })
-      return
-    }
-
-    // Handle add_location_to_selection — keep primary selection, add comparison overlay
-    if ((action as any).action === 'add_location_to_selection') {
-      console.log('[PAGE] add_location_to_selection from chat', { lat: action.lat, lng: action.lng })
-      window.dispatchEvent(new CustomEvent("tavus-map-action", {
-        detail: {
-          action: "add_location_to_selection",
-          params: { lat: action.lat, lng: action.lng, zoom: action.zoom },
-          result: {
-            chosen: { lat: action.lat, lng: action.lng, label: "" },
-            area: { id: (action as any).area_id, level: (action as any).level || "zcta" }
-          }
-        }
-      }))
-      toast({
-        title: "Comparison added",
-        description: `Overlaying comparison at ${action.lat.toFixed(4)}, ${action.lng.toFixed(4)}`,
-        duration: 2000,
-      })
-      return
-    }
-
-    // Use area_id for forecast mode, select_hex_id for H3 mode
-    const selectedId = action.area_id || action.select_hex_id || undefined
-    setMapState({
-      center: [action.lng, action.lat],
-      zoom: action.zoom,
-      ...(selectedId ? { selectedId } : {}),
-      ...(action.highlighted_hex_ids ? { highlightedIds: action.highlighted_hex_ids } : {}),
-    })
-
-    // Always dispatch tavus-map-action so the forecast map auto-selects on idle
-    if (action.area_id) {
-      window.dispatchEvent(new CustomEvent("tavus-map-action", {
-        detail: {
-          action: "location_to_area",
-          params: { lat: action.lat, lng: action.lng, zoom: action.zoom },
-          result: {
-            chosen: { lat: action.lat, lng: action.lng, label: "" },
-            area: { id: action.area_id, level: action.level || "zcta" }
-          }
-        }
-      }))
-    } else {
-      // Fallback: fly_to_location also auto-selects the feature at center on idle
-      window.dispatchEvent(new CustomEvent("tavus-map-action", {
-        detail: {
-          action: "fly_to_location",
-          params: { lat: action.lat, lng: action.lng, zoom: action.zoom }
-        }
-      }))
-    }
-
-    toast({
-      title: "Map updated",
-      description: `Navigating to ${action.lat.toFixed(4)}, ${action.lng.toFixed(4)}`,
-      duration: 2000,
-    })
-  }, [setMapState, toast])
-
-  // Listen for Tavus tool events (dispatched from window by TavusMiniWindow)
-  useEffect(() => {
-    const handleTavusAction = (e: Event) => {
-      const { action, params, result } = (e as CustomEvent).detail
-
-      console.log(`[PAGE] Received Tavus action: ${action}`, { params, result })
-
-      if (action === "fly_to_location") {
-        setMapState(prev => {
-          // If we have highlightedIds (e.g. from location_to_hex), preserve them unless new ones are provided.
-          const nextHighlightedIds = params.selected_hex_ids || prev.highlightedIds
-
-          // ZOOM SAFETY: If we have highlighted IDs (neighborhood mode), don't let AI force a zoom that hides them (e.g. Zoom 12 is too far out for Res 9 hexes? No, Res 9 needs ~13. Zoom 12 might be okay but let's check).
-          // Actually, Res 9 hexes are rendered at Zoom 12?
-          // getZoomForRes(9) -> 13.2.
-          // If AI says Zoom 12, and we have Res 9 hexes, we should probably prefer 13.
-          // Let's rely on the AI's zoom mostly, but if we have IDs and no specific selection, ensure we can see them.
-          let nextZoom = params.zoom || 12
-          if (nextHighlightedIds && nextHighlightedIds.length > 0 && nextZoom < 13) {
-            nextZoom = 13 // Force at least 13 if we are highlighting things
-          }
-
-          return {
-            center: [params.lng, params.lat],
-            zoom: nextZoom,
-            selectedId: params.select_hex_id || prev.selectedId, // Preserve selectedId if not overwriting
-            highlightedIds: nextHighlightedIds
-          }
-        })
-        toast({ title: "Homecastr Agent", description: "Moving map..." })
-      } else if (action === "inspect_location") {
-        setMapState({
-          center: [params.lng, params.lat],
-          zoom: params.zoom || 15,
-          selectedId: params.h3_id
-        })
-        toast({ title: "Homecastr Agent", description: "Inspecting property..." })
-      } else if (action === "inspect_neighborhood") {
-        setMapState(prev => {
-          // If we already have a selectedId and it's in the new set, keep it.
-          // Otherwise, default to the first one to ensure tooltip appears.
-          const newHighlights = params.h3_ids || []
-          const keepSelected = prev.selectedId && newHighlights.includes(prev.selectedId)
-
-          return {
-            ...prev,
-            center: [params.lng, params.lat],
-            zoom: params.zoom || 13,
-            highlightedIds: newHighlights,
-            selectedId: keepSelected ? prev.selectedId : (newHighlights[0] || null)
-          }
-        })
-        toast({ title: "Homecastr Agent", description: "Inspecting neighborhood..." })
-      } else if (action === "location_to_hex") {
-        if (result?.h3?.h3_id) {
-          const isNeighborhood = result.h3.context === "neighborhood_average" || (result.h3.neighbors && result.h3.neighbors.length > 1)
-          const targetRes = result.h3.h3_res || 9
-          const targetZoom = getZoomForRes(targetRes)
-
-          setMapState(prev => ({
-            ...prev,
-            center: [result.chosen.lng, result.chosen.lat],
-            zoom: targetZoom,
-            selectedId: result.h3.h3_id,
-            // If we have neighbors (neighborhood context), highlight them all
-            highlightedIds: result.h3.neighbors || undefined
-          }))
-          toast({ title: "Homecastr Agent", description: `Found ${result.chosen.label}` })
-        }
-      } else if (action === "add_location_to_selection") {
-        const resultIds = result?.h3?.h3_ids || (result?.h3?.h3_id ? [result.h3.h3_id] : [])
-        // Fallback for neighborhood context from resolveLocationToHex
-        const neighborIds = result?.h3?.neighbors || []
-
-        const idsToAdd = [...resultIds, ...neighborIds]
-
-        if (idsToAdd.length > 0) {
-          // If we have a single new location with lat/lng, maybe zoom/pan? 
-          // But for "Compare top 3", we likely just want to highlight them.
-          // Let's decide zoom based on the FIRST added item if we don't have a bounding box.
-
-          setMapState(prev => {
-            const currentHighlights = prev.highlightedIds || (prev.selectedId ? [prev.selectedId] : [])
-            const combined = Array.from(new Set([...currentHighlights, ...idsToAdd]))
-
-            // If we have an H3 ID but no explicit lat/lng (e.g. adding by ID), derive it
-            let targetCenter = result.chosen?.lat ? [result.chosen.lng, result.chosen.lat] : undefined
-            if (!targetCenter && result.h3?.h3_id) {
-              const [lat, lng] = cellToLatLng(result.h3.h3_id)
-              targetCenter = [lng, lat]
-            }
-
-            return {
-              ...prev,
-              highlightedIds: combined,
-              ...(targetCenter && result.h3?.h3_id ? {
-                center: targetCenter as [number, number],
-                zoom: getZoomForRes(result.h3.h3_res || 9),
-                selectedId: result.h3.h3_id // Select the new location so the tooltip appears!
-              } : {})
-            }
-          })
-          toast({ title: "Homecastr Agent", description: `Added ${result.chosen?.label || idsToAdd.length + " locations"} to comparison` })
-        }
-      } else if (action === "clear_selection") {
-        console.log("[PAGE] clear_selection fired")
-        setMapState(prev => ({
-          ...prev,
-          selectedId: null,
-          highlightedIds: undefined
-        }))
-        toast({ title: "Homecastr Agent", description: "Selection cleared" })
-      } else if (action === "rank_h3_hexes") {
-        if (result?.hexes?.length > 0) {
-          const topHex = result.hexes[0]
-          setMapState({
-            center: [topHex.location.lng, topHex.location.lat],
-            zoom: 12,
-            highlightedIds: result.hexes.map((h: any) => h.h3_id),
-            selectedId: topHex.h3_id
-          })
-          toast({ title: "Homecastr Agent", description: "Ranking locations..." })
-        }
-      }
-      // ── Forecast-map geography-level actions ──
-      else if (action === "location_to_area" || action === "get_forecast_area") {
-        if (result?.chosen?.lat) {
-          setMapState(prev => ({
-            ...prev,
-            center: [result.chosen.lng, result.chosen.lat],
-            zoom: 13,
-            selectedId: result.area?.id || prev.selectedId,
-          }))
-          toast({ title: "Homecastr Agent", description: `Found ${result.chosen?.label || "area"}` })
-        } else if (result?.area) {
-          toast({ title: "Homecastr Agent", description: `Forecast data loaded for ${result.area.id}` })
-        }
-      } else if (action === "rank_forecast_areas") {
-        if (result?.areas?.length > 0) {
-          toast({ title: "Homecastr Agent", description: `Found top ${result.areas.length} areas` })
-        }
-      }
-    }
-    window.addEventListener("tavus-map-action", handleTavusAction)
-    return () => window.removeEventListener("tavus-map-action", handleTavusAction)
-  }, [setMapState, toast])
-
-  // Click coordinates from ForecastMap (actual feature location, not viewport center)
-  const [clickCoords, setClickCoords] = useState<[number, number] | null>(null)
-
-  // Reverse Geocode Effect — only for non-forecast-map modes
-  // In forecast map mode, ForecastMap's onGeocodedName callback sets the search bar directly
-  useEffect(() => {
-    if (!mapState.selectedId) {
-      setSearchBarValue("")
-      return
-    }
-
-    // In forecast map mode, the search bar is set by onGeocodedName callback
-    if (filters.useForecastMap) return
-
-    // Do NOT show raw ID. Show "..." or nothing while loading.
-    setSearchBarValue("Loading location...")
-
-    const fetchAddress = async () => {
-      try {
-        const [lat, lng] = cellToLatLng(mapState.selectedId!)
-        const address = await reverseGeocode(lat, lng, 18)
-        if (address) {
-          setSearchBarValue(address)
-        } else {
-          setSearchBarValue("")
-        }
-      } catch (e) {
-        console.error("Reverse geocode failed", e)
-        setSearchBarValue("")
-      }
-    }
-    fetchAddress()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mapState.selectedId, filters.useForecastMap])
-
-  const handleSearchError = useCallback(
-    (error: string) => {
-      toast({
-        title: "Search failed",
-        description: error,
-        variant: "destructive",
-      })
-    },
-    [toast],
-  )
-
-  // Listen for Tavus-dispatched map actions that affect page-level state
-  // (set_forecast_year, set_color_mode come directly from Tavus, not through chat)
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail
-      const action = detail?.action
-      const params = detail?.params
-
-      if (action === "set_forecast_year" && params?.year) {
-        const yr = Math.max(2019, Math.min(2030, params.year))
-        console.log('[PAGE] set_forecast_year from Tavus:', yr)
-        setCurrentYear(yr)
-        toast({ title: `Timeline set to ${yr}`, duration: 2000 })
-      } else if (action === "set_color_mode" && params?.mode) {
-        const mode = params.mode === 'growth' ? 'growth' : 'value'
-        console.log('[PAGE] set_color_mode from Tavus:', mode)
-        setFilters({ colorMode: mode })
-        toast({ title: `Map view: ${mode}`, duration: 2000 })
-      }
-    }
-    window.addEventListener("tavus-map-action", handler)
-    return () => window.removeEventListener("tavus-map-action", handler)
-  }, [toast, setFilters])
-
-  const handleSearch = useCallback(async (query: string) => {
-    try {
-      const result = await geocodeAddress(query)
-      if (result) {
-        // Adaptive zoom based on Nominatim result type/class
-        const t = result.resultType?.toLowerCase() || ""
-        const c = result.resultClass?.toLowerCase() || ""
-        let zoom = 14 // default
-        if (t === "house" || t === "building" || t === "apartments" || c === "building") {
-          zoom = 18  // full address → parcel scale
-        } else if (t === "road" || t === "street" || t === "residential" || c === "highway") {
-          zoom = 16  // street → block scale
-        } else if (t === "suburb" || t === "neighbourhood" || t === "neighborhood" || t === "quarter") {
-          zoom = 14  // neighborhood
-        } else if (t === "postcode" || t === "postal_code") {
-          zoom = 14  // zip code
-        } else if (t === "city" || t === "town" || t === "village") {
-          zoom = 12  // city scale
-        } else if (t === "county" || t === "state" || t === "country") {
-          zoom = 10
-        }
-
-        // Clear any existing selection so fly_to_location will auto-select at destination
-        if (mapState.selectedId) {
-          window.dispatchEvent(new CustomEvent("tavus-map-action", {
-            detail: { action: "clear_selection" }
-          }))
-        }
-
-        setMapState({
-          center: [result.lng, result.lat],
-          zoom,
-        })
-        // Dispatch fly_to_location so forecast-map auto-selects the center feature
-        window.dispatchEvent(new CustomEvent("tavus-map-action", {
-          detail: {
-            action: "fly_to_location",
-            params: { lat: result.lat, lng: result.lng, zoom }
-          }
-        }))
-        toast({ title: "Found Address", description: result.displayName })
-      } else {
-        handleSearchError(`Address not found: ${query}`)
-      }
-    } catch (e) {
-      handleSearchError("Search failed")
-    }
-  }, [setMapState, toast, handleSearchError, mapState.selectedId])
-
-
-
-  const handleMockDataDetected = useCallback(() => {
-    if (!isUsingMockData) {
-      setIsUsingMockData(true)
-      toast({
-        title: "Database Quota Exceeded",
-        description: "Displaying mock data. Please upgrade your Supabase plan or contact support.",
-        variant: "destructive",
-        duration: 10000,
-      })
-    }
-  }, [isUsingMockData, toast])
-
-  const handleColorModeChange = useCallback((mode: "growth" | "value") => {
-    setFilters({ colorMode: mode })
-    // First time the user clicks Growth and hasn't touched the timeline — animate to 2027
-    if (mode === "growth" && !hasManuallySetYear && currentYear < 2027) {
-      try {
-        const alreadyShown = localStorage.getItem("properlytic_growth_intro_shown")
-        if (!alreadyShown) {
-          localStorage.setItem("properlytic_growth_intro_shown", "1")
-          // Animate to 2027 by stepping through years
-          let yr = currentYear + 1
-          const step = () => {
-            if (yr <= 2027) {
-              setCurrentYear(yr)
-              yr++
-              setTimeout(step, 80)
-            }
-          }
-          setTimeout(step, 200)
-        }
-      } catch { /* localStorage unavailable (SSR/private) */ }
-    }
-  }, [setFilters, hasManuallySetYear, currentYear])
-
-  /* Homecastr handler */
-  const handleConsultAI = useCallback(async (details: {
-    predictedValue: number | null
-    opportunityScore: number | null
-    capRate: number | null
-  }) => {
-    if (isTavusLoading) return
-
-    setIsTavusLoading(true)
-    try {
-      const result = await createTavusConversation({
-        predictedValue: details.predictedValue,
-        opportunityScore: details.opportunityScore,
-        capRate: details.capRate,
-        address: searchBarValue && !searchBarValue.includes("Loading") ? searchBarValue : "this neighborhood",
-        forecastMode: filters.useForecastMap ?? false,
-      })
-
-      if (result.error || !result.conversation_url) {
-        throw new Error(result.error || "Failed to create conversation")
-      }
-
-      setTavusConversationUrl(result.conversation_url)
-    } catch (err) {
-      console.error("[TAVUS] Failed to create conversation:", err)
-      toast({
-        title: "Homecastr Unavailable",
-        description: err instanceof Error ? err.message : "Could not connect to Homecastr agent.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsTavusLoading(false)
-    }
-  }, [isTavusLoading, toast, filters.useForecastMap])
-
-  /* Floating button handler */
-  const handleFloatingConsultAI = useCallback(async () => {
-    if (isTavusLoading) return
-
-    setIsTavusLoading(true)
-    try {
-      let predictedValue: number | null = null
-      let opportunityScore: number | null = null
-      let capRate: number | null = null
-
-      if (filters.useForecastMap) {
-        // Forecast map mode: query forecast-detail API if we have a selectedId
-        if (mapState.selectedId) {
-          try {
-            const res = await fetch(`/api/forecast-detail?level=zcta&id=${encodeURIComponent(mapState.selectedId)}&originYear=${pageOriginYear}`)
-            if (res.ok) {
-              const json = await res.json()
-              if (json.p50 && json.p50.length > 0) {
-                predictedValue = json.p50[json.p50.length - 1] // Last horizon
-              }
-            }
-          } catch { }
-        }
-      } else {
-        // Classic H3 mode
-        let h3Id = mapState.selectedId
-        if (!h3Id) {
-          const [lng, lat] = mapState.center
-          h3Id = latLngToCell(lat, lng, 8)
-        }
-        const details = await getH3CellDetails(h3Id, currentYear)
-        predictedValue = details?.proforma?.predicted_value ?? null
-        opportunityScore = details?.opportunity?.value ?? null
-        capRate = details?.proforma?.cap_rate ?? null
-      }
-
-      const result = await createTavusConversation({
-        predictedValue,
-        opportunityScore,
-        capRate,
-        address: searchBarValue && !searchBarValue.includes("Loading") && !searchBarValue.startsWith("8") ? searchBarValue : "this neighborhood",
-        forecastMode: filters.useForecastMap ?? false,
-      })
-
-      if (result.error || !result.conversation_url) {
-        throw new Error(result.error || "Failed to create conversation")
-      }
-
-      setTavusConversationUrl(result.conversation_url)
-    } catch (err) {
-      console.error("[TAVUS] Failed to create conversation:", err)
-      toast({
-        title: "Homecastr Unavailable",
-        description: err instanceof Error ? err.message : "Could not connect to Homecastr agent.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsTavusLoading(false)
-    }
-  }, [isTavusLoading, toast, mapState.selectedId, mapState.center, currentYear, filters.useForecastMap])
-
-  return (
-    <div className="h-dvh flex flex-col">
-      {/* Full-screen Map Container */}
-      <main className="flex-1 relative h-full w-full">
-        {isUsingMockData && (
-          <Alert
-            variant="destructive"
-            className="absolute top-4 left-1/2 -translate-x-1/2 z-50 w-auto max-w-2xl shadow-lg"
-          >
-            <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Database Quota Exceeded</AlertTitle>
-            <AlertDescription>
-              Displaying mock data. Contact Supabase support at{" "}
-              <a href="https://supabase.help" target="_blank" rel="noopener noreferrer" className="underline">
-                supabase.help
-              </a>
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {filters.useForecastMap ? (
-          <ForecastMap
-            filters={filters}
-            mapState={mapState}
-            onFeatureSelect={selectFeature}
-            onFeatureHover={hoverFeature}
-            onCoordsChange={setClickCoords}
-            onGeocodedName={(name) => setSearchBarValue(name || "")}
-            year={currentYear}
-            className="absolute inset-0 z-0"
-            onConsultAI={handleConsultAI}
-            isChatOpen={isChatOpen}
-            isTavusOpen={!!tavusConversationUrl && !isTavusLoading}
-            compareMode={compareMode}
-            onPinnedCountChange={setPinnedCount}
-          />
-        ) : filters.useVectorMap ? (
-          <VectorMap
-            filters={filters}
-            mapState={mapState}
-            onFeatureSelect={selectFeature}
-            onFeatureHover={hoverFeature}
-            year={currentYear}
-            className="absolute inset-0 z-0"
-            onConsultAI={handleConsultAI}
-          />
-        ) : filters.usePMTiles ? (
-          <div className="absolute inset-0 z-0">
-            <H3Map year={currentYear} colorMode={filters.colorMode} mapState={mapState} />
-          </div>
-        ) : (
-          <MapView
-            filters={filters}
-            mapState={mapState}
-            onFeatureSelect={selectFeature}
-            onFeatureHover={hoverFeature}
-            year={currentYear}
-            onMockDataDetected={handleMockDataDetected}
-            onYearChange={setCurrentYear}
-            mobileSelectionMode={mobileSelectionMode}
-            onMobileSelectionModeChange={setMobileSelectionMode}
-            onConsultAI={handleConsultAI}
-          />
-        )}
-
-        {/* Chat Panel Overlay */}
-        <ChatPanel
-          isOpen={isChatOpen}
-          onClose={() => setIsChatOpen(false)}
-          onMapAction={handleChatMapAction}
-          forecastMode={filters.useForecastMap ?? false}
-          onTavusRequest={handleFloatingConsultAI}
-          tooltipVisible={!!(mapState.selectedId || mapState.hoveredId)}
-          mapViewport={{ center: mapState.center, zoom: mapState.zoom, selectedId: mapState.selectedId }}
-          onShare={() => {
-            const url = new URL(window.location.href)
-            if (currentYear !== 2027) url.searchParams.set("yr", currentYear.toString())
-            const pinnedIds = (window as any).__getPinnedIds?.() as string[] | undefined
-            if (pinnedIds?.length) url.searchParams.set("compare", pinnedIds.join(","))
-            else url.searchParams.delete("compare")
-            navigator.clipboard.writeText(url.toString()).then(() => {
-              setLinkCopied(true)
-              toast({ title: "Link copied", description: pinnedIds?.length ? `Shared with ${pinnedIds.length} comparison(s)` : "Share this URL to show the same view", duration: 2500 })
-              setTimeout(() => setLinkCopied(false), 2500)
-            })
-          }}
-          onPDF={async () => {
-            try {
-              toast({ title: "Generating PDF…", duration: 2000 })
-              const captureMap = (window as any).__captureMapImage
-              const mapImageDataUrl: string | undefined = captureMap ? await captureMap() : undefined
-              const selectedId = mapState.selectedId
-              let historicalValues: (number | null)[] = []
-              let p50: number[] = [], p10: number[] = [], p90: number[] = [], years: number[] = []
-              if (selectedId) {
-                const level = selectedId.length === 3 ? "zip3" : selectedId.length === 5 ? "zcta" : selectedId.length === 11 ? "tract" : selectedId.length === 15 ? "tabblock" : "parcel"
-                const res = await fetch(`/api/forecast-detail?level=${level}&id=${encodeURIComponent(selectedId)}&originYear=${pageOriginYear}`)
-                if (res.ok) { const json = await res.json(); historicalValues = json.historicalValues || []; p50 = json.p50 || []; p10 = json.p10 || []; p90 = json.p90 || []; years = json.years || [] }
-              }
-              const shareUrl = new URL(window.location.href)
-              if (currentYear !== 2027) shareUrl.searchParams.set("yr", currentYear.toString())
-              const pdfPinnedIds = (window as any).__getPinnedIds?.() as string[] | undefined
-              if (pdfPinnedIds?.length) shareUrl.searchParams.set("compare", pdfPinnedIds.join(","))
-              await generateForecastPDF({
-                locationName: searchBarValue && !searchBarValue.includes("Loading") ? searchBarValue : selectedId ? selectedId : "Map Overview",
-                locationId: selectedId || "—", currentYear, historicalValues, p50, p10, p90, years, mapImageDataUrl,
-                shareUrl: shareUrl.toString(), pinnedComparisons: (window as any).__getPinnedComparisons?.() || undefined,
-              })
-            } catch (err) { console.error("PDF generation failed:", err); toast({ title: "PDF failed", description: "Could not generate report", variant: "destructive" }) }
-          }}
-          onContact={() => setIsContactOpen(true)}
-        />
-
-        {/* Unified Sidebar Container - Top Left */}
-        <div className={`absolute top-4 left-4 z-[60] flex flex-col gap-1.5 w-full max-w-[calc(100vw-32px)] md:w-fit md:min-w-[320px] transition-all duration-300`}>
-          {/* Search Row */}
-          <div className="flex items-center gap-2 w-full">
-            <SearchBox
-              onSearch={handleSearch}
-              placeholder="Search address or ID..."
-              value={searchBarValue}
-            />
-          </div>
-
-          {/* TimeControls + Help Button Row */}
-          <div className="flex items-center gap-2">
-            <TimeControls
-              minYear={2019}
-              maxYear={2030}
-              currentYear={currentYear}
-              onChange={(yr) => { setHasManuallySetYear(true); setCurrentYear(yr) }}
-              onPlayStart={() => {
-                console.log("[PAGE] Play started - prefetch all years triggered")
-              }}
-              className="flex-1"
-            />
-            {/* <ExplainerPopup /> */}  {/* Deactivated — replaced by OnboardingIntro */}
-          </div>
-
-          {/* 3. Legend & (Selection Buttons + Vertical Zoom Controls) Row */}
-          <div className="flex flex-row gap-1.5 items-stretch">
-            {/* Legend - Takes up available space */}
-            <Legend
-              className="flex-1"
-              colorMode={filters.colorMode}
-              onColorModeChange={handleColorModeChange}
-              year={currentYear}
-              originYear={pageOriginYear}
-            />
-
-            {/* Controls: 2x2 Grid */}
-            <div className="grid grid-cols-2 grid-rows-2 gap-1 shrink-0 self-stretch w-[4.5rem]">
-
-              {/* Single Select */}
-              <button
-                onClick={() => { setCompareMode(false); setMobileSelectionMode('replace') }}
-                className={`aspect-square rounded-md flex items-center justify-center transition-colors shadow-sm font-bold text-[10px] ${!compareMode ? "bg-primary text-primary-foreground" : "glass-panel text-foreground"}`}
-                title="Single Select"
-              >
-                1
-              </button>
-
-              {/* Compare Mode */}
-              <button
-                onClick={() => setCompareMode(!compareMode)}
-                className={`aspect-square rounded-md flex items-center justify-center transition-colors shadow-sm relative ${compareMode ? "bg-lime-500 text-black" : "glass-panel text-foreground"}`}
-                title={compareMode ? "Compare Mode ON — click areas to pin" : "Compare Mode — pin areas to compare"}
-              >
-                <ArrowLeftRight className="h-3.5 w-3.5" />
-                {pinnedCount > 0 && (
-                  <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-lime-400 text-black text-[8px] font-bold rounded-full flex items-center justify-center">
-                    {pinnedCount}
-                  </span>
-                )}
-              </button>
-
-              {/* Zoom In */}
-              <button
-                onClick={() => {
-                  setMapState({ zoom: Math.min(18, mapState.zoom + 1) })
-                }}
-                className="aspect-square glass-panel rounded-md flex items-center justify-center text-foreground hover:bg-accent transition-colors shadow-sm active:scale-95"
-                aria-label="Zoom In"
-              >
-                <Plus className="h-3.5 w-3.5" />
-              </button>
-
-              {/* Zoom Out */}
-              <button
-                onClick={() => {
-                  setMapState({ zoom: Math.max(9, mapState.zoom - 1) })
-                }}
-                className="aspect-square glass-panel rounded-md flex items-center justify-center text-foreground hover:bg-accent transition-colors shadow-sm active:scale-95"
-                aria-label="Zoom Out"
-              >
-                <Minus className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          </div>
-
-          {/* API Documentation + Version */}
-          <div className="flex justify-between items-center px-1">
-            <div className="flex items-center gap-2">
-              <a
-                href="/api-docs"
-                className="text-[10px] text-muted-foreground hover:text-primary transition-colors flex items-center gap-1 font-medium"
-                target="_blank"
-              >
-                <Terminal className="w-3 h-3" />
-                API Documentation
-              </a>
-
-              {/* Dev Only Schema Toggle */}
-              {process.env.NODE_ENV === "development" && (
-                <button
-                  onClick={() => {
-                    const urlArgs = new URLSearchParams(window.location.search)
-                    const currentSchema = urlArgs.get("schema") || ""
-                    const newSchema = prompt("Switch inference schema (leave blank for PROD):", currentSchema ? currentSchema : "forecast_queue")
-                    if (newSchema !== null) {
-                      if (newSchema.trim() === "") {
-                        urlArgs.delete("schema")
-                      } else {
-                        urlArgs.set("schema", newSchema.trim())
-                      }
-                      window.location.search = urlArgs.toString()
-                    }
-                  }}
-                  className="text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1 font-mono transition-colors bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 border border-amber-500/20"
-                >
-                  <Activity className="w-2.5 h-2.5" />
-                  Schema
-                </button>
-              )}
-            </div>
-            <div className="text-[10px] text-muted-foreground/50 font-mono">v1.4.0-beige</div>
-          </div>
-        </div>
-
-        {/* Floating action buttons — 2-column layout */}
-        <div className={cn(
-          "fixed z-[9999] flex items-stretch gap-2 transition-all duration-300 max-w-[calc(100vw-24px)]",
-          // Shift right of whichever panel is open (both are ~340px wide at left-5 → right edge ~365px)
-          tavusConversationUrl || isChatOpen ? "left-[365px]" : "left-5",
-          (mapState.selectedId || mapState.hoveredId) && filters.useForecastMap ? "bottom-[calc(25vh+12px)] md:bottom-5" : "bottom-5"
-        )}>
-          {/* Left column — Agent buttons stacked vertically */}
-          <div className="flex flex-col gap-1.5">
-            {/* Chat button — visible when chat panel is closed */}
-            {!isChatOpen && (
-              <button
-                onClick={() => setIsChatOpen(true)}
-                className="flex-1 flex items-center gap-2.5 px-4 py-2.5 rounded-2xl glass-panel hover:bg-accent/50 text-foreground shadow-2xl transition-all duration-300 hover:scale-105 active:scale-95 min-w-0"
-              >
-                <MessageSquare size={18} className="shrink-0" />
-                <div className="flex flex-col items-start min-w-0">
-                  <span className="text-xs font-semibold whitespace-nowrap">Chat with live agent</span>
-                  <span className="text-[10px] text-muted-foreground whitespace-nowrap">Powered by OpenAI</span>
-                </div>
-              </button>
-            )}
-
-            {/* Tavus button — visible when not in a Tavus call */}
-            {!tavusConversationUrl && !isTavusLoading && (
-              <button
-                onClick={handleFloatingConsultAI}
-                className="flex-1 flex items-center gap-2.5 px-4 py-2.5 rounded-2xl glass-panel hover:bg-accent/50 text-foreground shadow-2xl transition-all duration-300 hover:scale-105 active:scale-95 min-w-0"
-              >
-                <Mic size={18} className="shrink-0" />
-                <div className="flex flex-col items-start min-w-0">
-                  <span className="text-xs font-semibold whitespace-nowrap">Talk to live agent</span>
-                  <span className="text-[10px] text-muted-foreground whitespace-nowrap">Powered by Tavus</span>
-                </div>
-              </button>
-            )}
-          </div>
-
-          {/* Right column — Utility buttons stacked vertically */}
-          <div className="flex flex-col gap-1.5">
-            {/* Share View — copy link with full state */}
-            <button
-              onClick={() => {
-                const url = new URL(window.location.href)
-                // Ensure year is in the URL
-                if (currentYear !== 2027) url.searchParams.set("yr", currentYear.toString())
-                // Include pinned comparison IDs
-                const pinnedIds = (window as any).__getPinnedIds?.() as string[] | undefined
-                if (pinnedIds?.length) {
-                  url.searchParams.set("compare", pinnedIds.join(","))
-                } else {
-                  url.searchParams.delete("compare")
-                }
-                navigator.clipboard.writeText(url.toString()).then(() => {
-                  setLinkCopied(true)
-                  toast({ title: "Link copied", description: pinnedIds?.length ? `Shared with ${pinnedIds.length} comparison(s)` : "Share this URL to show the same view", duration: 2500 })
-                  setTimeout(() => setLinkCopied(false), 2500)
-                })
-              }}
-              className="flex-1 flex items-center gap-2 px-4 py-2 rounded-2xl glass-panel hover:bg-accent/50 text-foreground shadow-2xl transition-all duration-300 hover:scale-105 active:scale-95 min-w-0"
-            >
-              {linkCopied ? <Check size={16} className="shrink-0 text-green-500" /> : <Link2 size={16} className="shrink-0" />}
-              <span className="text-xs font-semibold whitespace-nowrap">{linkCopied ? "Copied!" : "Share"}</span>
-            </button>
-
-            {/* Download PDF — branded forecast report */}
-            <button
-              onClick={async () => {
-                try {
-                  toast({ title: "Generating PDF…", duration: 2000 })
-
-                  // Capture map canvas via global helper exposed by ForecastMap
-                  const captureMap = (window as any).__captureMapImage
-                  const mapImageDataUrl: string | undefined = captureMap ? await captureMap() : undefined
-
-                  // Fetch forecast data
-                  const selectedId = mapState.selectedId
-                  let historicalValues: (number | null)[] = []
-                  let p50: number[] = []
-                  let p10: number[] = []
-                  let p90: number[] = []
-                  let years: number[] = []
-
-                  if (selectedId) {
-                    // Auto-detect geo level from ID format
-                    const level = selectedId.length === 3 ? "zip3"
-                      : selectedId.length === 5 ? "zcta"
-                        : selectedId.length === 11 ? "tract"
-                          : selectedId.length === 15 ? "tabblock"
-                            : "parcel"
-                    const res = await fetch(`/api/forecast-detail?level=${level}&id=${encodeURIComponent(selectedId)}&originYear=${pageOriginYear}`)
-                    if (res.ok) {
-                      const json = await res.json()
-                      historicalValues = json.historicalValues || []
-                      p50 = json.p50 || []
-                      p10 = json.p10 || []
-                      p90 = json.p90 || []
-                      years = json.years || []
-                    }
-                  }
-
-                  const shareUrl = new URL(window.location.href)
-                  if (currentYear !== 2027) shareUrl.searchParams.set("yr", currentYear.toString())
-                  // Include pinned comparison IDs in PDF share URL
-                  const pdfPinnedIds = (window as any).__getPinnedIds?.() as string[] | undefined
-                  if (pdfPinnedIds?.length) shareUrl.searchParams.set("compare", pdfPinnedIds.join(","))
-
-                  await generateForecastPDF({
-                    locationName: searchBarValue && !searchBarValue.includes("Loading")
-                      ? searchBarValue
-                      : selectedId
-                        ? selectedId
-                        : (() => {
-                          const params = new URLSearchParams(window.location.search)
-                          const lat = parseFloat(params.get("lat") || "0")
-                          const lng = parseFloat(params.get("lng") || "0")
-                          return lat ? `Map View — ${Math.abs(lat).toFixed(2)}°${lat >= 0 ? "N" : "S"}, ${Math.abs(lng).toFixed(2)}°${lng >= 0 ? "E" : "W"}` : "Map Overview"
-                        })(),
-                    locationId: selectedId || "—",
-                    currentYear,
-                    historicalValues,
-                    p50,
-                    p10,
-                    p90,
-                    years,
-                    mapImageDataUrl,
-                    shareUrl: shareUrl.toString(),
-                    coords: (() => {
-                      const params = new URLSearchParams(window.location.search)
-                      const lat = parseFloat(params.get("lat") || "0")
-                      const lng = parseFloat(params.get("lng") || "0")
-                      return lat ? [lat, lng] as [number, number] : undefined
-                    })(),
-                    pinnedComparisons: (window as any).__getPinnedComparisons?.() || undefined,
-                  })
-                } catch (err) {
-                  console.error("PDF generation failed:", err)
-                  toast({ title: "PDF failed", description: "Could not generate report", variant: "destructive" })
-                }
-              }}
-              className="flex-1 flex items-center gap-2 px-4 py-2 rounded-2xl glass-panel hover:bg-accent/50 text-foreground shadow-2xl transition-all duration-300 hover:scale-105 active:scale-95 min-w-0"
-            >
-              <FileDown size={16} className="shrink-0" />
-              <span className="text-xs font-semibold whitespace-nowrap">PDF</span>
-            </button>
-
-            {/* CTA: Request custom analysis */}
-            <button
-              onClick={() => setIsContactOpen(true)}
-              className="flex-1 flex items-center gap-2 px-4 py-2 rounded-2xl glass-panel hover:bg-accent/50 text-foreground shadow-2xl transition-all duration-300 hover:scale-105 active:scale-95 border border-[hsl(var(--primary))]/30 min-w-0"
-            >
-              <CalendarDays size={16} className="text-[hsl(45,80%,45%)] shrink-0" />
-              <span className="text-xs font-semibold whitespace-nowrap">Request Analysis</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Homecastr Loading Indicator */}
-        {
-          isTavusLoading && (
-            <div className={cn(
-              "fixed z-[10000] glass-panel text-foreground rounded-2xl px-5 py-4 shadow-2xl flex items-center gap-3 transition-all duration-300",
-              "bottom-3 left-3",
-              "md:bottom-5",
-              isChatOpen ? "md:left-[365px]" : "md:left-5"
-            )}>
-              <div className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-              <span className="text-xs font-medium">Connecting to Homecastr...</span>
-            </div>
-          )
-        }
-
-        {/* Tavus AI Analyst Mini Window */}
-        {
-          tavusConversationUrl && !isTavusLoading && (
-            <TavusMiniWindow
-              conversationUrl={tavusConversationUrl}
-              onClose={() => setTavusConversationUrl(null)}
-              chatOpen={isChatOpen}
-              forecastMode={filters.useForecastMap ?? false}
-            />
-          )
-        }
-      </main >
-
-      {/* Cinematic onboarding intro — first-visit only */}
-      <OnboardingIntro />
-      <ContactModal isOpen={isContactOpen} onClose={() => setIsContactOpen(false)} />
-    </div >
-  )
+import Link from 'next/link'
+import { ArrowRight, BarChart3, Globe, Layers, Sparkles, TrendingUp, Terminal, Github, Linkedin, GraduationCap, Map } from 'lucide-react'
+import { HomecastrLogo } from '@/components/homecastr-logo'
+import { FanChart } from '@/components/fan-chart'
+
+// Static demo data for landing page FanChart — realistic ~$300K property
+const DEMO_FAN_DATA = {
+    years: [2026, 2027, 2028, 2029, 2030],
+    p10: [285000, 278000, 274000, 271000, 268000],
+    p50: [295000, 305000, 318000, 330000, 345000],
+    p90: [310000, 338000, 365000, 395000, 425000],
+    y_med: [293000, 302000, 314000, 326000, 340000],
+}
+const DEMO_HISTORICAL = [220000, 235000, 265000, 290000, 305000, 298000, 292000]
+
+// Inline SVG: Monte Carlo spaghetti lines
+function MonteCarloSVG() {
+    return (
+        <svg viewBox="0 0 120 60" className="w-full h-16 mt-3" preserveAspectRatio="xMidYMid meet">
+            <path className="group-hover:stroke-primary/40 transition-colors duration-500" d="M10 45 Q30 40 50 35 Q70 25 90 18 L110 12" fill="none" stroke="currentColor" strokeOpacity={0.12} strokeWidth={1.5} />
+            <path className="group-hover:stroke-primary/30 transition-colors duration-500 delay-75" d="M10 45 Q30 42 50 40 Q70 38 90 42 L110 48" fill="none" stroke="currentColor" strokeOpacity={0.12} strokeWidth={1.5} />
+            <path className="group-hover:stroke-primary/50 transition-colors duration-500 delay-150" d="M10 45 Q30 38 50 30 Q70 28 90 25 L110 20" fill="none" stroke="currentColor" strokeOpacity={0.12} strokeWidth={1.5} />
+            <path className="group-hover:stroke-primary/40 transition-colors duration-500 delay-200" d="M10 45 Q30 43 50 42 Q70 35 90 30 L110 28" fill="none" stroke="currentColor" strokeOpacity={0.12} strokeWidth={1.5} />
+            <path className="group-hover:stroke-primary/20 transition-colors duration-500 delay-300" d="M10 45 Q30 36 50 28 Q70 22 90 15 L110 8" fill="none" stroke="currentColor" strokeOpacity={0.12} strokeWidth={1.5} />
+            <path className="group-hover:stroke-primary/60 transition-colors duration-500 delay-100" d="M10 45 Q30 44 50 46 Q70 48 90 50 L110 52" fill="none" stroke="currentColor" strokeOpacity={0.12} strokeWidth={1.5} />
+            {/* P50 median line */}
+            <path d="M10 45 Q30 40 50 34 Q70 30 90 26 L110 22" fill="none" stroke="hsl(var(--primary))" strokeWidth={2} strokeOpacity={0.6} />
+            {/* Fan area hint */}
+            <path d="M10 45 Q30 38 50 30 Q70 25 90 18 L110 12 L110 48 Q90 46 70 42 Q50 42 30 43 L10 45 Z" fill="hsl(var(--primary))" fillOpacity={0.08} />
+        </svg>
+    )
 }
 
-export default function Page() {
-  return (
-    <Suspense
-      fallback={
-        <div className="h-screen flex items-center justify-center bg-background">
-          <div className="animate-pulse text-muted-foreground">Loading dashboard...</div>
-        </div>
-      }
-    >
-      <DashboardContent />
-    </Suspense>
-  )
+// Inline SVG: P10/P50/P90 range bars
+function RangeBarsSVG() {
+    return (
+        <svg viewBox="0 0 120 60" className="w-full h-16 mt-3" preserveAspectRatio="xMidYMid meet">
+            {/* Range bar background */}
+            <rect x="15" y="18" width="90" height="24" rx="4" fill="hsl(var(--primary))" fillOpacity={0.08} />
+            {/* P10 marker */}
+            <line x1="25" y1="14" x2="25" y2="46" stroke="currentColor" strokeOpacity={0.3} strokeWidth={1.5} />
+            <text x="25" y="55" textAnchor="middle" className="text-[7px] fill-muted-foreground font-mono">$268K</text>
+            <text x="25" y="12" textAnchor="middle" className="text-[6px] fill-muted-foreground">P10</text>
+            {/* P50 marker */}
+            <line x1="60" y1="14" x2="60" y2="46" className="group-hover:stroke-lime-500 transition-colors duration-500" stroke="hsl(var(--primary))" strokeWidth={2.5} />
+            <text x="60" y="55" textAnchor="middle" className="text-[7px] fill-primary font-mono font-bold group-hover:fill-lime-500 transition-colors duration-500">$345K</text>
+            <text x="60" y="12" textAnchor="middle" className="text-[6px] fill-primary font-bold">P50</text>
+            {/* P90 marker */}
+            <line x1="95" y1="14" x2="95" y2="46" stroke="currentColor" strokeOpacity={0.3} strokeWidth={1.5} />
+            <text x="95" y="55" textAnchor="middle" className="text-[7px] fill-muted-foreground font-mono">$425K</text>
+            <text x="95" y="12" textAnchor="middle" className="text-[6px] fill-muted-foreground">P90</text>
+        </svg>
+    )
+}
+
+// Inline SVG: Lot grid (property parcels with varying forecast colors)
+function LotGridSVG() {
+    const lots = [
+        { x: 5, y: 5, w: 22, h: 22, opacity: 0.5 },
+        { x: 30, y: 5, w: 28, h: 22, opacity: 0.7 },
+        { x: 61, y: 5, w: 22, h: 22, opacity: 0.2 },
+        { x: 86, y: 5, w: 28, h: 22, opacity: 0.6 },
+        { x: 5, y: 30, w: 28, h: 25, opacity: 0.3 },
+        { x: 36, y: 30, w: 22, h: 25, opacity: 0.8 },
+        { x: 61, y: 30, w: 28, h: 25, opacity: 0.15 },
+        { x: 92, y: 30, w: 22, h: 25, opacity: 0.45 },
+    ]
+    return (
+        <svg viewBox="0 0 120 60" className="w-full h-16 mt-3" preserveAspectRatio="xMidYMid meet">
+            {lots.map((l, i) => (
+                <rect key={i} x={l.x} y={l.y} width={l.w} height={l.h} rx={2}
+                    className="hover:fill-lime-500 hover:fill-opacity-80 transition-all duration-300 cursor-pointer"
+                    fill="hsl(var(--primary))" fillOpacity={l.opacity}
+                    stroke="hsl(var(--primary))" strokeWidth={0.5} strokeOpacity={0.25} />
+            ))}
+        </svg>
+    )
+}
+
+// Inline SVG: SHAP-style attribution bars (explainability visual)
+function AttributionBarSVG() {
+    return (
+        <svg viewBox="0 0 120 60" className="w-full h-16 mt-3 group" preserveAspectRatio="xMidYMid meet">
+            {/* Baseline */}
+            <line x1="60" y1="4" x2="60" y2="56" stroke="currentColor" strokeOpacity={0.15} strokeWidth={0.5} strokeDasharray="2 2" />
+            {/* Positive drivers (right of baseline) */}
+            <rect x="60" y="6" width="35" height="8" rx="2" className="group-hover:fill-lime-500 transition-colors duration-500" fill="hsl(142 70% 45%)" fillOpacity={0.6} />
+            <text x="58" y="13" textAnchor="end" className="text-[6px] fill-muted-foreground group-hover:fill-foreground transition-colors">Rate cuts</text>
+            <rect x="60" y="18" width="22" height="8" rx="2" className="group-hover:fill-lime-400 transition-colors duration-500 delay-75" fill="hsl(142 70% 45%)" fillOpacity={0.45} />
+            <text x="58" y="25" textAnchor="end" className="text-[6px] fill-muted-foreground group-hover:fill-foreground transition-colors">Demand</text>
+            {/* Negative driver (left of baseline) */}
+            <rect x="38" y="30" width="22" height="8" rx="2" className="group-hover:fill-red-400 transition-colors duration-500 delay-150" fill="hsl(0 70% 55%)" fillOpacity={0.5} />
+            <text x="58" y="37" textAnchor="end" className="text-[6px] fill-muted-foreground group-hover:fill-foreground transition-colors">Supply</text>
+            {/* Net result */}
+            <rect x="60" y="44" width="28" height="8" rx="2" className="group-hover:fill-lime-600 transition-colors duration-500 delay-300 pointer-events-none" fill="hsl(var(--primary))" fillOpacity={0.7} />
+            <text x="58" y="51" textAnchor="end" className="text-[6px] fill-primary font-bold group-hover:fill-lime-600 transition-colors delay-300">Net ↑</text>
+        </svg>
+    )
+}
+
+export default function AboutPage() {
+    return (
+        <div className="overflow-auto h-screen">
+            <div className="min-h-screen bg-background text-foreground font-sans">
+
+                {/* Nav */}
+                <header className="border-b border-border/40 bg-background/80 backdrop-blur-md sticky top-0 z-50">
+                    <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+                        <Link href="/" className="flex items-center gap-2">
+                            <HomecastrLogo size={28} variant="horizontal" />
+                        </Link>
+                        <nav className="hidden md:flex items-center gap-6">
+                            <Link href="/methodology" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Methodology</Link>
+                            <Link href="/coverage/houston" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Coverage</Link>
+                            <Link href="/forecasts" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5"><Map className="w-4 h-4" /> Browse Markets</Link>
+                            <Link href="/faq" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">FAQ</Link>
+                        </nav>
+                        <div className="flex items-center gap-4">
+                            <Link href="/app" className="text-sm font-bold px-5 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-sm">
+                                Open App
+                            </Link>
+                        </div>
+                    </div>
+                </header>
+
+                {/* ============================================================ */}
+                {/* SECTION 1: HOMEOWNERS & BROKERS                              */}
+                {/* ============================================================ */}
+
+                {/* Hero — consumer (2-column: copy left, demo chart right) */}
+                <section className="max-w-6xl mx-auto px-6 py-24 md:py-32">
+                    <div className="grid md:grid-cols-2 gap-12 items-center">
+                        <div>
+                            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-[10px] font-bold uppercase tracking-widest mb-8">
+                                <Sparkles className="w-3 h-3" />
+                                AI-Powered Home Forecasts
+                            </div>
+                            <h1 className="text-5xl md:text-7xl font-bold tracking-tight leading-[1.1] mb-6">
+                                See where your home&apos;s
+                                <span className="text-primary"> value is headed</span>
+                            </h1>
+                            <p className="text-xl text-muted-foreground leading-relaxed mb-10 max-w-2xl">
+                                Traditional estimates tell you what a home is worth today. Homecastr shows you where it&apos;s
+                                going. Down to your specific property, not just a zip code. With conservative,
+                                expected, and upside scenarios so you can plan with confidence.
+                            </p>
+                            <Link
+                                href="/app"
+                                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20"
+                            >
+                                Look up my home
+                                <ArrowRight className="w-4 h-4" />
+                            </Link>
+                        </div>
+                        {/* Mini Interactive App */}
+                        <div className="hidden md:block h-[560px] rounded-2xl overflow-hidden glass-panel border border-border/50 relative shadow-2xl">
+                            <div className="absolute top-4 left-4 z-10 bg-background/90 backdrop-blur-md px-3 py-1.5 rounded-full text-xs font-bold shadow-sm border border-border flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full bg-lime-500 animate-pulse" />
+                                Live Interactive Forecasts
+                            </div>
+                            {/* We load a simplified MapView */}
+                            <iframe
+                                src="/app?yr=2027&embedded=true"
+                                className="w-full h-full border-0 pointer-events-auto"
+                                title="Homecastr Interactive Map Preview"
+                            />
+                        </div>
+                    </div>
+                </section>
+
+                {/* How it works — with inline SVG illustrations */}
+                <section className="bg-muted/10 border-y border-border/40 py-24">
+                    <div className="max-w-6xl mx-auto px-6">
+                        <h2 className="text-3xl font-bold tracking-tight mb-16 text-center">How it works</h2>
+                        <div className="grid md:grid-cols-3 gap-10">
+                            <div className="group space-y-4 p-6 rounded-2xl hover:bg-muted/30 transition-colors cursor-default border border-transparent hover:border-border/50">
+                                <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
+                                    <Layers className="w-6 h-6 text-primary" />
+                                </div>
+                                <h3 className="text-lg font-bold">We simulate thousands of market scenarios</h3>
+                                <p className="text-sm text-muted-foreground leading-relaxed">
+                                    Our model projects possible futures for your neighborhood,
+                                    accounting for interest rates, market trends, and local demand.
+                                </p>
+                                <MonteCarloSVG />
+                            </div>
+                            <div className="group space-y-4 p-6 rounded-2xl hover:bg-muted/30 transition-colors cursor-default border border-transparent hover:border-border/50">
+                                <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
+                                    <BarChart3 className="w-6 h-6 text-primary" />
+                                </div>
+                                <h3 className="text-lg font-bold">You get a range, not a point</h3>
+                                <p className="text-sm text-muted-foreground leading-relaxed">
+                                    Instead of one number, we give you the conservative, most likely,
+                                    and upside estimate, so you can plan with confidence.
+                                </p>
+                                <RangeBarsSVG />
+                            </div>
+                            <div className="group space-y-4 p-6 rounded-2xl hover:bg-muted/30 transition-colors cursor-default border border-transparent hover:border-border/50">
+                                <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
+                                    <TrendingUp className="w-6 h-6 text-primary" />
+                                </div>
+                                <h3 className="text-lg font-bold">Down to your specific property</h3>
+                                <p className="text-sm text-muted-foreground leading-relaxed">
+                                    Most tools only forecast at the zip-code level. We forecast for your
+                                    individual property, because the house next door can have a very different outlook.
+                                </p>
+                                <LotGridSVG />
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                {/* Coverage + consumer use cases */}
+                <section className="max-w-6xl mx-auto px-6 py-24">
+                    <div className="grid md:grid-cols-2 gap-16 items-center">
+                        <div>
+                            <h2 className="text-3xl font-bold tracking-tight mb-6">Nationwide Coverage</h2>
+                            <p className="text-muted-foreground leading-relaxed mb-6">
+                                We&apos;re live across the United States, covering Texas, New York,
+                                Florida, and more &mdash; with new markets added regularly.
+                            </p>
+                            <div className="flex gap-8">
+                                <div>
+                                    <div className="text-3xl font-bold text-primary">1M+</div>
+                                    <div className="text-sm text-muted-foreground">Homes Covered</div>
+                                </div>
+                                <div>
+                                    <div className="text-3xl font-bold text-primary">5yr</div>
+                                    <div className="text-sm text-muted-foreground">Forecast Window</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="p-8 rounded-2xl glass-panel">
+                            <LotGridSVG />
+                            <div className="flex items-center gap-3 mb-6 mt-4">
+                                <Globe className="w-5 h-5 text-primary" />
+                                <span className="font-bold">Who is this for?</span>
+                            </div>
+                            <ul className="space-y-3 text-sm text-muted-foreground">
+                                <li className="flex items-start gap-2"><span className="text-primary mt-0.5">→</span> <strong>Investors</strong> find the neighborhoods that outperform</li>
+                                <li className="flex items-start gap-2"><span className="text-primary mt-0.5">→</span> <strong>Homeowners</strong> see where your biggest asset is headed</li>
+                                <li className="flex items-start gap-2"><span className="text-primary mt-0.5">→</span> <strong>Agents</strong> advise clients with data no one else has</li>
+                            </ul>
+                        </div>
+                    </div>
+                </section>
+
+                {/* Consumer CTA */}
+                <section className="bg-muted/10 border-t border-border/40 py-20">
+                    <div className="max-w-6xl mx-auto px-6 text-center">
+                        <h2 className="text-3xl font-bold tracking-tight mb-4">Ready to see your forecast?</h2>
+                        <p className="text-muted-foreground mb-8 max-w-lg mx-auto">
+                            Look up any home and see where its value is headed.
+                        </p>
+                        <Link
+                            href="/app"
+                            className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20"
+                        >
+                            Open Dashboard
+                            <ArrowRight className="w-4 h-4" />
+                        </Link>
+                    </div>
+                </section>
+
+                {/* ============================================================ */}
+                {/* SECTION 2: INSTITUTIONAL / BUYSIDE / REIT / QUANT / RESEARCH */}
+                {/* ============================================================ */}
+
+                <div id="institutional" className="border-t-4 border-primary/20" />
+
+                <section className="max-w-6xl mx-auto px-6 py-24 md:py-32">
+                    <div className="max-w-3xl">
+                        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-[10px] font-bold uppercase tracking-widest mb-8">
+                            <HomecastrLogo size={12} />
+                            For Real Estate Investors &amp; Operators
+                        </div>
+                        <h2 className="text-4xl md:text-5xl font-bold tracking-tight leading-[1.1] mb-6">
+                            Portfolio-grade forecasts,
+                            <span className="text-primary"> via API &amp; PDF</span>
+                        </h2>
+                        <p className="text-lg text-muted-foreground leading-relaxed max-w-2xl">
+                            Homecastr&apos;s foundation model generates probabilistic price bands for every
+                            residential property in the market. Access lot-level and neighborhood-level
+                            forecasts via REST API or downloadable PDF reports, with accuracy as strong as 14% annual compounding error (MdAPE).
+                        </p>
+                    </div>
+                </section>
+
+                <section className="bg-muted/10 border-y border-border/40 py-24">
+                    <div className="max-w-6xl mx-auto px-6">
+                        <div className="grid md:grid-cols-3 gap-10">
+                            <div className="space-y-4">
+                                <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center">
+                                    <Terminal className="w-6 h-6 text-primary" />
+                                </div>
+                                <h3 className="text-lg font-bold">REST API</h3>
+                                <p className="text-sm text-muted-foreground leading-relaxed">
+                                    Programmatic access to lot-level and hex-level forecasts.
+                                    JSON responses, API key auth, sub-second latency.
+                                </p>
+                                {/* Sample API response */}
+                                <pre className="text-[10px] font-mono bg-black/5 dark:bg-white/5 rounded-lg p-3 overflow-x-auto border border-border/30 leading-relaxed">
+                                    {`{
+  "h3_id": "862a100c7ffffff",
+  "horizon": 3,
+  "p10": 268000,
+  "p50": 345000,
+  "p90": 425000
+}`}
+                                </pre>
+                            </div>
+                            <div className="space-y-4">
+                                <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center">
+                                    <BarChart3 className="w-6 h-6 text-primary" />
+                                </div>
+                                <h3 className="text-lg font-bold">Percentile Bands</h3>
+                                <p className="text-sm text-muted-foreground leading-relaxed">
+                                    P10/P50/P90 distributions across 1 to 5 year horizons.
+                                    Calibrated from scenario ensembles, not point estimates.
+                                </p>
+                                <RangeBarsSVG />
+                            </div>
+                            <div className="space-y-4">
+                                <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center">
+                                    <Sparkles className="w-6 h-6 text-primary" />
+                                </div>
+                                <h3 className="text-lg font-bold">Explainable Forecasts</h3>
+                                <p className="text-sm text-muted-foreground leading-relaxed">
+                                    Every forecast includes interpretable attributions: see
+                                    which drivers move prices, not just the numbers.
+                                </p>
+                                <AttributionBarSVG />
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                {/* Institutional use cases */}
+                <section className="max-w-6xl mx-auto px-6 py-24">
+                    <div className="grid md:grid-cols-2 gap-16 items-center">
+                        <div className="p-8 rounded-2xl glass-panel">
+                            <div className="flex items-center gap-3 mb-6">
+                                <HomecastrLogo size={20} />
+                                <span className="font-bold">Built for</span>
+                            </div>
+                            <ul className="space-y-3 text-sm text-muted-foreground">
+                                <li className="flex items-start gap-2"><span className="text-primary mt-0.5">→</span> <strong>SFR acquisitions teams</strong> scoring buy/hold/sell across 50 to 5,000+ doors</li>
+                                <li className="flex items-start gap-2"><span className="text-primary mt-0.5">→</span> <strong>Investment committees</strong> underwriting new deals with forward-looking data</li>
+                                <li className="flex items-start gap-2"><span className="text-primary mt-0.5">→</span> <strong>Mortgage risk desks</strong> stress-testing collateral under rate scenarios</li>
+                                <li className="flex items-start gap-2"><span className="text-primary mt-0.5">→</span> <strong>RE research analysts</strong> building market outlook reports and investment memos</li>
+                            </ul>
+                        </div>
+                        <div>
+                            <h2 className="text-3xl font-bold tracking-tight mb-6">Accuracy you can audit</h2>
+                            <p className="text-muted-foreground leading-relaxed mb-4">
+                                Forecast accuracy is measured using industry-standard MdAPE
+                                (Median Absolute Percentage Error), with results as strong as 14% annual
+                                compounding error. Metrics are available by geography and forecast horizon.
+                            </p>
+                            <p className="text-muted-foreground leading-relaxed">
+                                All forecasts include interpretable percentile bands and
+                                regime-aware attributions. No black-box point estimates.
+                            </p>
+                        </div>
+                    </div>
+                </section>
+
+                {/* Institutional CTA */}
+                <section className="bg-muted/10 border-y border-border/40 py-20">
+                    <div className="max-w-6xl mx-auto px-6 text-center">
+                        <h2 className="text-3xl font-bold tracking-tight mb-4">Get API access</h2>
+                        <p className="text-muted-foreground mb-8 max-w-lg mx-auto">
+                            Generate a free API key instantly. No sales call required.
+                        </p>
+                        <div className="flex gap-4 justify-center">
+                            <Link
+                                href="/api-docs#get-key"
+                                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20"
+                            >
+                                Get Free API Key
+                                <ArrowRight className="w-4 h-4" />
+                            </Link>
+                            <Link
+                                href="/api-docs"
+                                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-muted/30 border border-border/50 font-medium hover:bg-muted/50 transition-colors"
+                            >
+                                API Documentation
+                            </Link>
+                        </div>
+                    </div>
+                </section>
+
+                {/* Team */}
+                <section className="max-w-6xl mx-auto px-6 py-24">
+                    <div className="max-w-2xl mx-auto text-center">
+                        <h2 className="text-3xl font-bold tracking-tight mb-6">Built by</h2>
+                        <div className="inline-flex flex-col items-center gap-4 mb-8">
+                            <img
+                                src="/dhl.jpg"
+                                alt="Daniel Hardesty Lewis"
+                                className="w-32 h-32 rounded-full object-cover border-4 border-primary/10 shadow-xl bg-primary/10"
+                            />
+                            <div className="space-y-1">
+                                <div className="text-2xl font-bold">Daniel Hardesty Lewis</div>
+                                <div className="text-base text-primary font-medium">Founder & CEO</div>
+                                <div className="text-xs text-muted-foreground uppercase tracking-widest mt-1">
+                                    TOP500 Supercomputing • Bagnold Medal Contributor • NSF 10 Big Ideas
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="grid md:grid-cols-2 gap-8 text-left max-w-4xl mx-auto">
+                            <div className="space-y-4">
+                                <h3 className="font-bold text-lg border-b border-border/40 pb-2">Experience</h3>
+                                <ul className="space-y-6 text-sm text-foreground/80 leading-relaxed">
+                                    <li className="flex gap-4 items-start">
+                                        <div className="w-12 h-12 rounded-lg bg-background border border-border/50 flex items-center justify-center shrink-0 overflow-hidden">
+                                            <img src="/logo_summit.png" alt="Summit Geospatial" className="w-10 h-10 object-contain p-1" />
+                                        </div>
+                                        <div>
+                                            <div className="font-bold text-base">Founder, Summit Geospatial</div>
+                                            <div className="text-muted-foreground mb-1 text-xs uppercase tracking-wider">2023 – Present</div>
+                                            <div className="text-muted-foreground">Building the highest quality seamless elevation data for Texas.</div>
+                                        </div>
+                                    </li>
+                                    <li className="flex gap-4 items-start">
+                                        <div className="w-12 h-12 rounded-lg bg-background border border-border/50 flex items-center justify-center shrink-0 overflow-hidden">
+                                            <img src="/logo_tacc.png" alt="TACC" className="w-10 h-10 object-contain p-1" />
+                                        </div>
+                                        <div>
+                                            <div className="font-bold text-base">Senior Data Scientist, TACC</div>
+                                            <div className="text-muted-foreground mb-1 text-xs uppercase tracking-wider">2018 – 2023 · Austin, TX</div>
+                                            <div className="text-muted-foreground">Led $40M disaster resiliency initiative (TDIS). Scaled climate models on world's most powerful supercomputers. Contributed to Paola Passalacqua's 2022 Bagnold Medal research.</div>
+                                        </div>
+                                    </li>
+                                    <li className="flex gap-4 items-start">
+                                        <div className="w-12 h-12 rounded-lg bg-[#BF5700]/10 border border-[#BF5700]/20 flex items-center justify-center shrink-0 overflow-hidden">
+                                            <img src="/logo_utaustin.png" alt="UT Austin" className="w-8 h-8 object-contain" />
+                                        </div>
+                                        <div>
+                                            <div className="font-bold text-base">Co-Instructor, UT Austin</div>
+                                            <div className="text-muted-foreground mb-1 text-xs uppercase tracking-wider">2018 – 2020</div>
+                                            <div className="text-muted-foreground">Taught Machine Learning for Geosciences and Scientific Computation.</div>
+                                        </div>
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <div className="space-y-4">
+                                <h3 className="font-bold text-lg border-b border-border/40 pb-2">Education</h3>
+                                <ul className="space-y-6 text-sm text-foreground/80 leading-relaxed">
+                                    <li className="flex gap-4 items-start">
+                                        <div className="w-12 h-12 rounded-lg bg-[#2968C8]/5 border border-[#2968C8]/10 flex items-center justify-center shrink-0 overflow-hidden">
+                                            <img src="/logos/logo_columbia.png" alt="Columbia University" className="w-8 h-8 object-contain" />
+                                        </div>
+                                        <div>
+                                            <div className="font-bold text-base">Columbia University</div>
+                                            <div className="text-muted-foreground">M.S. Urban Planning (Current)</div>
+                                            <div className="text-xs text-muted-foreground/80 mt-1 uppercase tracking-wider">Cross-registered in Engineering (Machine Learning)</div>
+                                        </div>
+                                    </li>
+                                    <li className="flex gap-4 items-start">
+                                        <div className="w-12 h-12 rounded-lg bg-[#BF5700]/10 border border-[#BF5700]/20 flex items-center justify-center shrink-0 overflow-hidden">
+                                            <img src="/logo_utaustin.png" alt="UT Austin" className="w-8 h-8 object-contain" />
+                                        </div>
+                                        <div>
+                                            <div className="font-bold text-base">UT Austin</div>
+                                            <div className="text-muted-foreground">B.S. Mathematics</div>
+                                        </div>
+                                    </li>
+                                </ul>
+
+                                <h3 className="font-bold text-lg border-b border-border/40 pb-2 pt-4">Research & Awards</h3>
+                                <ul className="space-y-2 text-sm text-foreground/80 leading-relaxed">
+                                    <li>• Published in <em>ACM Transactions on Interactive Intelligent Systems</em></li>
+                                    <li>• DARPA World Modelers: Disaster resiliency in East Africa</li>
+                                    <li>• Fellow, Texas Institute for Discovery Education in Science</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div className="mt-12 flex justify-center gap-4">
+                            <a href="https://linkedin.com/in/dhardestylewis" target="_blank" rel="noopener noreferrer" className="p-3 rounded-full bg-[#0077b5]/10 text-[#0077b5] hover:bg-[#0077b5]/20 hover:scale-110 transition-all shadow-sm" aria-label="LinkedIn">
+                                <Linkedin className="w-5 h-5" />
+                            </a>
+                            <a href="https://scholar.google.com/citations?user=Vy3H9FAAAAAJ" target="_blank" rel="noopener noreferrer" className="p-3 rounded-full bg-muted/30 text-foreground/70 hover:bg-muted/50 hover:text-foreground hover:scale-110 transition-all border border-border/40 shadow-sm flex items-center justify-center" aria-label="Google Scholar">
+                                {/* Fallback Google Scholar icon representation */}
+                                <GraduationCap className="w-5 h-5" />
+                            </a>
+                            <a href="https://github.com/dhardestylewis" target="_blank" rel="noopener noreferrer" className="p-3 rounded-full bg-muted/30 text-foreground/70 hover:bg-muted/50 hover:text-foreground hover:scale-110 transition-all border border-border/40 shadow-sm" aria-label="GitHub">
+                                <Github className="w-5 h-5" />
+                            </a>
+                        </div>
+                    </div>
+                </section>
+
+                {/* SEO Hub CTA */}
+                <section className="bg-primary/5 border-t border-border/40 py-16">
+                    <div className="max-w-6xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-8">
+                        <div>
+                            <h2 className="text-2xl font-bold tracking-tight mb-2">Explore local market data</h2>
+                            <p className="text-muted-foreground text-sm max-w-lg">
+                                Access our complete database of probabilistic home price forecasts across the United States. Available by state, metro area, county, and zip code.
+                            </p>
+                        </div>
+                        <Link
+                            href="/forecasts"
+                            className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-background border border-border/50 text-foreground font-medium hover:bg-muted/30 transition-colors shadow-sm whitespace-nowrap"
+                        >
+                            <Map className="w-4 h-4 text-primary" />
+                            Browse Forecast Hubs
+                        </Link>
+                    </div>
+                </section>
+
+                {/* Footer */}
+                <footer className="py-12">
+                    <div className="max-w-6xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-6">
+                        <div className="text-sm text-muted-foreground">© 2026 Homecastr. All rights reserved.</div>
+                        <div className="flex gap-8 text-sm font-medium text-muted-foreground">
+                            <Link href="/privacy" className="hover:text-foreground">Privacy</Link>
+                            <Link href="/terms" className="hover:text-foreground">Terms</Link>
+                            <Link href="/support" className="hover:text-foreground">Support</Link>
+                            <Link href="/api-docs" className="hover:text-foreground">API</Link>
+                        </div>
+                    </div>
+                </footer>
+            </div >
+        </div >
+    )
 }

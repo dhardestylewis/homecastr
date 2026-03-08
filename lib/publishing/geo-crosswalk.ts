@@ -1,4 +1,5 @@
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
+import { withRedisCache } from "@/lib/redis"
 import { COUNTY_NAMES } from "./county-fips"
 import zipCityRaw from "./zip-city-names.json"
 const ZIP_CITY_NATIONAL: Record<string, string> = zipCityRaw as any
@@ -904,58 +905,60 @@ export async function getTractsForCity(
     citySlug: string,
     schema = "forecast_queue"
 ): Promise<GeoInfo[]> {
-    const stateEntry = Object.entries(STATE_FIPS).find(
-        ([, v]) => v.abbr.toLowerCase() === stateSlug.toLowerCase()
-    )
-    if (!stateEntry) return []
-    const stateFips = stateEntry[0]
+    return withRedisCache(`tracts:${stateSlug}:${citySlug}:${schema}`, async () => {
+        const stateEntry = Object.entries(STATE_FIPS).find(
+            ([, v]) => v.abbr.toLowerCase() === stateSlug.toLowerCase()
+        )
+        if (!stateEntry) return []
+        const stateFips = stateEntry[0]
 
-    const countyEntry = Object.entries(COUNTY_CITY).find(
-        ([k, v]) => k.startsWith(stateFips) && slugify(v) === citySlug
-    ) || Object.entries(COUNTY_NAMES).find(
-        ([k, v]) => k.startsWith(stateFips) && slugify(v) === citySlug
-    )
+        const countyEntry = Object.entries(COUNTY_CITY).find(
+            ([k, v]) => k.startsWith(stateFips) && slugify(v) === citySlug
+        ) || Object.entries(COUNTY_NAMES).find(
+            ([k, v]) => k.startsWith(stateFips) && slugify(v) === citySlug
+        )
 
-    // Fallback for "county-XXXXX" slugs (non-standard FIPS that aren't in any county mapping)
-    let countyFipsPrefix: string
-    if (countyEntry) {
-        countyFipsPrefix = countyEntry[0]
-    } else {
-        const match = citySlug.match(/^county-(\d{5})$/)
-        if (match && match[1].startsWith(stateFips)) {
-            countyFipsPrefix = match[1]
+        // Fallback for "county-XXXXX" slugs (non-standard FIPS that aren't in any county mapping)
+        let countyFipsPrefix: string
+        if (countyEntry) {
+            countyFipsPrefix = countyEntry[0]
         } else {
-            return []
+            const match = citySlug.match(/^county-(\d{5})$/)
+            if (match && match[1].startsWith(stateFips)) {
+                countyFipsPrefix = match[1]
+            } else {
+                return []
+            }
         }
-    }
 
-    // Paginated fetch to bypass Supabase default 1000-row limit
-    const supabase = getSupabaseAdmin()
-    const PAGE = 1000
-    const data: any[] = []
-    let offset = 0
-    while (true) {
-        const { data: page } = await supabase
-            .schema(schema as any)
-            .from("metrics_tract_forecast")
-            .select("tract_geoid20")
-            .like("tract_geoid20", `${countyFipsPrefix}%`)
-            .eq("horizon_m", 12)
-            .eq("series_kind", "forecast")
-            .not("p50", "is", null)
-            .range(offset, offset + PAGE - 1)
+        // Paginated fetch to bypass Supabase default 1000-row limit
+        const supabase = getSupabaseAdmin()
+        const PAGE = 1000
+        const data: any[] = []
+        let offset = 0
+        while (true) {
+            const { data: page } = await supabase
+                .schema(schema as any)
+                .from("metrics_tract_forecast")
+                .select("tract_geoid20")
+                .like("tract_geoid20", `${countyFipsPrefix}%`)
+                .eq("horizon_m", 12)
+                .eq("series_kind", "forecast")
+                .not("p50", "is", null)
+                .range(offset, offset + PAGE - 1)
 
-        if (!page || page.length === 0) break
-        data.push(...page)
-        if (page.length < PAGE) break
-        offset += PAGE
-    }
+            if (!page || page.length === 0) break
+            data.push(...page)
+            if (page.length < PAGE) break
+            offset += PAGE
+        }
 
-    if (data.length === 0) return []
+        if (data.length === 0) return []
 
-    // Deduplicate
-    const uniqueTracts = [...new Set(data.map((d: any) => d.tract_geoid20))]
-    return uniqueTracts.map(t => parseTractGeoid(t))
+        // Deduplicate
+        const uniqueTracts = [...new Set(data.map((d: any) => d.tract_geoid20))]
+        return uniqueTracts.map(t => parseTractGeoid(t))
+    })
 }
 
 /**
@@ -965,119 +968,122 @@ export async function getCitiesForState(
     stateSlug: string,
     schema = "forecast_queue"
 ): Promise<{ city: string; citySlug: string; countyFips: string; tractCount: number }[]> {
-    const stateEntry = Object.entries(STATE_FIPS).find(
-        ([, v]) => v.abbr.toLowerCase() === stateSlug.toLowerCase()
-    )
-    if (!stateEntry) return []
-    const stateFips = stateEntry[0]
+    return withRedisCache(`cities:${stateSlug}:${schema}`, async () => {
+        const stateEntry = Object.entries(STATE_FIPS).find(
+            ([, v]) => v.abbr.toLowerCase() === stateSlug.toLowerCase()
+        )
+        if (!stateEntry) return []
+        const stateFips = stateEntry[0]
 
-    // Paginated fetch to bypass Supabase default 1000-row limit
-    const supabase = getSupabaseAdmin()
-    const PAGE = 1000
-    const data: any[] = []
-    let offset = 0
-    while (true) {
-        const { data: page } = await supabase
-            .schema(schema as any)
-            .from("metrics_tract_forecast")
-            .select("tract_geoid20")
-            .like("tract_geoid20", `${stateFips}%`)
-            .eq("horizon_m", 12)
-            .eq("series_kind", "forecast")
-            .not("p50", "is", null)
-            .range(offset, offset + PAGE - 1)
+        // Paginated fetch to bypass Supabase default 1000-row limit
+        const supabase = getSupabaseAdmin()
+        const PAGE = 1000
+        const data: any[] = []
+        let offset = 0
+        while (true) {
+            const { data: page } = await supabase
+                .schema(schema as any)
+                .from("metrics_tract_forecast")
+                .select("tract_geoid20")
+                .like("tract_geoid20", `${stateFips}%`)
+                .eq("horizon_m", 12)
+                .eq("series_kind", "forecast")
+                .not("p50", "is", null)
+                .range(offset, offset + PAGE - 1)
 
-        if (!page || page.length === 0) break
-        data.push(...page)
-        if (page.length < PAGE) break
-        offset += PAGE
-    }
-
-    if (data.length === 0) return []
-
-    // Group by county FIPS (first 5 digits), tracking sample tract IDs per county
-    const countyMap = new Map<string, { count: number; sampleTracts: string[] }>()
-    for (const row of data as any[]) {
-        const county = row.tract_geoid20.substring(0, 5)
-        const entry = countyMap.get(county) || { count: 0, sampleTracts: [] }
-        entry.count++
-        if (entry.sampleTracts.length < 5) entry.sampleTracts.push(row.tract_geoid20)
-        countyMap.set(county, entry)
-    }
-
-    const cities: { city: string; citySlug: string; countyFips: string; tractCount: number }[] = []
-
-    // Collect unresolved counties for batch DB lookup
-    const unresolved = new Map<string, string[]>() // countyFips -> sampleTracts
-    for (const [countyFips, { count, sampleTracts }] of countyMap) {
-        let city = COUNTY_CITY[countyFips] || COUNTY_NAMES[countyFips]
-
-        // Try ZCTA crosswalk first
-        if (!city) {
-            for (const tractId of sampleTracts) {
-                const zcta = TRACT_ZCTA[tractId]
-                if (zcta) {
-                    const placeName = ZIP_NAMES[zcta]
-                    if (placeName) { city = placeName; break }
-                }
-            }
+            if (!page || page.length === 0) break
+            data.push(...page)
+            if (page.length < PAGE) break
+            offset += PAGE
         }
 
-        if (city) {
-            cities.push({ city, citySlug: slugify(city), countyFips, tractCount: count })
-        } else {
-            unresolved.set(countyFips, sampleTracts)
+        if (data.length === 0) return []
+
+        // Group by county FIPS (first 5 digits), tracking sample tract IDs per county
+        const countyMap = new Map<string, { count: number; sampleTracts: string[] }>()
+        for (const row of data as any[]) {
+            const county = row.tract_geoid20.substring(0, 5)
+            const entry = countyMap.get(county) || { count: 0, sampleTracts: [] }
+            entry.count++
+            if (entry.sampleTracts.length < 5) entry.sampleTracts.push(row.tract_geoid20)
+            countyMap.set(county, entry)
         }
-    }
 
-    // Batch DB fallback for still-unresolved counties
-    if (unresolved.size > 0) {
-        try {
-            const allSampleTracts = [...unresolved.values()].flat()
-            const CHUNK = 50
-            const dbResults = new Map<string, string>() // tractId -> name
-            for (let i = 0; i < allSampleTracts.length; i += CHUNK) {
-                const chunk = allSampleTracts.slice(i, i + CHUNK)
-                const { data: ladderRows } = await supabase
-                    .from("parcel_ladder_v1")
-                    .select("tract_geoid20, neighborhood_name, zcta5, city, county_name")
-                    .in("tract_geoid20", chunk)
-                    .limit(500)
+        const cities: { city: string; citySlug: string; countyFips: string; tractCount: number }[] = []
 
-                if (ladderRows) {
-                    for (const row of ladderRows as any[]) {
-                        if (!dbResults.has(row.tract_geoid20)) {
-                            const name = row.county_name
-                                || row.city
-                                || row.neighborhood_name
-                                || (row.zcta5 && ZIP_NAMES[row.zcta5])
-                                || (row.zcta5 ? `ZIP ${row.zcta5}` : null)
-                            if (name) dbResults.set(row.tract_geoid20, name)
-                        }
+        // Collect unresolved counties for batch DB lookup
+        const unresolved = new Map<string, string[]>() // countyFips -> sampleTracts
+        for (const [countyFips, { count, sampleTracts }] of countyMap) {
+            let city = COUNTY_CITY[countyFips] || COUNTY_NAMES[countyFips]
+
+            // Try ZCTA crosswalk first
+            if (!city) {
+                for (const tractId of sampleTracts) {
+                    const zcta = TRACT_ZCTA[tractId]
+                    if (zcta) {
+                        const placeName = ZIP_NAMES[zcta]
+                        if (placeName) { city = placeName; break }
                     }
                 }
             }
 
-            for (const [countyFips, sampleTracts] of unresolved) {
-                let city: string | undefined
-                for (const tractId of sampleTracts) {
-                    const name = dbResults.get(tractId)
-                    if (name) { city = name; break }
-                }
-                const { count } = countyMap.get(countyFips)!
-                if (!city) city = `County ${countyFips}`
+            if (city) {
                 cities.push({ city, citySlug: slugify(city), countyFips, tractCount: count })
-            }
-        } catch {
-            // DB unavailable — use raw FIPS as fallback
-            for (const [countyFips] of unresolved) {
-                const { count } = countyMap.get(countyFips)!
-                cities.push({ city: `County ${countyFips}`, citySlug: `county-${countyFips}`, countyFips, tractCount: count })
+            } else {
+                unresolved.set(countyFips, sampleTracts)
             }
         }
-    }
 
-    return cities.sort((a, b) => b.tractCount - a.tractCount)
+        // Batch DB fallback for still-unresolved counties
+        if (unresolved.size > 0) {
+            try {
+                const allSampleTracts = [...unresolved.values()].flat()
+                const CHUNK = 50
+                const dbResults = new Map<string, string>() // tractId -> name
+                for (let i = 0; i < allSampleTracts.length; i += CHUNK) {
+                    const chunk = allSampleTracts.slice(i, i + CHUNK)
+                    const { data: ladderRows } = await supabase
+                        .from("parcel_ladder_v1")
+                        .select("tract_geoid20, neighborhood_name, zcta5, city, county_name")
+                        .in("tract_geoid20", chunk)
+                        .limit(500)
+
+                    if (ladderRows) {
+                        for (const row of ladderRows as any[]) {
+                            if (!dbResults.has(row.tract_geoid20)) {
+                                const name = row.county_name
+                                    || row.city
+                                    || row.neighborhood_name
+                                    || (row.zcta5 && ZIP_NAMES[row.zcta5])
+                                    || (row.zcta5 ? `ZIP ${row.zcta5}` : null)
+                                if (name) dbResults.set(row.tract_geoid20, name)
+                            }
+                        }
+                    }
+                }
+
+                for (const [countyFips, sampleTracts] of unresolved) {
+                    let city: string | undefined
+                    for (const tractId of sampleTracts) {
+                        const name = dbResults.get(tractId)
+                        if (name) { city = name; break }
+                    }
+
+                    // If we STILL don't have a name after DB lookup, it's a synthetic FIPS (like 48900)
+                    // Filter it out entirely rather than showing 'County 48900'
+                    if (city) {
+                        const { count } = countyMap.get(countyFips)!
+                        cities.push({ city, citySlug: slugify(city), countyFips, tractCount: count })
+                    }
+                }
+            } catch (err) {
+                console.error("Error querying parcel_ladder_v1 for county names:", err)
+                // If DB completely fails, we just don't load the unresolved counties
+            }
+        }
+
+        return cities.sort((a, b) => b.tractCount - a.tractCount)
+    })
 }
 
 /**
@@ -1087,32 +1093,34 @@ export async function getCitiesForState(
 export async function getStatesWithData(
     schema = "forecast_queue"
 ): Promise<{ stateName: string; stateAbbr: string; stateSlug: string }[]> {
-    const supabase = getSupabaseAdmin()
+    return withRedisCache(`states:${schema}`, async () => {
+        const supabase = getSupabaseAdmin()
 
-    // Query each known state prefix to check for data (avoids huge limit)
-    const states: { stateName: string; stateAbbr: string; stateSlug: string }[] = []
+        // Query each known state prefix to check for data (avoids huge limit)
+        const states: { stateName: string; stateAbbr: string; stateSlug: string }[] = []
 
-    for (const [fips, info] of Object.entries(STATE_FIPS)) {
-        const { count } = await supabase
-            .schema(schema as any)
-            .from("metrics_tract_forecast")
-            .select("tract_geoid20", { count: "exact", head: true })
-            .like("tract_geoid20", `${fips}%`)
-            .eq("horizon_m", 12)
-            .eq("series_kind", "forecast")
-            .not("p50", "is", null)
-            .limit(1)
+        for (const [fips, info] of Object.entries(STATE_FIPS)) {
+            const { count } = await supabase
+                .schema(schema as any)
+                .from("metrics_tract_forecast")
+                .select("tract_geoid20", { count: "exact", head: true })
+                .like("tract_geoid20", `${fips}%`)
+                .eq("horizon_m", 12)
+                .eq("series_kind", "forecast")
+                .not("p50", "is", null)
+                .limit(1)
 
-        if (count && count > 0) {
-            states.push({
-                stateName: info.name,
-                stateAbbr: info.abbr,
-                stateSlug: info.abbr.toLowerCase(),
-            })
+            if (count && count > 0) {
+                states.push({
+                    stateName: info.name,
+                    stateAbbr: info.abbr,
+                    stateSlug: info.abbr.toLowerCase(),
+                })
+            }
         }
-    }
 
-    return states.sort((a, b) => a.stateName.localeCompare(b.stateName))
+        return states.sort((a, b) => a.stateName.localeCompare(b.stateName))
+    })
 }
 
 // ---------------------------------------------------------------------------

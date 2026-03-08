@@ -65,6 +65,37 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <head>
         <link href="https://assets.calendly.com/assets/external/widget.css" rel="stylesheet" />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "WebSite",
+              name: "Homecastr",
+              url: APP_URL,
+              potentialAction: {
+                "@type": "SearchAction",
+                target: `${APP_URL}/app?q={search_term_string}`,
+                "query-input": "required name=search_term_string"
+              }
+            })
+          }}
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "Organization",
+              name: "Homecastr",
+              url: APP_URL,
+              logo: `${APP_URL}/homecastr-icon.png`,
+              sameAs: [
+                "https://linkedin.com/company/homecastr"
+              ]
+            })
+          }}
+        />
       </head>
       <body className={`font-sans antialiased overflow-hidden`} suppressHydrationWarning>
         {children}
