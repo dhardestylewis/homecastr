@@ -1,2 +1,0 @@
-﻿  32147892  2026-02-27T04:33:12Z  gs://properlytic-raw-data/panel/jurisdiction=nyc_pluto/part.parquet
-TOTAL: 1 objects, 32147892 bytes (30.66 MiB)

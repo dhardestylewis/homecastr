@@ -1,7 +1,0 @@
-﻿gs://properlytic-raw-data/nyc/pluto/:
-gs://properlytic-raw-data/nyc/pluto/nyc_pluto_20v8_arc_csv.zip
-gs://properlytic-raw-data/nyc/pluto/nyc_pluto_21v3_arc_csv.zip
-gs://properlytic-raw-data/nyc/pluto/nyc_pluto_22v3_arc_csv.zip
-gs://properlytic-raw-data/nyc/pluto/nyc_pluto_23v3_arc_csv.zip
-gs://properlytic-raw-data/nyc/pluto/nyc_pluto_24v4_arc_csv.zip
-gs://properlytic-raw-data/nyc/pluto/nyc_pluto_25v3.1_arc_csv.zip

@@ -62,6 +62,41 @@ export async function GET(request: Request) {
             .eq("origin_year", originYear)
             .order("horizon_m", { ascending: true })
 
+        // For state level: if the primary query fails or returns empty, try alternate column names
+        // The metrics_state_forecast table has had column name changes (origin_year↔forecast_year, horizon_m↔horizon_months)
+        if (level === "state" && (error || !data || data.length === 0)) {
+            console.log(`[FORECAST-DETAIL] State primary query ${error ? 'errored' : 'empty'} for id=${id}, originYear=${originYear}. Trying alternate columns...`)
+            const altResult = await supabase
+                .schema(schemaName as any)
+                .from(meta.table)
+                .select("*")
+                .eq(meta.key, id)
+                .limit(5)
+            if (!altResult.error && altResult.data && altResult.data.length > 0) {
+                const sample = altResult.data[0]
+                const cols = Object.keys(sample)
+                console.log(`[FORECAST-DETAIL] State table columns: ${cols.join(', ')}. Sample row origin check: origin_year=${sample.origin_year}, forecast_year=${(sample as any).forecast_year}`)
+                // Try with forecast_year column if origin_year doesn't exist
+                if (cols.includes('forecast_year') && !cols.includes('origin_year')) {
+                    const altQuery = await supabase
+                        .schema(schemaName as any)
+                        .from(meta.table)
+                        .select("horizon_m, p10, p25, p50, p75, p90, forecast_year")
+                        .eq(meta.key, id)
+                        .eq("forecast_year", originYear)
+                        .order("horizon_m", { ascending: true })
+                    if (!altQuery.error && altQuery.data && altQuery.data.length > 0) {
+                        // Map forecast_year → origin_year for downstream compatibility
+                        data = altQuery.data.map((r: any) => ({ ...r, origin_year: r.forecast_year }))
+                        error = null
+                        console.log(`[FORECAST-DETAIL] State fallback with forecast_year succeeded: ${data!.length} rows`)
+                    }
+                }
+            } else {
+                console.log(`[FORECAST-DETAIL] State table sample query also ${altResult.error ? 'errored: ' + altResult.error.message : 'empty'}`)
+            }
+        }
+
         // Fallback to alternate origin year if no data found
         if (!error && (!data || data.length === 0)) {
             const fb = await supabase
@@ -73,6 +108,20 @@ export async function GET(request: Request) {
                 .order("horizon_m", { ascending: true })
             if (!fb.error && fb.data && fb.data.length > 0) {
                 data = fb.data
+            }
+            // State fallback: also try forecast_year for the fallback year
+            if (level === "state" && (!data || data.length === 0)) {
+                const fbAlt = await supabase
+                    .schema(schemaName as any)
+                    .from(meta.table)
+                    .select("horizon_m, p10, p25, p50, p75, p90, forecast_year")
+                    .eq(meta.key, id)
+                    .eq("forecast_year", fallbackYear)
+                    .order("horizon_m", { ascending: true })
+                if (!fbAlt.error && fbAlt.data && fbAlt.data.length > 0) {
+                    data = fbAlt.data.map((r: any) => ({ ...r, origin_year: r.forecast_year }))
+                    error = null
+                }
             }
         }
 

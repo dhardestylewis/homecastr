@@ -1,2 +1,0 @@
-﻿ 304686523  2026-02-27T04:32:55Z  gs://properlytic-raw-data/nyc_pluto/raw_data.csv
-TOTAL: 1 objects, 304686523 bytes (290.57 MiB)

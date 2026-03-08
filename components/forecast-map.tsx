@@ -27,6 +27,23 @@ const GEO_LEVELS = [
     { name: "parcel", minzoom: 17, maxzoom: 22, label: "Parcel" },
 ] as const
 
+// US State FIPS → name lookup for state-level geocoding
+const STATE_FIPS_NAMES: Record<string, string> = {
+    "01": "Alabama", "02": "Alaska", "04": "Arizona", "05": "Arkansas",
+    "06": "California", "08": "Colorado", "09": "Connecticut", "10": "Delaware",
+    "11": "District of Columbia", "12": "Florida", "13": "Georgia", "15": "Hawaii",
+    "16": "Idaho", "17": "Illinois", "18": "Indiana", "19": "Iowa",
+    "20": "Kansas", "21": "Kentucky", "22": "Louisiana", "23": "Maine",
+    "24": "Maryland", "25": "Massachusetts", "26": "Michigan", "27": "Minnesota",
+    "28": "Mississippi", "29": "Missouri", "30": "Montana", "31": "Nebraska",
+    "32": "Nevada", "33": "New Hampshire", "34": "New Jersey", "35": "New Mexico",
+    "36": "New York", "37": "North Carolina", "38": "North Dakota", "39": "Ohio",
+    "40": "Oklahoma", "41": "Oregon", "42": "Pennsylvania", "44": "Rhode Island",
+    "45": "South Carolina", "46": "South Dakota", "47": "Tennessee", "48": "Texas",
+    "49": "Utah", "50": "Vermont", "51": "Virginia", "53": "Washington",
+    "54": "West Virginia", "55": "Wisconsin", "56": "Wyoming", "72": "Puerto Rico",
+}
+
 function getSmartTooltipPos(x: number, y: number, windowWidth: number, windowHeight: number) {
     if (typeof window === "undefined") return { x, y }
 
@@ -286,6 +303,15 @@ export function ForecastMap({
         setSelectedCoords([center.lat, center.lng])
     }, [isLoaded, mapState.selectedId])
 
+    // Re-fetch forecast detail when year changes (so fan chart P-values update)
+    useEffect(() => {
+        const selId = selectedIdRef.current
+        const srcLayer = selectedSourceLayerRef.current
+        if (selId && srcLayer) {
+            fetchForecastDetail(selId, srcLayer)
+        }
+    }, [year])
+
     // Mobile detection
     const [isMobile, setIsMobile] = useState(false)
     useEffect(() => {
@@ -339,6 +365,14 @@ export function ForecastMap({
         const map = mapRef.current
         const zoom = map?.getZoom() || 10
         const geoLevel = getSourceLayer(zoom)
+
+        // At State scale, look up name from FIPS code
+        if (geoLevel === "state") {
+            const fips = selectedId?.padStart(2, '0') || ''
+            const name = STATE_FIPS_NAMES[fips]
+            setGeocodedName(name || `State ${fips}`)
+            return
+        }
 
         // At ZIP Code scale, just show the ZIP code from the feature ID
         if (geoLevel === "zcta") {
@@ -400,6 +434,13 @@ export function ForecastMap({
         const map = mapRef.current
         const zoom = map?.getZoom() || 10
         const geoLevel = getSourceLayer(zoom)
+
+        if (geoLevel === "state") {
+            const fips = compId?.padStart(2, '0') || ''
+            const name = STATE_FIPS_NAMES[fips]
+            setComparisonGeocodedName(name || `State ${fips}`)
+            return
+        }
 
         if (geoLevel === "zcta") {
             const zip = compId?.length === 5 ? compId : compId?.slice(-5)
@@ -556,13 +597,17 @@ export function ForecastMap({
     // Dynamic origin_year based on Viewport Spatial checks
     // HCAD (Harris County) boundary: ~29.4 to 30.2 Lat, -95.9 to -94.9 Lng
     // HCAD temporarily disabled — using ACS-only (origin_year=2024) everywhere
+    // When re-enabled, HCAD will use schema=forecast_hcad (separate DB schema)
+    // instead of toggling origin_year, to prevent accidental data source mixing.
     const [mapCenter, setMapCenter] = useState<{ lat: number, lng: number } | null>(null)
     // const isHarrisCounty = mapCenter
     //     ? (mapCenter.lat >= 29.4 && mapCenter.lat <= 30.2 && mapCenter.lng >= -95.9 && mapCenter.lng <= -94.9)
     //     : false
     const isHarrisCounty = false // HCAD off — ACS only
 
-    const originYear = 2024 // ACS-only: always 2024
+    // ACS uses origin_year=2024 in forecast_queue schema
+    // HCAD (when re-enabled) uses origin_year=2025 in forecast_hcad schema
+    const originYear = 2024
     const horizonM = (year - originYear) * 12
 
     // Student inference state: triggers outside Harris County at z≥13
@@ -778,32 +823,87 @@ export function ForecastMap({
 
 
 
+    // Data-driven growth_pct breakpoints per geo level
+    // Fetched once per horizon from /api/forecast-stats?mode=growth
+    type GrowthLevelStats = { p5: number; p10: number; p25: number; p50: number; p75: number; p90: number; p95: number; count: number }
+    const [growthStats, setGrowthStats] = useState<Record<string, GrowthLevelStats> | null>(null)
+    const growthStatsRef = useRef<Record<string, GrowthLevelStats> | null>(null)
+    useEffect(() => { growthStatsRef.current = growthStats }, [growthStats])
+    const growthStatsFetchedHorizon = useRef<number | null>(null)
+
+    // Fetch growth stats when horizon changes
+    useEffect(() => {
+        // Use abs(horizonM) — distribution spread is similar whether looking backward or forward
+        const absH = Math.abs(horizonM)
+        if (absH === 0 || absH === Math.abs(growthStatsFetchedHorizon.current ?? 0)) return
+        growthStatsFetchedHorizon.current = horizonM
+        const schemaParam = schema ? `&schema=${schema}` : ""
+        fetch(`/api/forecast-stats?mode=growth&originYear=${originYear}&horizonM=${absH}${schemaParam}`)
+            .then(r => r.ok ? r.json() : null)
+            .then(json => {
+                if (json?.levels) {
+                    setGrowthStats(json.levels)
+                    console.log('[GROWTH-STATS] Loaded for horizonM=', horizonM, json.levels)
+                }
+            })
+            .catch(() => { /* fallback to hardcoded */ })
+    }, [horizonM, originYear, schema])
+
     // Color ramp: growth mode uses growth_pct (% change from baseline).
     // Zero-centered: negative growth → blue, zero → neutral white, positive → amber/red.
-    // This matches the tooltip which shows green ▲ for positive and red ▼ for negative.
-    // The ramp is slightly asymmetric (wider on the positive side) because
-    // the underlying distribution is right-skewed.
+    // Breakpoints are data-driven from actual growth_pct distributions per geo level.
     // Value mode uses absolute p50 with fixed percentile breakpoints.
     const buildFillColor = (colorMode?: string): any => {
         if (colorMode === "growth") {
-            const presentYear = originYear + 1  // 2026
+            const presentYear = originYear + 2  // 2026 (origin 2024 + 2yr)
             if (year === presentYear) return "#e5e5e5" // Present year: growth=0 → flat neutral
-            const yrsFromPresent = Math.max(Math.abs(year - presentYear), 1)
 
-            // Zero-centered breakpoints scaled by horizon
-            const deepNeg = -5 - 4 * yrsFromPresent  // 1yr≈-9, 3yr≈-17, 5yr≈-25
-            const slightNeg = -2 * yrsFromPresent     // 1yr≈-2, 3yr≈-6, 5yr≈-10
-            const slightPos = 5 * yrsFromPresent      // 1yr≈5, 3yr≈15, 5yr≈25
-            const hotPos = 20 * yrsFromPresent         // 1yr≈20, 3yr≈60, 5yr≈100
+            // Pick the right level stats based on zoom
+            const zoom = mapRef.current?.getZoom() ?? 10
+            const stats = growthStatsRef.current
+            const levelStats = stats
+                ? (zoom <= 7 ? stats.zcta : zoom <= 14 ? stats.tract : stats.tabblock) || stats.tract
+                : null
+
+            if (levelStats && levelStats.count > 10) {
+                // Data-driven breakpoints: median (p50) is neutral, deviations show color
+                // Nominal values mean median growth ≠ 0 (includes inflation)
+                // Must enforce strictly ascending for MapLibre (percentiles can be equal
+                // when distribution is tight, e.g. at state aggregation level)
+                const eps = 0.01
+                const raw = [levelStats.p5, levelStats.p25, levelStats.p50, levelStats.p75, levelStats.p95]
+                // Walk forward ensuring each value is strictly greater than previous
+                for (let i = 1; i < raw.length; i++) {
+                    if (raw[i] <= raw[i - 1]) raw[i] = raw[i - 1] + eps
+                }
+                return [
+                    "interpolate",
+                    ["linear"],
+                    ["coalesce", ["to-number", ["get", "growth_pct"], 0], 0],
+                    raw[0], "#3b82f6",     // bottom 5% → deep blue
+                    raw[1], "#93c5fd",     // below avg → light blue
+                    raw[2], "#f8f8f8",     // median → neutral white
+                    raw[3], "#f59e0b",     // above avg → amber
+                    raw[4], "#ef4444",     // top 5% → deep red
+                ]
+            }
+
+            // Fallback: hardcoded formula if stats haven't loaded yet
+            const yrsFromPresent = Math.max(Math.abs(year - presentYear), 1)
+            const zoomScale = zoom <= 7 ? 0.3 : zoom <= 11 ? 0.5 : zoom <= 14 ? 0.8 : 1.0
+            const deepNeg = (-5 - 4 * yrsFromPresent) * zoomScale
+            const slightNeg = -2 * yrsFromPresent * zoomScale
+            const slightPos = 5 * yrsFromPresent * zoomScale
+            const hotPos = 20 * yrsFromPresent * zoomScale
             return [
                 "interpolate",
                 ["linear"],
                 ["coalesce", ["to-number", ["get", "growth_pct"], 0], 0],
-                deepNeg, "#3b82f6",    // rare decline → deep blue
-                slightNeg, "#93c5fd",  // slight decline → light blue
-                0, "#f8f8f8",          // zero growth → neutral white
-                slightPos, "#f59e0b",  // moderate growth → amber
-                hotPos, "#ef4444",     // hot growth → deep red
+                deepNeg, "#3b82f6",
+                slightNeg, "#93c5fd",
+                0, "#f8f8f8",
+                slightPos, "#f59e0b",
+                hotPos, "#ef4444",
             ]
         }
         return [
@@ -1731,9 +1831,13 @@ export function ForecastMap({
                 }
                 if (hoverDetailTimerRef.current) { clearTimeout(hoverDetailTimerRef.current); hoverDetailTimerRef.current = null }
                 selectedIdRef.current = null
+                hoveredIdRef.current = null
                 setSelectedId(null)
                 setSelectedProps(null)
+                setTooltipData(null)
                 setFixedTooltipPos(null)
+                userDraggedRef.current = false
+                setSelectedCoords(null)
                 setFanChartData(null)
                 setHistoricalValues(undefined)
                 setComparisonData(null)
@@ -2080,16 +2184,25 @@ export function ForecastMap({
     useEffect(() => {
         if (!isLoaded || !mapRef.current) return
         const map = mapRef.current
-        const newColor = buildFillColor(filters.colorMode)
-        for (const lvl of GEO_LEVELS) {
-            for (const suffix of ["a", "b"]) {
-                const layerId = `forecast-fill-${lvl.name}-${suffix}`
-                if (map.getLayer(layerId)) {
-                    map.setPaintProperty(layerId, "fill-color", newColor)
+        const applyColor = () => {
+            const newColor = buildFillColor(filters.colorMode)
+            for (const lvl of GEO_LEVELS) {
+                for (const suffix of ["a", "b"]) {
+                    const layerId = `forecast-fill-${lvl.name}-${suffix}`
+                    if (map.getLayer(layerId)) {
+                        map.setPaintProperty(layerId, "fill-color", newColor)
+                    }
                 }
             }
         }
-    }, [filters.colorMode, isLoaded])
+        applyColor()
+
+        // Re-apply when zoom changes (zoom-dependent scaling)
+        if (filters.colorMode === "growth") {
+            map.on("moveend", applyColor)
+            return () => { map.off("moveend", applyColor) }
+        }
+    }, [filters.colorMode, isLoaded, growthStats])
 
     // UPDATE YEAR — Seamless A/B swap (same pattern as vector-map.tsx)
     // Note: tile URLs are managed by the earlier effect (which handles both sources correctly,
@@ -2141,6 +2254,18 @@ export function ForecastMap({
             }
 
             ; (map as any)._activeSuffix = nextSuffix
+
+            // Re-query selected feature from new tiles to refresh tooltip P-values
+            const selId = selectedIdRef.current
+            if (selId) {
+                const zoom = map.getZoom()
+                const sourceLayer = getSourceLayer(zoom)
+                const features = map.querySourceFeatures(`forecast-${nextSuffix}`, { sourceLayer })
+                const match = features.find(f => (f.properties?.id || f.id) === selId)
+                if (match?.properties) {
+                    setSelectedProps(match.properties)
+                }
+            }
 
             // Clear the old source's tile cache to free memory
             const oldSource = map.getSource(currentSource)
@@ -2580,10 +2705,13 @@ export function ForecastMap({
                             {/* Chart — right half */}
                             <div className="w-1/2 h-full overflow-hidden flex flex-col">
                                 {(() => {
-                                    const currentVal = historicalValues?.[historicalValues.length - 1] ?? null
-                                    const forecastVal = displayProps.p50 ?? displayProps.value ?? null
-                                    const isPast = year < originYear + 1
-                                    const isPresent = year === originYear + 1 // 2026 = "now"
+                                    // Use the fan chart's 2026 p50 as "Now" for consistency with the chart
+                                    const currentVal = fanChartData?.p50?.[0] ?? historicalValues?.[historicalValues.length - 1] ?? null
+                                    // Look up P50 for the selected year from the fan chart timeseries
+                                    const yearIdx = fanChartData?.years?.indexOf(year) ?? -1
+                                    const forecastVal = (yearIdx >= 0 ? fanChartData?.p50?.[yearIdx] : null) ?? displayProps.p50 ?? displayProps.value ?? null
+                                    const isPast = year < originYear + 2
+                                    const isPresent = year === originYear + 2 // 2026 = "now"
                                     const leftLabel = isPresent ? "Now" : isPast ? String(year) : "Now"
                                     const leftVal = isPresent ? currentVal : isPast ? forecastVal : currentVal
                                     const rightLabel = isPresent ? String(year) : isPast ? "Now" : String(year)
@@ -2638,12 +2766,13 @@ export function ForecastMap({
                             <div className="p-4 space-y-3">
                                 {/* Current → Forecast header with % change */}
                                 {(() => {
-                                    const currentVal = historicalValues?.[historicalValues.length - 1] ?? null
-                                    // At zcta/tract/block zoom levels the tile stores the area median as p50.
-                                    // At parcel level, value is the individual estimate; p50 may not exist.
-                                    const forecastVal = displayProps.p50 ?? displayProps.value ?? null
-                                    const isPast = year < originYear + 1
-                                    const isPresent = year === originYear + 1 // 2026 = "now"
+                                    // Use the fan chart's 2026 p50 as "Now" for consistency with the chart
+                                    const currentVal = fanChartData?.p50?.[0] ?? historicalValues?.[historicalValues.length - 1] ?? null
+                                    // Look up P50 for the selected year from the fan chart timeseries
+                                    const yearIdx = fanChartData?.years?.indexOf(year) ?? -1
+                                    const forecastVal = (yearIdx >= 0 ? fanChartData?.p50?.[yearIdx] : null) ?? displayProps.p50 ?? displayProps.value ?? null
+                                    const isPast = year < originYear + 2
+                                    const isPresent = year === originYear + 2 // 2026 = "now"
                                     const leftLabel = isPresent ? "Now" : isPast ? String(year) : "Now"
                                     const leftVal = isPresent ? currentVal : isPast ? forecastVal : currentVal
                                     const rightLabel = isPresent ? String(year) : isPast ? "Now" : String(year)

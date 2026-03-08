@@ -1,5 +1,6 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { Info } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
@@ -16,21 +17,32 @@ interface LegendProps {
   originYear?: number
 }
 
-export function Legend({ className, colorMode = "growth", onColorModeChange, year = 2026, originYear = 2025 }: LegendProps) {
-  // Compute horizon-aware labels from empirical percentile fits
-  const presentYear = (originYear ?? 2025) + 1
-  const yrsFromPresent = Math.max(Math.abs((year ?? 2026) - presentYear), 1)
-  // Round to nearest 5 for clean labels
-  const round5 = (n: number) => Math.round(n / 5) * 5
-  const p05 = round5(-5 - 4 * yrsFromPresent)   // 1yr≈-10, 3yr≈-15, 5yr≈-25
-  const med = round5(5 * yrsFromPresent)          // 1yr≈5, 3yr≈15, 5yr≈25
-  const p95 = round5(30 * yrsFromPresent)         // 1yr≈30, 3yr≈90, 5yr≈150
+export function Legend({ className, colorMode = "growth", onColorModeChange, year = 2026, originYear = 2024 }: LegendProps) {
+  // Data-driven growth labels from API
+  const [growthLabels, setGrowthLabels] = useState<[string, string, string]>(["-20%", "0%", "+100%+"])
+  const horizonM = (year - originYear) * 12
+  const absHorizonM = Math.abs(horizonM)
 
-  const growthLabels = [
-    `${p05 > 0 ? "+" : ""}${p05}%`,
-    `${med > 0 ? "+" : ""}${med}%`,
-    `+${p95}%+`,
-  ]
+  useEffect(() => {
+    if (colorMode !== "growth" || absHorizonM === 0) return
+    fetch(`/api/forecast-stats?mode=growth&originYear=${originYear}&horizonM=${absHorizonM}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(json => {
+        if (json?.levels?.tract) {
+          const s = json.levels.tract
+          const fmt = (n: number) => {
+            const v = Math.round(n)
+            return v >= 0 ? `+${v}%` : `${v}%`
+          }
+          setGrowthLabels([
+            fmt(s.p5),
+            fmt(s.p50),
+            fmt(s.p95),
+          ])
+        }
+      })
+      .catch(() => { /* keep defaults */ })
+  }, [colorMode, absHorizonM, originYear])
 
   // Growth gradient: same colors as buildFillColor ramp
   const OPPORTUNITY_GRADIENT = "linear-gradient(to right, #3b82f6, #93c5fd 30%, #f8f8f8 50%, #f59e0b 70%, #ef4444)"
@@ -51,7 +63,7 @@ export function Legend({ className, colorMode = "growth", onColorModeChange, yea
                   <p>
                     {colorMode === "value"
                       ? "Estimated median property value ($)."
-                      : "Change in value vs 2025 baseline."}
+                      : "Relative growth vs median. White = average."}
                   </p>
                 </TooltipContent>
               </Tooltip>
@@ -110,4 +122,3 @@ export function Legend({ className, colorMode = "growth", onColorModeChange, yea
     </div>
   )
 }
-

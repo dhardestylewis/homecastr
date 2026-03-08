@@ -97,7 +97,9 @@ export async function fetchForecastPageData(
         if (error || !forecastData || forecastData.length === 0) return null
 
         const effectiveOrigin = (forecastData[0] as any).origin_year as number
-        const baseRow = forecastData.find((r: any) => r.horizon_m === 12)
+        // Always use p50 at 2026 as the denominator, regardless of origin vintage
+        const baselineHorizonM = (2026 - effectiveOrigin) * 12
+        const baseRow = forecastData.find((r: any) => r.horizon_m === baselineHorizonM)
         const baselineP50 = (baseRow as any)?.p50 || (forecastData[0] as any).p50 || 1
 
         const horizons: ForecastHorizon[] = forecastData.map((r: any) => ({

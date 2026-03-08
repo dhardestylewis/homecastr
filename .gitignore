@@ -44,6 +44,7 @@ scripts/data_acquisition/.venv/
 
 # Logs (local only)
 scripts/logs/
+logs/gcs_investigation/
 
 # Scratch work
 _scratch/

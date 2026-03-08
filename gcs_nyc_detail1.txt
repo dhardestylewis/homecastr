@@ -1,2 +1,0 @@
-﻿  53752561  2026-02-26T17:49:32Z  gs://properlytic-raw-data/nyc/nyc_sales_clean.parquet
-TOTAL: 1 objects, 53752561 bytes (51.26 MiB)

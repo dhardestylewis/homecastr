@@ -1954,12 +1954,16 @@ export function MapView({
                 setSelectedHexGeoCenter(null)
                 setComparisonHex(null)
                 setComparisonDetails(null)
+                // Also clear hover state so the tooltip container fully disappears
+                setTooltipData(null)
+                setHoveredHex(null)
+                onFeatureHover(null)
                 onFeatureSelect(null)
             }
         }
         window.addEventListener('keydown', handleKeyDown)
         return () => window.removeEventListener('keydown', handleKeyDown)
-    }, [selectedHex, onFeatureSelect])
+    }, [selectedHex, onFeatureSelect, onFeatureHover])
 
     // Swipe logic for mobile tooltip
     const [touchStart, setTouchStart] = useState<number | null>(null)
