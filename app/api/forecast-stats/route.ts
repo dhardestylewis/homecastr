@@ -57,7 +57,7 @@ export async function GET(request: Request) {
                             .from(level.table)
                             .select(`${level.key}, p50`)
                             .eq("origin_year", originYear)
-                            .eq("horizon_m", 24) // baseline = 2026 for origin 2024 (origin + 24m)
+                            .eq("horizon_m", 24) // 2026 baseline (origin 2024 + 24m)
                             .eq("series_kind", "forecast")
                             .not("p50", "is", null),
                     ])
