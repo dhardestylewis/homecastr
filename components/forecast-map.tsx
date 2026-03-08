@@ -2822,31 +2822,47 @@ export function ForecastMap({
                                         </div>
                                     ) : null}
 
-                                    {/* P-values overlay — top-right corner */}
-                                    {(displayProps.p10 != null || displayProps.p90 != null) && (
-                                        <div className="absolute top-5 right-4 text-[8px] leading-snug rounded px-1 py-0.5" style={{ textShadow: '0 0 3px var(--background), 0 0 3px var(--background)' }}>
-                                            <div className="flex items-baseline gap-1">
-                                                <span className="font-medium text-[9px]">{formatValue(displayProps.p90)}</span>
-                                                <span className="text-muted-foreground/50">P90</span>
+                                    {/* P-values overlay — top-right corner, year-aware */}
+                                    {(() => {
+                                        // Index into fanChartData for the current slider year
+                                        const yIdx = fanChartData?.years?.indexOf(year) ?? -1
+                                        const pv = {
+                                            p90: (yIdx >= 0 ? fanChartData?.p90?.[yIdx] : null) ?? displayProps.p90,
+                                            p75: displayProps.p75, // p75/p25 only in tile props
+                                            p50: (yIdx >= 0 ? fanChartData?.p50?.[yIdx] : null) ?? displayProps.p50 ?? displayProps.value,
+                                            p25: displayProps.p25,
+                                            p10: (yIdx >= 0 ? fanChartData?.p10?.[yIdx] : null) ?? displayProps.p10,
+                                        }
+                                        if (pv.p10 == null && pv.p90 == null) return null
+                                        return (
+                                            <div className="absolute top-5 right-4 text-[8px] leading-snug rounded px-1 py-0.5" style={{ textShadow: '0 0 3px var(--background), 0 0 3px var(--background)' }}>
+                                                <div className="flex items-baseline gap-1">
+                                                    <span className="font-medium text-[9px]">{formatValue(pv.p90)}</span>
+                                                    <span className="text-muted-foreground/50">P90</span>
+                                                </div>
+                                                {pv.p75 != null && (
+                                                    <div className="flex items-baseline gap-1">
+                                                        <span className="font-medium text-[9px]">{formatValue(pv.p75)}</span>
+                                                        <span className="text-muted-foreground/50">P75</span>
+                                                    </div>
+                                                )}
+                                                <div className="flex items-baseline gap-1 bg-primary/10 rounded px-0.5">
+                                                    <span className="font-bold text-[9px] text-primary">{formatValue(pv.p50)}</span>
+                                                    <span className="text-primary/70">P50</span>
+                                                </div>
+                                                {pv.p25 != null && (
+                                                    <div className="flex items-baseline gap-1">
+                                                        <span className="font-medium text-[9px]">{formatValue(pv.p25)}</span>
+                                                        <span className="text-muted-foreground/50">P25</span>
+                                                    </div>
+                                                )}
+                                                <div className="flex items-baseline gap-1">
+                                                    <span className="font-medium text-[9px]">{formatValue(pv.p10)}</span>
+                                                    <span className="text-muted-foreground/50">P10</span>
+                                                </div>
                                             </div>
-                                            <div className="flex items-baseline gap-1">
-                                                <span className="font-medium text-[9px]">{formatValue(displayProps.p75)}</span>
-                                                <span className="text-muted-foreground/50">P75</span>
-                                            </div>
-                                            <div className="flex items-baseline gap-1 bg-primary/10 rounded px-0.5">
-                                                <span className="font-bold text-[9px] text-primary">{formatValue(displayProps.p50 ?? displayProps.value)}</span>
-                                                <span className="text-primary/70">P50</span>
-                                            </div>
-                                            <div className="flex items-baseline gap-1">
-                                                <span className="font-medium text-[9px]">{formatValue(displayProps.p25)}</span>
-                                                <span className="text-muted-foreground/50">P25</span>
-                                            </div>
-                                            <div className="flex items-baseline gap-1">
-                                                <span className="font-medium text-[9px]">{formatValue(displayProps.p10)}</span>
-                                                <span className="text-muted-foreground/50">P10</span>
-                                            </div>
-                                        </div>
-                                    )}
+                                        )
+                                    })()}
                                 </div>
 
                                 <div className="pt-1 mt-0 border-t border-border/50 text-center">
