@@ -2705,9 +2705,12 @@ export function ForecastMap({
                                 {(() => {
                                     // Use the fan chart's 2026 p50 as "Now" for consistency with the chart
                                     const currentVal = fanChartData?.p50?.[0] ?? historicalValues?.[historicalValues.length - 1] ?? null
-                                    // Look up P50 for the selected year from the fan chart timeseries
+                                    // Look up value for the selected year: fan chart (2026+), historicalValues (2019-2025), or tile props
                                     const yearIdx = fanChartData?.years?.indexOf(year) ?? -1
-                                    const forecastVal = (yearIdx >= 0 ? fanChartData?.p50?.[yearIdx] : null) ?? displayProps.p50 ?? displayProps.value ?? null
+                                    const histIdx = year >= 2019 && year <= 2025 ? year - 2019 : -1
+                                    const forecastVal = (yearIdx >= 0 ? fanChartData?.p50?.[yearIdx] : null)
+                                        ?? (histIdx >= 0 ? historicalValues?.[histIdx] : null)
+                                        ?? displayProps.p50 ?? displayProps.value ?? null
                                     const isPast = year < originYear + 2
                                     const isPresent = year === originYear + 2 // 2026 = "now"
                                     const leftLabel = isPresent ? "Now" : isPast ? String(year) : "Now"
@@ -2766,9 +2769,12 @@ export function ForecastMap({
                                 {(() => {
                                     // Use the fan chart's 2026 p50 as "Now" for consistency with the chart
                                     const currentVal = fanChartData?.p50?.[0] ?? historicalValues?.[historicalValues.length - 1] ?? null
-                                    // Look up P50 for the selected year from the fan chart timeseries
+                                    // Look up value for the selected year: fan chart (2026+), historicalValues (2019-2025), or tile props
                                     const yearIdx = fanChartData?.years?.indexOf(year) ?? -1
-                                    const forecastVal = (yearIdx >= 0 ? fanChartData?.p50?.[yearIdx] : null) ?? displayProps.p50 ?? displayProps.value ?? null
+                                    const histIdx = year >= 2019 && year <= 2025 ? year - 2019 : -1
+                                    const forecastVal = (yearIdx >= 0 ? fanChartData?.p50?.[yearIdx] : null)
+                                        ?? (histIdx >= 0 ? historicalValues?.[histIdx] : null)
+                                        ?? displayProps.p50 ?? displayProps.value ?? null
                                     const isPast = year < originYear + 2
                                     const isPresent = year === originYear + 2 // 2026 = "now"
                                     const leftLabel = isPresent ? "Now" : isPast ? String(year) : "Now"
