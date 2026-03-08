@@ -807,13 +807,19 @@ export function ForecastMap({
         const map = mapRef.current
         const _v = "7" // bump: f_now baseline changed from h=12 to h=24 (2026)
 
+        // For tile rendering, clamp horizonM to >=24 (2026 baseline).
+        // Historical mode SQL uses INNER JOIN on history tables that lack data at
+        // ZCTA/tract level, producing empty tiles. By staying in forecast mode,
+        // tiles always render. The slider year only affects tooltip/chart display.
+        const tileHorizonM = Math.max(horizonM, 24)
+
         const updateSource = (id: string) => {
             const src = map.getSource(id) as maplibregl.VectorTileSource
             if (src) {
                 // Maplibre doesn't have setUrl but it has setTiles
                 const schemaParam = schema ? `&schema=${schema}` : ""
                 src.setTiles([
-                    `${window.location.origin}/api/forecast-tiles/{z}/{x}/{y}?originYear=${originYear}&horizonM=${horizonM}&v=${_v}${schemaParam}`,
+                    `${window.location.origin}/api/forecast-tiles/{z}/{x}/{y}?originYear=${originYear}&horizonM=${tileHorizonM}&v=${_v}${schemaParam}`,
                 ])
             }
         }
