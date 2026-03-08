@@ -58,9 +58,9 @@ export default function FAQPage() {
                                 </p>
                             </div>
                             <div>
-                                <h3 className="text-xl font-bold">Is this available outside of Houston?</h3>
+                                <h3 className="text-xl font-bold">What areas do you cover?</h3>
                                 <p className="text-muted-foreground mt-2 leading-relaxed">
-                                    Currently, our public V11 model is restricted to our core Texas geometries. We are actively expanding to Florida and other sunbelt markets.
+                                    Our V11 model covers residential properties across the United States, including Texas, New York, Florida, and more. Browse the <a href="/forecasts" className="text-primary hover:underline">forecast directory</a> to find your state, county, or neighborhood.
                                 </p>
                             </div>
                             <div>

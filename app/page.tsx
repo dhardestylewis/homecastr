@@ -500,7 +500,7 @@ export default function AboutPage() {
                         <div>
                             <h2 className="text-2xl font-bold tracking-tight mb-2">Explore local market data</h2>
                             <p className="text-muted-foreground text-sm max-w-lg">
-                                Access our complete database of probabilistic home price forecasts across the United States. Available by state, metro area, county, and zip code.
+                                Access our complete database of probabilistic home price forecasts across the United States. Available by state, metro area, county, and neighborhood.
                             </p>
                         </div>
                         <Link

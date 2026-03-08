@@ -1,13 +1,11 @@
 import type { MetadataRoute } from "next"
-import { getStatesWithData, getCitiesForState, getTractsForCity } from "@/lib/publishing/geo-crosswalk"
 
-const SCHEMA = process.env.FORECAST_SCHEMA || "forecast_queue"
-const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://homecastr.com"
+const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://www.homecastr.com"
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const entries: MetadataRoute.Sitemap = []
 
-    // Static Routes
+    // Static Routes (always included regardless of DB availability)
     entries.push({
         url: `${BASE_URL}`,
         lastModified: new Date(),
@@ -38,7 +36,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         priority: 0.9,
     })
 
+    // Dynamic Routes — wrapped in resilient try/catch with dynamic import
+    // so that if geo-crosswalk or its dependencies fail, the sitemap still
+    // returns the static entries above.
     try {
+        const SCHEMA = process.env.FORECAST_SCHEMA || "forecast_queue"
+        const { getStatesWithData, getCitiesForState } = await import("@/lib/publishing/geo-crosswalk")
+
         const states = await getStatesWithData(SCHEMA)
 
         for (const state of states) {
@@ -63,7 +67,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
             }
         }
     } catch (err) {
-        console.error("[SITEMAP] Error generating sitemap:", err)
+        console.error("[SITEMAP] Error generating dynamic sitemap entries (static entries still included):", err)
     }
 
     return entries

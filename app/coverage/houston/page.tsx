@@ -20,7 +20,7 @@ export default function HoustonCoveragePage() {
                     <div className="flex-1">
                         <h1 className="text-4xl font-extrabold tracking-tight mb-6">Houston, TX Coverage</h1>
                         <p className="text-lg text-muted-foreground mb-8 text-balance">
-                            Houston serves as the flagship market for Homecastr's v11 forecasting models. We provide comprehensive, parcel-level coverage across Harris County and surrounding municipalities.
+                            Homecastr provides comprehensive, parcel-level forecasting across Harris County and surrounding municipalities in the Houston metro area.
                         </p>
 
                         <div className="bg-muted/30 border border-border rounded-xl p-6 mb-8">
