@@ -916,14 +916,7 @@ export function ForecastMap({
             const diff = [
                 "-",
                 ["coalesce", ["get", "p50"], ["get", "value"], 0],
-                [
-                    "coalesce",
-                    ["get", "value"],
-                    ["/",
-                        ["coalesce", ["get", "p50"], 0],
-                        ["+", 1, ["/", ["coalesce", ["to-number", ["get", "growth_pct"], 0], 0], 100]]
-                    ]
-                ]
+                ["coalesce", ["get", "baseline_value"], ["get", "value"], 0]
             ]
             return [
                 "interpolate",

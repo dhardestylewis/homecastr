@@ -86,57 +86,84 @@ def _read_one_layer(args):
         return None, f"{path}[{layer}]: {e}"
 
 
+def _is_value_column(col_name: str) -> bool:
+    """Return True if column name looks like a property value column (not landmark, address, etc.)."""
+    cl = col_name.lower()
+    value_words = ("val", "appr", "mkt")
+    concept_words = ("land", "imp", "tot", "mkt", "appr")
+    return any(c in cl for c in concept_words) and any(v in cl for v in value_words)
+
+
 def _build_value(df: "pd.DataFrame") -> "pd.Series":
     """
     Discover value columns and return a numeric float64 Series aligned to df.index.
     Bulletproof against Arrow-backed dtypes, nullable Int64/Float64, and missing cols.
+    When multiple columns match the same rule, pick the one with the most non-null values.
     """
     import numpy as np
     import pandas as pd
 
-    val_mapping = {}
+    # ── Discover candidates per category ──────────────────────────────────
+    candidates = {"total_value": [], "land_value": [], "improvement_value": [], "market_value": []}
     for col in df.columns:
         cl = col.lower()
         if "tot" in cl and ("val" in cl or "appr" in cl or "mkt" in cl):
-            val_mapping["total_value"] = col
+            candidates["total_value"].append(col)
         elif "land" in cl and ("val" in cl or "appr" in cl):
-            val_mapping["land_value"] = col
+            candidates["land_value"].append(col)
         elif ("impr" in cl or "imp_" in cl or "impv" in cl or "imprv" in cl) and (
             "val" in cl or "appr" in cl
         ):
-            val_mapping["improvement_value"] = col
+            candidates["improvement_value"].append(col)
         elif "mkt" in cl and "val" in cl and "tot" not in cl:
-            val_mapping["market_value"] = col
+            candidates["market_value"].append(col)
+
+    # Pick best-populated candidate for each category
+    val_mapping = {}
+    for key, cols in candidates.items():
+        if not cols:
+            continue
+        best = max(cols, key=lambda c: df[c].notna().sum())
+        val_mapping[key] = best
+        if len(cols) > 1:
+            counts = {c: int(df[c].notna().sum()) for c in cols}
+            print(f"  ⚠️ Multiple candidates for {key}: {counts} → picked '{best}'")
 
     print(f"  Value cols: {val_mapping}")
 
     n = len(df)
 
-    def _parse(col_name: str) -> np.ndarray:
+    def _parse(key: str, col_name: str) -> np.ndarray:
         """Parse a column to float64 numpy array, safe against all dtypes."""
         if col_name not in df.columns:
             return np.zeros(n, dtype=np.float64)
-        
-        # Use pandas vectorized string cleaning instead of slow python loop
+
         s = df[col_name]
-        
-        # If it's inherently numeric, just cast it. 
+
+        # Diagnostic: show dtype, non-null count, and first 5 non-null values
+        nonnull = int(s.notna().sum())
+        print(f"    → {key} = '{col_name}': dtype={s.dtype}, non-null={nonnull:,}/{n:,}")
+        if nonnull > 0:
+            sample = s.dropna().head(5).tolist()
+            print(f"      sample values: {sample}")
+
+        # If it's inherently numeric, just cast it.
         # If string/object, strip $ and , then coerce to numeric
         if pd.api.types.is_numeric_dtype(s):
             s_num = pd.to_numeric(s, errors="coerce")
         else:
-            # Convert to string, clean currency chars, convert to numeric
             s_clean = s.astype(str).str.replace(r'[$,]', '', regex=True).str.strip()
-            # Replace exactly string "None" or "nan" with actual NaN before cast
-            s_clean = s_clean.replace({"None": np.nan, "nan": np.nan, "<NA>": np.nan})
+            s_clean = s_clean.replace({"None": np.nan, "nan": np.nan, "<NA>": np.nan, "none": np.nan})
             s_num = pd.to_numeric(s_clean, errors="coerce")
-            
-        return s_num.to_numpy(dtype=np.float64, na_value=np.nan)
 
-    parsed = {k: _parse(v) for k, v in val_mapping.items()}
+        result = s_num.to_numpy(dtype=np.float64, na_value=np.nan)
+        valid_count = int(np.isfinite(result).sum())
+        print(f"      after parse: {valid_count:,} finite values")
+        return result
+
+    parsed = {k: _parse(k, v) for k, v in val_mapping.items()}
 
     def _any_positive(arr: np.ndarray) -> bool:
-        # nanmax is safe against all-nan slices (raises warning but returns nan, handles cleanly in bool())
         with np.errstate(all='ignore'):
             return bool(np.nanmax(arr) > 0)
 
@@ -145,12 +172,15 @@ def _build_value(df: "pd.DataFrame") -> "pd.Series":
 
     if has_tot:
         result_arr = parsed["total_value"]
+        print(f"  Using total_value as primary value column")
     elif has_mkt:
         result_arr = parsed["market_value"]
+        print(f"  Using market_value as primary value column")
     else:
         land = parsed.get("land_value", np.zeros(n, dtype=np.float64))
         impr = parsed.get("improvement_value", np.zeros(n, dtype=np.float64))
         result_arr = np.nan_to_num(land, nan=0.0) + np.nan_to_num(impr, nan=0.0)
+        print(f"  Using land_value + improvement_value as primary value")
 
     return pd.Series(result_arr, index=df.index, dtype="float64")
 
@@ -246,8 +276,7 @@ def process_one_year(blob_name: str) -> dict:
                 # ── Pre-filter PER LAYER to avoid massive post-concat OOM ──
                 # Many zip layers are roads/boundaries with no value columns.
                 # If we concat them all into one 40M-row DF, we OOM instantly.
-                val_like = [c for c in gdf.columns
-                            if any(k in c for k in ("land", "imp", "mkt", "tot_val", "total_v", "appr"))]
+                val_like = [c for c in gdf.columns if _is_value_column(c)]
                 if val_like:
                     # Drop rows that have no values populated in this chunk
                     mask = gdf[val_like].notna().any(axis=1)

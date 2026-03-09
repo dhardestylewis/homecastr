@@ -66,6 +66,7 @@ begin
           coalesce(h_past.p50,h_past.value) as p50,
           null::double precision as p75, null::double precision as p90,
           null::bigint as n,
+          coalesce(f_now.p50,f_now.value) as baseline_value,
           CASE 
             WHEN coalesce(f_now.p50,f_now.value) IS NULL OR coalesce(h_past.p50,h_past.value) IS NULL THEN null
             ELSE least(100, greatest(-50,
@@ -111,6 +112,7 @@ begin
         select g.%1$I::text as id, m.origin_year, m.horizon_m,
           coalesce(m.forecast_year,m.origin_year+((m.horizon_m+11)/12))::integer as forecast_year,
           m.value, m.p10, m.p25, coalesce(m.p50,m.value) as p50, m.p75, m.p90, m.n,
+          coalesce(f_now.p50,f_now.value) as baseline_value,
           CASE 
             WHEN coalesce(m.p50,m.value) IS NULL OR coalesce(f_now.p50,f_now.value) IS NULL THEN null
             ELSE least(100, greatest(-50,

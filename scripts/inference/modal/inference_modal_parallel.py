@@ -351,7 +351,7 @@ def run_inference_shard(
         "MODEL_VARIANT": model,
         "APPLY_CALIBRATION": False,  # disabled globally per user request
         "RUN_FULL_BACKTEST": False,
-        "H": 5 if "florida" in jurisdiction else 6,
+        "H": 5 if jurisdiction in ["florida_dor", "nyc"] else 6,  # NYC was trained with H=5
         "S_SCENARIOS": 256,
         "OUT_ROOT": out_root,
         "SUITE_ID": suite_id,

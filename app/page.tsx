@@ -301,12 +301,17 @@ export default function AboutPage() {
                                 </p>
                                 {/* Sample API response */}
                                 <pre className="text-[10px] font-mono bg-black/5 dark:bg-white/5 rounded-lg p-3 overflow-x-auto border border-border/30 leading-relaxed">
-                                    {`{
-  "h3_id": "862a100c7ffffff",
-  "horizon": 3,
-  "p10": 268000,
-  "p50": 345000,
-  "p90": 425000
+                                    {`GET /api/v1/forecast?address=123+Main+St+Houston+TX
+
+{
+  "address": "123 Main St, Houston, TX 77002",
+  "current_value": 295000,
+  "forecasts": {
+    "p10": 268000,
+    "p50": 345000,
+    "p90": 425000
+  },
+  "horizon_years": 5
 }`}
                                 </pre>
                             </div>
