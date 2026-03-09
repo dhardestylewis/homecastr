@@ -47,7 +47,7 @@ export function ForecastSummaryCard({
                         <p className="text-2xl font-bold tracking-tight text-foreground">
                             {fmtVal(baselineP50)}
                         </p>
-                        <p className="text-sm font-medium text-muted-foreground/60">
+                        <p className="text-sm font-medium text-muted-foreground">
                             Estimated median
                         </p>
                     </div>

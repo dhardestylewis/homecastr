@@ -20,7 +20,7 @@
   /* Slightly darker beige */
   --secondary-foreground: oklch(0.25 0.02 85);
   --muted: oklch(0.92 0.02 85);
-  --muted-foreground: oklch(0.5 0.01 85);
+  --muted-foreground: oklch(0.4 0.01 85);
   --accent: oklch(0.88 0.03 85);
   /* Light sandy accent */
   --accent-foreground: oklch(0.25 0.02 85);
@@ -31,13 +31,13 @@
   --ring: oklch(0.45 0.05 85);
 
   /* Chart colors for opportunity scale - Refined for Sage/Beige look */
-  --chart-negative: oklch(0.6 0.15 25);
-  --chart-low: oklch(0.7 0.1 60);
-  --chart-mid: oklch(0.8 0.08 90);
-  --chart-high: oklch(0.65 0.12 165);
-  /* Sage/Teal */
-  --chart-very-high: oklch(0.55 0.15 200);
-  /* Muted Blue */
+  --chart-negative: oklch(0.5 0.18 25);
+  --chart-low: oklch(0.55 0.12 60);
+  --chart-mid: oklch(0.55 0.08 90);
+  --chart-high: oklch(0.38 0.13 165);
+  /* Deep Sage — meets WCAG AA on beige card */
+  --chart-very-high: oklch(0.35 0.15 200);
+  /* Deep Teal */
 
   /* Warning colors */
   --warning: oklch(0.85 0.12 85);

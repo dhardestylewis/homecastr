@@ -28,7 +28,7 @@ export function DownloadButton({ state, city, label }: DownloadButtonProps) {
         <a
             href={href}
             download={filename}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border bg-secondary/50 hover:bg-secondary text-sm font-medium text-foreground transition-all hover:shadow-md"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border bg-secondary hover:bg-accent text-sm font-medium text-foreground transition-all hover:shadow-md"
         >
             <Download className="w-4 h-4" />
             {label || "Download CSV"}
