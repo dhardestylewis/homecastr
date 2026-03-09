@@ -36,7 +36,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     let geo = parseTractGeoid(tractGeoid)
     geo = await enrichWithNeighborhood(geo)
 
-    const isOutlier = isForecastOutlier(data)
+    const data = await fetchForecastPageData(tractGeoid, 2025, SCHEMA)
+    const isOutlier = data ? isForecastOutlier(data) : false
     const h5 = data?.forecast.horizons.find(h => h.horizon_m === 60)
     const appreciation = (h5 && !isOutlier) ? `${h5.appreciation > 0 ? "+" : ""}${h5.appreciation.toFixed(1)}%` : ""
 
