@@ -69,7 +69,7 @@ async function getStateOutlook(stateFips: string) {
                     neighborhoodCount: Number(row.neighborhood_count || 0),
                     medianValue: row.median_value !== null ? Number(row.median_value) : null,
                     medianAppreciation: row.median_appreciation !== null ? Number(row.median_appreciation) : null,
-                    highestUpside: row.highest_upside !== null ? Number(row.highest_upside) : null,
+                    highestUpside: row.highest_upside !== null ? Math.min(Number(row.highest_upside), 500) : null,
                 }
             }
         } catch { /* fall through */ }
@@ -103,7 +103,7 @@ async function getStateOutlook(stateFips: string) {
             const h60 = h60Map.get(tid)
             if (h12 >= 20_000 && h60 && h12 < 5_000_000) {
                 const appr = ((h60 - h12) / h12) * 100
-                if (appr > -95) { appreciations.push(appr); values.push(h12) }
+                if (appr > -95 && appr <= 500) { appreciations.push(appr); values.push(h12) }
             }
         }
         if (appreciations.length === 0) return { countyCount: counties.size, neighborhoodCount: tracts.size, medianValue: null, medianAppreciation: null, highestUpside: null }
