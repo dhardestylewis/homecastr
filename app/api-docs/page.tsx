@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { HomecastrLogo } from "@/components/homecastr-logo"
 import { ArrowRight, Copy, Check, Key, Zap, Code2, Terminal } from "lucide-react"
@@ -31,6 +31,11 @@ function TryItWidget() {
     const [response, setResponse] = useState<string | null>(null)
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    const [origin, setOrigin] = useState("https://homecastr.ai")
+
+    useEffect(() => {
+        setOrigin(window.location.origin)
+    }, [])
 
     async function tryIt() {
         setLoading(true)
@@ -50,6 +55,9 @@ function TryItWidget() {
             setLoading(false)
         }
     }
+
+    const curlCmd = `curl -s -H "x-api-key: ${DEMO_KEY}" \\
+  "${origin}/api/v1/forecast?address=${encodeURIComponent(address)}"`
 
     return (
         <div className="rounded-2xl border border-border/50 bg-muted/10 overflow-hidden">
@@ -86,11 +94,10 @@ function TryItWidget() {
                 <div className="relative">
                     <div className="flex items-center justify-between mb-1.5">
                         <span className="text-xs font-medium text-muted-foreground">curl equivalent</span>
-                        <CopyButton text={`curl -s -H "x-api-key: ${DEMO_KEY}" "${typeof window !== "undefined" ? window.location.origin : ""}/api/v1/forecast?address=${encodeURIComponent(address)}"`} />
+                        <CopyButton text={curlCmd} />
                     </div>
                     <pre className="text-[11px] font-mono bg-zinc-950 text-zinc-300 rounded-lg p-4 overflow-x-auto leading-relaxed">
-                        {`curl -s -H "x-api-key: ${DEMO_KEY}" \\
-  "${typeof window !== "undefined" ? window.location.origin : "https://homecastr.ai"}/api/v1/forecast?address=${encodeURIComponent(address)}"`}
+                        {curlCmd}
                     </pre>
                 </div>
 
