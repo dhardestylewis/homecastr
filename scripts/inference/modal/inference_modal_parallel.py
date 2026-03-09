@@ -630,7 +630,7 @@ def _load_accounts(jurisdiction: str, panel_gcs_path: str = "") -> list:
 @app.function(
     image=image,
     secrets=[gcs_secret, supabase_secret],
-    timeout=600,
+    timeout=21600,
     memory=16384,
 )
 def _dispatch_and_run(

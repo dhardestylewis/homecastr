@@ -23,8 +23,19 @@ export function Legend({ className, colorMode = "growth", onColorModeChange, yea
   const [growthGradient, setGrowthGradient] = useState<string>(
     "linear-gradient(to right, #3b82f6, #93c5fd 30%, #f8f8f8 50%, #f59e0b 70%, #ef4444)"
   )
-  const GROWTH_DOLLAR_GRADIENT = "linear-gradient(to right, #3b82f6, #f8f8f8 50%, #ef4444)"
-  const GROWTH_DOLLAR_LABELS = ["-$50k", "$0", "+$150k+"]
+  const presentYear = originYear + 2
+  const yrsFromPresent = Math.max(Math.abs(year - presentYear), 1)
+  const growthDollarMin = -10000 * yrsFromPresent
+  const growthDollarMax = 30000 * yrsFromPresent
+  const growthDollarRange = growthDollarMax - growthDollarMin
+  const zeroPct = growthDollarRange > 0 ? Math.round((0 - growthDollarMin) / growthDollarRange * 100) : 50
+
+  const GROWTH_DOLLAR_GRADIENT = `linear-gradient(to right, #3b82f6, #f8f8f8 ${zeroPct}%, #ef4444)`
+  const GROWTH_DOLLAR_LABELS = [
+    `-$${Math.abs(growthDollarMin) / 1000}k`,
+    "$0",
+    `+$${growthDollarMax / 1000}k+`
+  ]
   const horizonM = (year - originYear) * 12
 
   useEffect(() => {

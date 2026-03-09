@@ -316,6 +316,7 @@ export interface FilterState {
 export interface MapState {
   center: [number, number]
   zoom: number
+  bbox?: [number, number, number, number] | null
   selectedId: string | null
   hoveredId: string | null
   highlightedIds?: string[]

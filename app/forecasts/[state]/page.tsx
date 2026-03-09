@@ -10,6 +10,7 @@ import { DownloadButton } from "@/components/publishing/DownloadButton"
 import { DatasetJsonLd } from "@/components/publishing/DatasetJsonLd"
 import { ForecastMapEmbed } from "@/components/publishing/ForecastMapEmbed"
 import { getCenterForState } from "@/lib/publishing/geo-centroids"
+import { getDynamicBounds } from "@/lib/publishing/geo-bounds"
 
 export const revalidate = 3600
 
@@ -185,9 +186,10 @@ export default async function StateHubPage({ params }: PageProps) {
     const stateName = STATE_NAMES[state] || state.toUpperCase()
     const stateFips = SLUG_TO_FIPS[state] || "00"
 
-    const [cities, countyOutlooks] = await Promise.all([
+    const [cities, countyOutlooks, dynamicBounds] = await Promise.all([
         getCitiesForState(state, SCHEMA),
         getCountyOutlooks(stateFips),
+        getDynamicBounds("state", stateFips)
     ])
 
     if (cities.length === 0) notFound()
@@ -217,6 +219,7 @@ export default async function StateHubPage({ params }: PageProps) {
     allValues.sort((a, b) => a - b)
     const stateMedianValue = allValues.length > 0 ? allValues[Math.floor(allValues.length / 2)] : null
 
+    // We still extract center as fallback/base for lat/lng, but bounding box overrides it
     const mapCenter = getCenterForState(state)
 
     return (
@@ -234,6 +237,7 @@ export default async function StateHubPage({ params }: PageProps) {
                 lat={mapCenter.lat}
                 lng={mapCenter.lng}
                 zoom={mapCenter.zoom}
+                bbox={dynamicBounds}
                 label={`${stateName} Live Forecast Map`}
                 height={400}
             />

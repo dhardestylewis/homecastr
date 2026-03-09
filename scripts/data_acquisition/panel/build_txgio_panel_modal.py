@@ -116,29 +116,29 @@ def _build_value(df: "pd.DataFrame") -> "pd.Series":
         """Parse a column to float64 numpy array, safe against all dtypes."""
         if col_name not in df.columns:
             return np.zeros(n, dtype=np.float64)
+        
+        # Use pandas vectorized string cleaning instead of slow python loop
         s = df[col_name]
-        # Convert Arrow-backed or categorical to plain Python objects first
-        try:
-            s = s.to_numpy(dtype=object, na_value=None)
-        except Exception:
-            s = s.values
-        # Stringify numeric-looking objects and strip currency chars
-        arr = []
-        for v in s:
-            if v is None:
-                arr.append(np.nan)
-            else:
-                sv = str(v).replace("$", "").replace(",", "").strip()
-                try:
-                    arr.append(float(sv))
-                except (ValueError, TypeError):
-                    arr.append(np.nan)
-        return np.array(arr, dtype=np.float64)
+        
+        # If it's inherently numeric, just cast it. 
+        # If string/object, strip $ and , then coerce to numeric
+        if pd.api.types.is_numeric_dtype(s):
+            s_num = pd.to_numeric(s, errors="coerce")
+        else:
+            # Convert to string, clean currency chars, convert to numeric
+            s_clean = s.astype(str).str.replace(r'[$,]', '', regex=True).str.strip()
+            # Replace exactly string "None" or "nan" with actual NaN before cast
+            s_clean = s_clean.replace({"None": np.nan, "nan": np.nan, "<NA>": np.nan})
+            s_num = pd.to_numeric(s_clean, errors="coerce")
+            
+        return s_num.to_numpy(dtype=np.float64, na_value=np.nan)
 
     parsed = {k: _parse(v) for k, v in val_mapping.items()}
 
     def _any_positive(arr: np.ndarray) -> bool:
-        return bool(np.any(arr > 0))
+        # nanmax is safe against all-nan slices (raises warning but returns nan, handles cleanly in bool())
+        with np.errstate(all='ignore'):
+            return bool(np.nanmax(arr) > 0)
 
     has_tot = "total_value" in parsed and _any_positive(parsed["total_value"])
     has_mkt = "market_value" in parsed and _any_positive(parsed["market_value"])

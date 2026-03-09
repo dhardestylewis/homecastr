@@ -911,14 +911,27 @@ export function ForecastMap({
             ]
         }
         if (colorMode === "growth_dollar") {
-            const diff = ["-", ["coalesce", ["get", "p50"], ["get", "value"], 0], ["coalesce", ["get", "value"], 0]]
+            const presentYear = originYear + 2
+            const yrsFromPresent = Math.max(Math.abs(year - presentYear), 1)
+            const diff = [
+                "-",
+                ["coalesce", ["get", "p50"], ["get", "value"], 0],
+                [
+                    "coalesce",
+                    ["get", "value"],
+                    ["/",
+                        ["coalesce", ["get", "p50"], 0],
+                        ["+", 1, ["/", ["coalesce", ["to-number", ["get", "growth_pct"], 0], 0], 100]]
+                    ]
+                ]
+            ]
             return [
                 "interpolate",
                 ["linear"],
                 diff,
-                -50000, "#3b82f6", // Deep Blue
+                -10000 * yrsFromPresent, "#3b82f6", // Deep Blue
                 0, "#f8f8f8",      // Whiteish
-                150000, "#ef4444"  // Redish
+                30000 * yrsFromPresent, "#ef4444"  // Redish
             ]
         }
         return [
@@ -942,6 +955,15 @@ export function ForecastMap({
         const initialLng = parseFloat(urlParams.get("lng") || "-73.9857")
         const initialZoom = parseFloat(urlParams.get("zoom") || "10")
 
+        const bboxParam = urlParams.get("bbox")
+        let initialBounds: [number, number, number, number] | undefined
+        if (bboxParam) {
+            const parts = bboxParam.split(",").map(Number.parseFloat)
+            if (parts.length === 4 && parts.every((p) => !isNaN(p))) {
+                initialBounds = parts as [number, number, number, number]
+            }
+        }
+
         const map = new maplibregl.Map({
             container: mapContainerRef.current,
             style: {
@@ -964,6 +986,7 @@ export function ForecastMap({
             },
             center: [initialLng, initialLat],
             zoom: initialZoom,
+            ...(initialBounds ? { bounds: initialBounds, fitBoundsOptions: { padding: 50 } } : {}),
             maxZoom: 18,
             minZoom: 2,
             maxTileCacheSize: 30, // Keep very low — forces MapLibre to prioritize visible tiles over off-viewport prefetch

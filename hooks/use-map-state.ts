@@ -15,16 +15,28 @@ export function useMapState() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  const [mapState, setMapStateInternal] = useState<MapState>(() => ({
-    center: [
-      Number.parseFloat(searchParams.get("lng") || DEFAULT_MAP_STATE.center[0].toString()),
-      Number.parseFloat(searchParams.get("lat") || DEFAULT_MAP_STATE.center[1].toString()),
-    ],
-    zoom: Number.parseFloat(searchParams.get("zoom") || DEFAULT_MAP_STATE.zoom.toString()),
-    selectedId: searchParams.get("id") || null,
-    hoveredId: null,
-    highlightedIds: searchParams.get("highlights") ? searchParams.get("highlights")!.split(",") : [],
-  }))
+  const [mapState, setMapStateInternal] = useState<MapState>(() => {
+    let bbox: [number, number, number, number] | null = null
+    const bboxParam = searchParams.get("bbox")
+    if (bboxParam) {
+      const parts = bboxParam.split(",").map(Number.parseFloat)
+      if (parts.length === 4 && parts.every((p) => !isNaN(p))) {
+        bbox = parts as [number, number, number, number]
+      }
+    }
+
+    return {
+      center: [
+        Number.parseFloat(searchParams.get("lng") || DEFAULT_MAP_STATE.center[0].toString()),
+        Number.parseFloat(searchParams.get("lat") || DEFAULT_MAP_STATE.center[1].toString()),
+      ],
+      zoom: Number.parseFloat(searchParams.get("zoom") || DEFAULT_MAP_STATE.zoom.toString()),
+      bbox,
+      selectedId: searchParams.get("id") || null,
+      hoveredId: null,
+      highlightedIds: searchParams.get("highlights") ? searchParams.get("highlights")!.split(",") : [],
+    }
+  })
 
   // Update URL when selectedId changes - use ref to prevent infinite loops
   const prevSelectedIdRef = useRef<string | null>(mapState.selectedId)

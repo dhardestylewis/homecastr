@@ -207,6 +207,15 @@ export function VectorMap({
         const initialLng = parseFloat(urlParams.get("lng") || "-95.37") // Houston center
         const initialZoom = parseFloat(urlParams.get("zoom") || "10")   // City scale
 
+        const bboxParam = urlParams.get("bbox")
+        let initialBounds: [number, number, number, number] | undefined
+        if (bboxParam) {
+            const parts = bboxParam.split(",").map(Number.parseFloat)
+            if (parts.length === 4 && parts.every((p) => !isNaN(p))) {
+                initialBounds = parts as [number, number, number, number]
+            }
+        }
+
         const map = new maplibregl.Map({
             container: mapContainerRef.current,
             style: {
@@ -229,6 +238,7 @@ export function VectorMap({
             },
             center: [initialLng, initialLat],
             zoom: initialZoom,
+            ...(initialBounds ? { bounds: initialBounds, fitBoundsOptions: { padding: 50 } } : {}),
             maxZoom: 18,
             minZoom: 2
         })
@@ -793,11 +803,12 @@ export function VectorMap({
                 0.50, "#3b82f6"  // Deep Blue
             ];
         } else if (filters.colorMode === "growth_dollar") {
+            const yrsFromPresent = Math.max(Math.abs(year - 2026), 1)
             fillColor = [
                 "interpolate", ["linear"], ["-", ["get", "val"], ["get", "cv"]],
-                -50000, "#3b82f6", // Deep Blue
+                -10000 * yrsFromPresent, "#3b82f6", // Deep Blue
                 0, "#f8f8f8",      // Whiteish
-                150000, "#ef4444"  // Redish
+                30000 * yrsFromPresent, "#ef4444"  // Redish
             ];
         } else {
             fillColor = [

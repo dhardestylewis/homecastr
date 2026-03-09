@@ -9,6 +9,7 @@ import { DownloadButton } from "@/components/publishing/DownloadButton"
 import { DatasetJsonLd } from "@/components/publishing/DatasetJsonLd"
 import { ForecastMapEmbed } from "@/components/publishing/ForecastMapEmbed"
 import { getCenterForCity } from "@/lib/publishing/geo-centroids"
+import { getDynamicBounds } from "@/lib/publishing/geo-bounds"
 
 export const revalidate = 3600
 
@@ -86,7 +87,7 @@ export default async function CityHubPage({ params, searchParams }: PageProps) {
     const supabase = getSupabaseAdmin()
     const tractIds = tracts.map(t => t.tractGeoid)
 
-    const [{ data: forecastRows }, enrichedNames] = await Promise.all([
+    const [{ data: forecastRows }, enrichedNames, dynamicBounds] = await Promise.all([
         supabase
             .schema(schema as any)
             .from("metrics_tract_forecast")
@@ -96,6 +97,7 @@ export default async function CityHubPage({ params, searchParams }: PageProps) {
             .eq("series_kind", "forecast")
             .not("p50", "is", null),
         batchEnrichTracts(tractIds),
+        getDynamicBounds("county", countyFipsPrefix)
     ])
 
     // Build lookup: tractId -> { p50_current, appreciation_5yr, spread_5yr }
@@ -248,6 +250,7 @@ export default async function CityHubPage({ params, searchParams }: PageProps) {
                 lat={mapCenter.lat}
                 lng={mapCenter.lng}
                 zoom={mapCenter.zoom}
+                bbox={dynamicBounds}
                 label={`${cityName} Live Forecast Map`}
                 height={400}
             />

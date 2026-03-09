@@ -177,7 +177,7 @@ export default function H3Map({ year = 2026, colorMode = "growth", mapState }: H
     useEffect(() => {
         if (!map.current || !map.current.isStyleLoaded()) return;
 
-        console.log(`[H3Map] Updating color mode to ${colorMode}`);
+        console.log(`[H3Map] Updating color mode to ${colorMode} for year ${year}`);
 
         const growthColorExpr: any = [
             'interpolate',
@@ -188,13 +188,14 @@ export default function H3Map({ year = 2026, colorMode = "growth", mapState }: H
             50, '#059669'
         ];
 
+        const yrsFromPresent = Math.max(Math.abs(year - 2026), 1);
         const growthDollarColorExpr: any = [
             'interpolate',
             ['linear'],
             ['-', ['get', 'med_predicted_value'], ['get', 'current_value']],
-            -50000, '#3b82f6',
+            -10000 * yrsFromPresent, '#3b82f6',
             0, '#f8f8f8',
-            150000, '#ef4444'
+            30000 * yrsFromPresent, '#ef4444'
         ];
 
         resLevels.forEach(res => {
@@ -207,7 +208,7 @@ export default function H3Map({ year = 2026, colorMode = "growth", mapState }: H
                 );
             }
         });
-    }, [colorMode]);
+    }, [colorMode, year]);
 
     // Sync with external mapState (Search / Tavus / URL)
     useEffect(() => {
