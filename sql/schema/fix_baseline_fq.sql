@@ -1,17 +1,7 @@
--- =============================================================================
--- Align growth_pct baseline to 2026 (horizon_m=24) instead of 2025 (horizon_m=12)
--- 
--- For origin_year=2024:
---   horizon_m=12 → 2025 (old baseline)
---   horizon_m=24 → 2026 (new baseline = "now")
---
--- This must match the stats API (/api/forecast-stats?mode=growth) which also
--- uses horizon_m=24 for computing color ramp breakpoints.
---
--- Deploy via Supabase SQL Editor.
--- =============================================================================
+-- Deploy baseline_value to forecast_queue schema
+-- The app defaults to schema='forecast_queue', not 'forecast_20260220_7f31c6e4'
 
-create or replace function forecast_20260220_7f31c6e4._mvt_forecast_generic(
+create or replace function forecast_queue._mvt_forecast_generic(
   p_layer_name       text,
   p_geom_fqtn        text,
   p_geom_key_col     text,
@@ -46,8 +36,8 @@ begin
 
   if p_horizon_m <= 0 then
     -- ===== HISTORICAL MODE =====
-    -- Slider year from history, "now" (2026) from forecast at horizon_m=24
     -- growth = (now_2026 - past) / past * 100
+    -- "now" = forecast at horizon_m=24
 
     perform 1 from pg_catalog.pg_class c
       join pg_catalog.pg_namespace n on n.oid = c.relnamespace
@@ -112,12 +102,12 @@ begin
         select g.%1$I::text as id, m.origin_year, m.horizon_m,
           coalesce(m.forecast_year,m.origin_year+((m.horizon_m+11)/12))::integer as forecast_year,
           m.value, m.p10, m.p25, coalesce(m.p50,m.value) as p50, m.p75, m.p90, m.n,
-          coalesce(f_now24.p50, f_now24.value, f_now12.p50, f_now12.value) as baseline_value,
+          coalesce(f_now.p50, f_now.value) as baseline_value,
           CASE 
-            WHEN coalesce(m.p50,m.value) IS NULL OR coalesce(f_now24.p50,f_now24.value,f_now12.p50,f_now12.value) IS NULL THEN null
+            WHEN coalesce(m.p50,m.value) IS NULL OR coalesce(f_now.p50,f_now.value) IS NULL THEN null
             ELSE least(100, greatest(-50,
-              round((100.0*(coalesce(m.p50,m.value)-coalesce(f_now24.p50,f_now24.value,f_now12.p50,f_now12.value))
-                /nullif(coalesce(f_now24.p50,f_now24.value,f_now12.p50,f_now12.value),0))::numeric,1)
+              round((100.0*(coalesce(m.p50,m.value)-coalesce(f_now.p50,f_now.value))
+                /nullif(coalesce(f_now.p50,f_now.value),0))::numeric,1)
             ))
           END as growth_pct,
           m.series_kind, m.variant_id, m.run_id, m.backtest_id,
@@ -125,13 +115,9 @@ begin
           ST_AsMVTGeom(ST_Transform(g.geom,3857),bounds.b3857,4096,256,true) as geom
         from %2$s g
         join %3$s m on m.%4$I=g.%1$I
-        left join %3$s f_now24 on f_now24.%4$I=g.%1$I
-          and f_now24.origin_year=$4 and f_now24.horizon_m=24
-          and f_now24.series_kind=$6 and f_now24.variant_id=$7
-        left join %3$s f_now12 on f_now12.%4$I=g.%1$I
-          and f_now12.origin_year=$4 and f_now12.horizon_m=12
-          and f_now12.series_kind=$6 and f_now12.variant_id=$7
-          and f_now24.%4$I IS NULL
+        left join %3$s f_now on f_now.%4$I=g.%1$I
+          and f_now.origin_year=$4 and f_now.horizon_m=24
+          and f_now.series_kind=$6 and f_now.variant_id=$7
         cross join bounds
         where g.geom && bounds.b4326 and ST_Intersects(g.geom,bounds.b4326)
           and m.origin_year=$4 and m.horizon_m=$5

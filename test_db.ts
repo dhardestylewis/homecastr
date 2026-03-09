@@ -2,7 +2,6 @@ import { loadEnvConfig } from "@next/env"
 loadEnvConfig(process.cwd())
 
 import { Client } from "pg"
-import * as fs from "fs"
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"
 
@@ -14,23 +13,19 @@ async function main() {
 
     await client.connect()
 
+    // Check distinct state FIPS prefixes in geo_tract20_tx
     const res = await client.query(`
-        SELECT f_table_name, f_geometry_column 
-        FROM geometry_columns 
-        ORDER BY f_table_name;
+        SELECT DISTINCT substring(geoid from 1 for 2) as state_fips, count(*) as tract_count
+        FROM public.geo_tract20_tx 
+        GROUP BY substring(geoid from 1 for 2)
+        ORDER BY state_fips;
     `)
-
-    fs.writeFileSync("/tmp/geo_tables.json", JSON.stringify(res.rows, null, 2))
-
-    const res2 = await client.query(`
-        SELECT routine_name FROM information_schema.routines 
-        WHERE routine_name LIKE 'mvt_%' OR routine_name LIKE 'get_feature%'
-        ORDER BY routine_name;
-    `)
-    fs.writeFileSync("/tmp/geo_funcs.json", JSON.stringify(res2.rows, null, 2))
+    console.log("States in geo_tract20_tx:", res.rows.length, "states")
+    for (const r of res.rows) {
+        console.log(`  ${r.state_fips}: ${r.tract_count} tracts`)
+    }
 
     await client.end()
-    console.log("Done")
 }
 
 main().catch(console.error)

@@ -10,7 +10,7 @@ async function main() {
         ssl: { rejectUnauthorized: false }
     });
     await client.connect();
-    const sql = fs.readFileSync('sql/schema/fix_baseline_2026.sql', 'utf8');
+    const sql = fs.readFileSync('sql/schema/fix_baseline_fq.sql', 'utf8');
     await client.query(sql);
     console.log('Deployed SQL successfully.');
     await client.end();
