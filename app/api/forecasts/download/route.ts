@@ -65,8 +65,8 @@ async function getStateOutlook(stateFips: string) {
             if (!error && data && data.length > 0) {
                 const row = data[0]
                 const highestUpside = row.highest_upside !== null ? Number(row.highest_upside) : null
-                // If RPC highest_upside looks corrupt (>500%), fall through to JS recomputation
-                if (highestUpside !== null && highestUpside > 500) throw new Error('outlier')
+                // If RPC highest_upside looks corrupt (>100%), fall through to JS recomputation
+                if (highestUpside !== null && highestUpside > 100) throw new Error('outlier')
                 return {
                     countyCount: Number(row.county_count || 0),
                     neighborhoodCount: Number(row.neighborhood_count || 0),
@@ -106,7 +106,7 @@ async function getStateOutlook(stateFips: string) {
             const h60 = h60Map.get(tid)
             if (h12 >= 20_000 && h60 && h12 < 5_000_000) {
                 const appr = ((h60 - h12) / h12) * 100
-                if (appr > -95 && appr <= 500) { appreciations.push(appr); values.push(h12) }
+                if (appr > -95 && appr <= 100) { appreciations.push(appr); values.push(h12) }
             }
         }
         if (appreciations.length === 0) return { countyCount: counties.size, neighborhoodCount: tracts.size, medianValue: null, medianAppreciation: null, highestUpside: null }

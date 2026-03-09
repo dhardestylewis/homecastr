@@ -66,9 +66,9 @@ async function getStateOutlooksFast(stateFips: string) {
             if (!error && data && data.length > 0) {
                 const row = data[0]
                 const highestUpside = row.highest_upside !== null ? Number(row.highest_upside) : null
-                // If RPC highest_upside looks corrupt (>500%), fall through to JS recomputation
+                // If RPC highest_upside looks corrupt (>100%), fall through to JS recomputation
                 // so we get a real interpolated p99 from valid tracts rather than a capped junk value.
-                if (highestUpside !== null && highestUpside > 500) throw new Error('outlier')
+                if (highestUpside !== null && highestUpside > 100) throw new Error('outlier')
                 return {
                     countyCount: Number(row.county_count || 0),
                     neighborhoodCount: Number(row.neighborhood_count || 0),
@@ -135,7 +135,7 @@ async function getStateOutlooksFast(stateFips: string) {
             const h60 = h60Map.get(tractId)
             if (h12 >= 20_000 && h60 && h12 < 5_000_000) {
                 const appr = ((h60 - h12) / h12) * 100
-                if (appr > -95 && appr <= 500) {
+                if (appr > -95 && appr <= 100) {
                     appreciations.push(appr)
                     values.push(h12)
                 }
