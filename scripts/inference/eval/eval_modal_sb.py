@@ -56,6 +56,7 @@ def evaluate_checkpoints(
     sample_size: int = 20_000,
     scenarios: int = 128,
     version_tag: str = "v12_sb",
+    nocalibrators: bool = False,
 ):
     import json, time, tempfile, glob, pickle
     import numpy as np
@@ -516,8 +517,8 @@ SimpleScaler = _DimSafeScaler
     actual_dim = ctx["cur_num"].shape[1]
     if actual_dim < num_dim:
         n_pad = num_dim - actual_dim
-        pad = torch.zeros(ctx["cur_num"].shape[0], n_pad, dtype=ctx["cur_num"].dtype, device=ctx["cur_num"].device)
-        ctx["cur_num"] = torch.cat([ctx["cur_num"], pad], dim=1)
+        pad = np.zeros((ctx["cur_num"].shape[0], n_pad), dtype=ctx["cur_num"].dtype)
+        ctx["cur_num"] = np.concatenate([ctx["cur_num"], pad], axis=1)
     elif actual_dim > num_dim:
         ctx["cur_num"] = ctx["cur_num"][:, :num_dim]
     

@@ -290,27 +290,32 @@ def process_one_year(blob_name: str) -> dict:
 
     geo_cols = [c for c in df.columns if c.lower() in ("geo_id", "geoid", "parcelfips")]
 
+    def fast_clean_str(series):
+        # Use pyarrow[string] for fast vectorized string operations without GIL lock
+        return series.astype("string[pyarrow]").str.strip()
+
     if fips_cols and prop_cols:
         id_strategy = f"FIPS ({fips_cols[0]}) + PROP_ID ({prop_cols[0]})"
-        acct_series = df[fips_cols[0]].astype(str).str.strip() + "_" + df[prop_cols[0]].astype(str).str.strip()
+        acct_series = fast_clean_str(df[fips_cols[0]]) + "_" + fast_clean_str(df[prop_cols[0]])
     elif cnty_name_cols and prop_cols:
         id_strategy = f"COUNTY ({cnty_name_cols[0]}) + PROP_ID ({prop_cols[0]})"
-        acct_series = df[cnty_name_cols[0]].astype(str).str.strip() + "_" + df[prop_cols[0]].astype(str).str.strip()
+        acct_series = fast_clean_str(df[cnty_name_cols[0]]) + "_" + fast_clean_str(df[prop_cols[0]])
     elif geo_cols:
         id_strategy = f"GEO_ID ({geo_cols[0]})"
-        acct_series = df[geo_cols[0]].astype(str).str.strip()
+        acct_series = fast_clean_str(df[geo_cols[0]])
     elif prop_cols:
         id_strategy = f"WARNING! Raw PROP_ID ({prop_cols[0]}) — collision risk"
-        acct_series = df[prop_cols[0]].astype(str).str.strip()
+        acct_series = fast_clean_str(df[prop_cols[0]])
     else:
         id_strategy = f"FATAL FALLBACK: {df.columns[0]}"
-        acct_series = df[df.columns[0]].astype(str).str.strip()
+        acct_series = fast_clean_str(df[df.columns[0]])
 
     print(f"  ID Strategy: {id_strategy}")
 
     # ── Build result frame (keep df index intact so value slices stay aligned) ──
-    bad_accts = {"none", "nan", "", "none_none", "nan_nan", "none_nan", "nan_none"}
-    keep_mask = ~acct_series.str.lower().str.strip().isin(bad_accts) & acct_series.notna()
+    bad_accts = {"none", "nan", "", "none_none", "nan_nan", "none_nan", "nan_none", "<NA>_<NA>"}
+    # Lowercase only for the bad_acct check, using pyarrow engine for speed
+    keep_mask = ~acct_series.str.lower().isin(bad_accts) & acct_series.notna()
     df = df[keep_mask].copy()          # filter df so it stays aligned with acct_series
     acct_series = acct_series[keep_mask]
     print(f"  After dropping empty IDs: {len(df):,} rows")
