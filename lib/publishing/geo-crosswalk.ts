@@ -1026,13 +1026,13 @@ export async function getCitiesForState(
 
         if (data.length === 0) return []
 
-        // Group by county FIPS (first 5 digits), tracking sample tract IDs per county
-        const countyMap = new Map<string, { count: number; sampleTracts: string[] }>()
+        // Group by county FIPS (first 5 digits), tracking unique tract GEOIDs per county
+        const countyMap = new Map<string, { tracts: Set<string>; sampleTracts: string[] }>()
         for (const row of data as any[]) {
             const county = row.tract_geoid20.substring(0, 5)
-            const entry = countyMap.get(county) || { count: 0, sampleTracts: [] }
-            entry.count++
-            if (entry.sampleTracts.length < 5) entry.sampleTracts.push(row.tract_geoid20)
+            const entry = countyMap.get(county) || { tracts: new Set(), sampleTracts: [] }
+            entry.tracts.add(row.tract_geoid20)
+            if (entry.sampleTracts.length < 5 && !entry.sampleTracts.includes(row.tract_geoid20)) entry.sampleTracts.push(row.tract_geoid20)
             countyMap.set(county, entry)
         }
 
@@ -1055,7 +1055,7 @@ export async function getCitiesForState(
             }
 
             if (city) {
-                cities.push({ city, citySlug: slugify(city), countyFips, tractCount: count })
+                cities.push({ city, citySlug: slugify(city), countyFips, tractCount: tracts.size })
             } else {
                 unresolved.set(countyFips, sampleTracts)
             }
@@ -1099,8 +1099,8 @@ export async function getCitiesForState(
                     // If we STILL don't have a name after DB lookup, it's a synthetic FIPS (like 48900)
                     // Filter it out entirely rather than showing 'County 48900'
                     if (city) {
-                        const { count } = countyMap.get(countyFips)!
-                        cities.push({ city, citySlug: slugify(city), countyFips, tractCount: count })
+                        const { tracts } = countyMap.get(countyFips)!
+                        cities.push({ city, citySlug: slugify(city), countyFips, tractCount: tracts.size })
                     }
                 }
             } catch (err) {
@@ -1149,6 +1149,38 @@ export async function getStatesWithData(
         }
 
         return states.sort((a, b) => a.stateName.localeCompare(b.stateName))
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Origin-year resolution
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns the latest origin_year available in metrics_tract_forecast for a
+ * given geoid prefix (e.g. a state FIPS "23" or county FIPS "23005").
+ * Falls back to 2025 if no data is found.
+ */
+export async function getLatestOriginYear(
+    geoidPrefix: string,
+    schema = "forecast_queue"
+): Promise<number> {
+    return withRedisCache(`latest_origin_year:${geoidPrefix}:${schema}`, async () => {
+        const supabase = getSupabaseAdmin()
+        const { data } = await supabase
+            .schema(schema as any)
+            .from("metrics_tract_forecast")
+            .select("origin_year")
+            .gte("tract_geoid20", geoidPrefix)
+            .lt("tract_geoid20", geoidPrefix + "z")
+            .eq("horizon_m", 12)
+            .eq("series_kind", "forecast")
+            .not("p50", "is", null)
+            .order("origin_year", { ascending: false })
+            .limit(1)
+            .maybeSingle()
+
+        return (data as any)?.origin_year ?? 2025
     })
 }
 

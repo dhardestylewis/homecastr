@@ -1,11 +1,13 @@
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 import Link from "next/link"
-import { getTractsForCity, batchEnrichTracts, getStatesWithData, getCitiesForState } from "@/lib/publishing/geo-crosswalk"
+import { getTractsForCity, batchEnrichTracts, getStatesWithData, getCitiesForState, getLatestOriginYear } from "@/lib/publishing/geo-crosswalk"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
 import { SortableNeighborhoodTable } from "@/components/publishing/SortableNeighborhoodTable"
 import { DownloadButton } from "@/components/publishing/DownloadButton"
 import { DatasetJsonLd } from "@/components/publishing/DatasetJsonLd"
+import { ForecastMapEmbed } from "@/components/publishing/ForecastMapEmbed"
+import { getCenterForCity } from "@/lib/publishing/geo-centroids"
 
 export const revalidate = 3600
 
@@ -76,9 +78,13 @@ export default async function CityHubPage({ params, searchParams }: PageProps) {
     const stateName = tracts[0]?.stateName || STATE_NAMES[state] || state.toUpperCase()
     const stateAbbr = tracts[0]?.stateAbbr || state.toUpperCase()
 
+    // Derive county FIPS prefix from the first tract (all tracts in same county)
+    const countyFipsPrefix = tracts[0]?.tractGeoid?.substring(0, 5) ?? ""
+
     // Batch fetch forecast data and neighborhood names in parallel
     const supabase = getSupabaseAdmin()
     const tractIds = tracts.map(t => t.tractGeoid)
+    const originYear = countyFipsPrefix ? await getLatestOriginYear(countyFipsPrefix, schema) : 2025
 
     const [{ data: forecastRows }, enrichedNames] = await Promise.all([
         supabase
@@ -86,7 +92,7 @@ export default async function CityHubPage({ params, searchParams }: PageProps) {
             .from("metrics_tract_forecast")
             .select("tract_geoid20, horizon_m, p50, p10, p90")
             .in("tract_geoid20", tractIds)
-            .eq("origin_year", 2025)
+            .eq("origin_year", originYear)
             .in("horizon_m", [12, 60])
             .eq("series_kind", "forecast")
             .not("p50", "is", null),
@@ -207,6 +213,10 @@ export default async function CityHubPage({ params, searchParams }: PageProps) {
     const medianLow = sortedValues[p10Idx] || 0
     const medianHigh = sortedValues[p90Idx] || 0
 
+    // Resolve map centroid — use first tract's county FIPS
+    const countyFips = tracts[0]?.countyFips
+    const mapCenter = getCenterForCity(countyFips, state)
+
     return (
         <div className="space-y-8">
             <DatasetJsonLd
@@ -216,7 +226,16 @@ export default async function CityHubPage({ params, searchParams }: PageProps) {
                 geographyCovered={`${cityName}, ${stateName}, United States`}
                 downloadQuery={`state=${state}&city=${city}`}
             />
-            {/* Breadcrumbs */}
+
+            {/* Live map embed — pre-centered on this city */}
+            <ForecastMapEmbed
+                lat={mapCenter.lat}
+                lng={mapCenter.lng}
+                zoom={mapCenter.zoom}
+                label={`${cityName} Live Forecast Map`}
+                height={400}
+            />
+
             <nav aria-label="Breadcrumb" className="text-xs text-muted-foreground flex items-center gap-1.5">
                 <Link href="/forecasts" className="hover:text-foreground transition-colors">Forecasts</Link>
                 <span>/</span>

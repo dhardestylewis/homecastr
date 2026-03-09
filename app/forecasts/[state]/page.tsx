@@ -1,12 +1,14 @@
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 import Link from "next/link"
-import { getCitiesForState, getStatesWithData } from "@/lib/publishing/geo-crosswalk"
+import { getCitiesForState, getStatesWithData, getLatestOriginYear } from "@/lib/publishing/geo-crosswalk"
 import { withRedisCache } from "@/lib/redis"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
 import { SortableCountyTable, type CountyRow } from "@/components/publishing/SortableCountyTable"
 import { DownloadButton } from "@/components/publishing/DownloadButton"
 import { DatasetJsonLd } from "@/components/publishing/DatasetJsonLd"
+import { ForecastMapEmbed } from "@/components/publishing/ForecastMapEmbed"
+import { getCenterForState } from "@/lib/publishing/geo-centroids"
 
 export const revalidate = 3600
 
@@ -77,10 +79,9 @@ async function getCountyOutlooks(stateFips: string) {
                 supabase
                     .schema(SCHEMA as any)
                     .from("metrics_tract_forecast")
-                    .select("tract_geoid20, p50")
+                    .select("tract_geoid20, origin_year, p50")
                     .gte("tract_geoid20", stateFips)
                     .lt("tract_geoid20", stateFips + "z")
-                    .eq("origin_year", 2025)
                     .eq("horizon_m", 12)
                     .eq("series_kind", "forecast")
                     .not("p50", "is", null)
@@ -90,10 +91,9 @@ async function getCountyOutlooks(stateFips: string) {
                 supabase
                     .schema(SCHEMA as any)
                     .from("metrics_tract_forecast")
-                    .select("tract_geoid20, p50")
+                    .select("tract_geoid20, origin_year, p50")
                     .gte("tract_geoid20", stateFips)
                     .lt("tract_geoid20", stateFips + "z")
-                    .eq("origin_year", 2025)
                     .eq("horizon_m", 60)
                     .eq("series_kind", "forecast")
                     .not("p50", "is", null)
@@ -101,21 +101,37 @@ async function getCountyOutlooks(stateFips: string) {
             ),
         ])
 
-        const h12Map = new Map<string, number>()
-        for (const row of h12Rows) h12Map.set(row.tract_geoid20, row.p50)
-        const h60Map = new Map<string, number>()
-        for (const row of h60Rows) h60Map.set(row.tract_geoid20, row.p50)
+        const h12Map = new Map<string, { year: number, p50: number }>()
+        for (const row of h12Rows) {
+            const existing = h12Map.get(row.tract_geoid20)
+            if (!existing || row.origin_year > existing.year) {
+                h12Map.set(row.tract_geoid20, { year: row.origin_year, p50: row.p50 })
+            }
+        }
+
+        const h60Map = new Map<string, { year: number, p50: number }>()
+        for (const row of h60Rows) {
+            const existing = h60Map.get(row.tract_geoid20)
+            if (!existing || row.origin_year > existing.year) {
+                h60Map.set(row.tract_geoid20, { year: row.origin_year, p50: row.p50 })
+            }
+        }
 
         // Group by county FIPS and compute appreciation
         const countyData = new Map<string, { appreciations: number[]; values: number[] }>()
 
-        for (const [tractId, h12] of h12Map) {
-            const h60 = h60Map.get(tractId)
+        for (const [tractId, h12Data] of h12Map) {
+            const h60Data = h60Map.get(tractId)
             const countyFips = tractId.substring(0, 5)
+
+            if (!h60Data || h12Data.year !== h60Data.year) continue
+
+            const h12 = h12Data.p50
+            const h60 = h60Data.p50
 
             if (h12 >= 20_000 && h60 && h12 < 5_000_000) {
                 const appr = ((h60 - h12) / h12) * 100
-                if (appr > -95 && appr <= 100) {
+                if (appr > -95 && appr <= 300) {
                     if (!countyData.has(countyFips)) countyData.set(countyFips, { appreciations: [], values: [] })
                     const cd = countyData.get(countyFips)!
                     cd.appreciations.push(appr)
@@ -196,6 +212,8 @@ export default async function StateHubPage({ params }: PageProps) {
     allValues.sort((a, b) => a - b)
     const stateMedianValue = allValues.length > 0 ? allValues[Math.floor(allValues.length / 2)] : null
 
+    const mapCenter = getCenterForState(state)
+
     return (
         <div className="space-y-8">
             <DatasetJsonLd
@@ -205,6 +223,16 @@ export default async function StateHubPage({ params }: PageProps) {
                 geographyCovered={`${stateName}, United States`}
                 downloadQuery={`state=${state}`}
             />
+
+            {/* Live map embed — pre-centered on this state */}
+            <ForecastMapEmbed
+                lat={mapCenter.lat}
+                lng={mapCenter.lng}
+                zoom={mapCenter.zoom}
+                label={`${stateName} Live Forecast Map`}
+                height={400}
+            />
+
             {/* Breadcrumbs */}
             <nav aria-label="Breadcrumb" className="text-xs text-muted-foreground flex items-center gap-1.5">
                 <Link href="/forecasts" className="hover:text-foreground transition-colors">Forecasts</Link>
