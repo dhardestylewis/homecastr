@@ -65,12 +65,16 @@ async function getStateOutlooksFast(stateFips: string) {
             })
             if (!error && data && data.length > 0) {
                 const row = data[0]
+                const highestUpside = row.highest_upside !== null ? Number(row.highest_upside) : null
+                // If RPC highest_upside looks corrupt (>500%), fall through to JS recomputation
+                // so we get a real interpolated p99 from valid tracts rather than a capped junk value.
+                if (highestUpside !== null && highestUpside > 500) throw new Error('outlier')
                 return {
                     countyCount: Number(row.county_count || 0),
                     neighborhoodCount: Number(row.neighborhood_count || 0),
                     medianValue: row.median_value !== null ? Number(row.median_value) : null,
                     medianAppreciation: row.median_appreciation !== null ? Number(row.median_appreciation) : null,
-                    highestUpside: row.highest_upside !== null ? Math.min(Number(row.highest_upside), 500) : null,
+                    highestUpside,
                 }
             }
         } catch { /* fall through to client-side */ }
