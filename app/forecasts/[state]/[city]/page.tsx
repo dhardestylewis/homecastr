@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 import Link from "next/link"
-import { getTractsForCity, batchEnrichTracts, getStatesWithData, getCitiesForState, getLatestOriginYear } from "@/lib/publishing/geo-crosswalk"
+import { getTractsForCity, batchEnrichTracts, getStatesWithData, getCitiesForState } from "@/lib/publishing/geo-crosswalk"
 import { isOutlierTract, logFlaggedOutliers, createOutlierTag, type OutlierTag } from "@/lib/publishing/forecast-outlier-filter"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
 import { SortableNeighborhoodTable } from "@/components/publishing/SortableNeighborhoodTable"
@@ -85,15 +85,13 @@ export default async function CityHubPage({ params, searchParams }: PageProps) {
     // Batch fetch forecast data and neighborhood names in parallel
     const supabase = getSupabaseAdmin()
     const tractIds = tracts.map(t => t.tractGeoid)
-    const originYear = countyFipsPrefix ? await getLatestOriginYear(countyFipsPrefix, schema) : 2025
 
     const [{ data: forecastRows }, enrichedNames] = await Promise.all([
         supabase
             .schema(schema as any)
             .from("metrics_tract_forecast")
-            .select("tract_geoid20, horizon_m, p50, p10, p90")
+            .select("tract_geoid20, origin_year, horizon_m, p50, p10, p90")
             .in("tract_geoid20", tractIds)
-            .eq("origin_year", originYear)
             .in("horizon_m", [12, 60])
             .eq("series_kind", "forecast")
             .not("p50", "is", null),
@@ -105,6 +103,7 @@ export default async function CityHubPage({ params, searchParams }: PageProps) {
         p50_current: number
         appreciation_5yr: number
         spread_5yr: number
+        h60_p50: number | null
     }>()
 
     if (forecastRows) {
@@ -116,8 +115,14 @@ export default async function CityHubPage({ params, searchParams }: PageProps) {
         }
 
         for (const [tractId, rows] of grouped) {
-            const h12 = rows.find((r: any) => r.horizon_m === 12)
-            const h60 = rows.find((r: any) => r.horizon_m === 60)
+            let maxYear = 0
+            for (const r of rows) {
+                if (r.origin_year > maxYear) maxYear = r.origin_year
+            }
+
+            const latestRows = rows.filter(r => r.origin_year === maxYear)
+            const h12 = latestRows.find((r: any) => r.horizon_m === 12)
+            const h60 = latestRows.find((r: any) => r.horizon_m === 60)
             if (h12) {
                 tractLookup.set(tractId, {
                     p50_current: h12.p50,
