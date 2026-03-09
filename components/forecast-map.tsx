@@ -916,9 +916,9 @@ export function ForecastMap({
                 "interpolate",
                 ["linear"],
                 diff,
-                -50000, "#ef4444", // Redish
+                -50000, "#3b82f6", // Deep Blue
                 0, "#f8f8f8",      // Whiteish
-                150000, "#3b82f6"  // Deep Blue
+                150000, "#ef4444"  // Redish
             ]
         }
         return [

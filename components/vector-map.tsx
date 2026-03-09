@@ -795,9 +795,9 @@ export function VectorMap({
         } else if (filters.colorMode === "growth_dollar") {
             fillColor = [
                 "interpolate", ["linear"], ["-", ["get", "val"], ["get", "cv"]],
-                -50000, "#ef4444", // Redish
+                -50000, "#3b82f6", // Deep Blue
                 0, "#f8f8f8",      // Whiteish
-                150000, "#3b82f6"  // Deep Blue
+                150000, "#ef4444"  // Redish
             ];
         } else {
             fillColor = [

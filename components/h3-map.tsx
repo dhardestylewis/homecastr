@@ -192,9 +192,9 @@ export default function H3Map({ year = 2026, colorMode = "growth", mapState }: H
             'interpolate',
             ['linear'],
             ['-', ['get', 'med_predicted_value'], ['get', 'current_value']],
-            -50000, '#ef4444',
+            -50000, '#3b82f6',
             0, '#f8f8f8',
-            150000, '#3b82f6'
+            150000, '#ef4444'
         ];
 
         resLevels.forEach(res => {
