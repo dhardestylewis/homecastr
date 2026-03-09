@@ -175,7 +175,6 @@ export function VectorMap({
     const activeHoverIds = useRef<Set<string>>(new Set()) // Track all for sweep
     // Unified tooltip state (matches MapView pattern)
     const [tooltipData, setTooltipData] = useState<{ x: number; y: number; globalX: number; globalY: number; properties: any } | null>(null)
-    const [fixedTooltipPos, setFixedTooltipPos] = useState<{ globalX: number; globalY: number } | null>(null)
 
     // Fix stale closure for isMobile in map event handlers
     const isMobileRef = useRef(isMobile)

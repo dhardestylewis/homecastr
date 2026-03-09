@@ -1,0 +1,27 @@
+SCHEMA: forecast_queue
+
+=== History for 0611570025R ===
+Error: none
+Rows: 0
+
+=== Overall metrics_tract_history stats ===
+Total rows in metrics_tract_history: 1436518
+
+Sample rows:
+  tract=42051260300 year=2017 value=90000 p50=90000
+  tract=13089023212 year=2015 value=108300 p50=108300
+  tract=06085510801 year=2016 value=1487400 p50=1487400
+  tract=39057240100 year=2019 value=138200 p50=138200
+  tract=26111290400 year=2016 value=148900 p50=148900
+  tract=55057100600 year=2020 value=102500 p50=102500
+  tract=48439113919 year=2020 value=239700 p50=239700
+  tract=42079200800 year=2022 value=90700 p50=90700
+  tract=37151030700 year=2018 value=109300 p50=109300
+  tract=42027011504 year=2024 value=461700 p50=461700
+
+=== History for Houston tract 4820110100 ===
+Rows: 0
+
+=== Checking table in public schema ===
+Public schema error: none
+Public schema rows: 0
