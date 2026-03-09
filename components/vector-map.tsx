@@ -397,7 +397,8 @@ export function VectorMap({
                 stability_flag: (p.ap || 0) > 0.15,
                 robustness_flag: (p.ap || 0) > 0.25,
                 has_data: (p.count || 0) > 0,
-                med_predicted_value: p.val || 0
+                med_predicted_value: p.val || 0,
+                current_value: p.cv || 0
             }
 
             // Only update tooltip if not in locked mode (has selection)
@@ -783,19 +784,29 @@ export function VectorMap({
         }
 
         // Apply Color Logic (HEX equivalents of OKLCH for MapLibre compatibility)
-        const fillColor: any = filters.colorMode === "growth"
-            ? [
+        let fillColor: any;
+        if (filters.colorMode === "growth") {
+            fillColor = [
                 "interpolate", ["linear"], ["get", "opp"],
                 -0.50, "#b159ff", // Deep Purple
                 0.00, "#f8f8f8", // Whiteish
                 0.50, "#3b82f6"  // Deep Blue
-            ]
-            : [
+            ];
+        } else if (filters.colorMode === "growth_dollar") {
+            fillColor = [
+                "interpolate", ["linear"], ["-", ["get", "val"], ["get", "cv"]],
+                -50000, "#ef4444", // Redish
+                0, "#f8f8f8",      // Whiteish
+                150000, "#3b82f6"  // Deep Blue
+            ];
+        } else {
+            fillColor = [
                 "interpolate", ["linear"], ["get", "val"],
                 100000, "#3b0764",
                 800000, "#f43f5e",
                 1500000, "#fbbf24"
             ];
+        }
 
         // Update colors on BOTH layers to be ready
         ["a", "b"].forEach(s => {

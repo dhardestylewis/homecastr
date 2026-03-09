@@ -486,7 +486,7 @@ function DashboardContent() {
     }
   }, [isUsingMockData, toast])
 
-  const handleColorModeChange = useCallback((mode: "growth" | "value") => {
+  const handleColorModeChange = useCallback((mode: "growth" | "value" | "growth_dollar") => {
     setFilters({ colorMode: mode })
     // First time the user clicks Growth and hasn't touched the timeline — animate to 2027
     if (mode === "growth" && !hasManuallySetYear && currentYear < 2027) {

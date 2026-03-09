@@ -208,6 +208,7 @@ export interface FeatureProperties {
   has_data: boolean // New field: true if property_count > 0, false for empty coverage cells
   med_n_years?: number
   med_predicted_value?: number
+  current_value?: number
   med_noi?: number
   med_dscr?: number
   med_score?: number

@@ -76,6 +76,16 @@ export default function H3Map({ year = 2026, colorMode = "growth", mapState }: H
                     1500000, '#d97706' // Warm Amber
                 ];
 
+                // Dollar Growth mode color scale
+                const growthDollarColorExpr: any = [
+                    'interpolate',
+                    ['linear'],
+                    ['-', ['get', 'med_predicted_value'], ['get', 'current_value']],
+                    -50000, '#ef4444',
+                    0, '#f8f8f8',
+                    150000, '#3b82f6'
+                ];
+
                 map.current?.addLayer({
                     'id': layerId,
                     'type': 'fill',
@@ -84,7 +94,7 @@ export default function H3Map({ year = 2026, colorMode = "growth", mapState }: H
                     'minzoom': res === 7 ? 0 : res + 2,
                     'maxzoom': res === 11 ? 24 : res + 3,
                     'paint': {
-                        'fill-color': colorMode === 'value' ? valueColorExpr : growthColorExpr,
+                        'fill-color': colorMode === 'value' ? valueColorExpr : colorMode === 'growth_dollar' ? growthDollarColorExpr : growthColorExpr,
                         'fill-opacity': 0.6,
                         'fill-outline-color': 'rgba(0,0,0,0.1)'
                     },
@@ -178,13 +188,13 @@ export default function H3Map({ year = 2026, colorMode = "growth", mapState }: H
             50, '#059669'
         ];
 
-        const valueColorExpr: any = [
+        const growthDollarColorExpr: any = [
             'interpolate',
             ['linear'],
-            ['coalesce', ['get', 'med_predicted_value'], 0],
-            100000, '#4a1d96',
-            500000, '#be123c',
-            1500000, '#d97706'
+            ['-', ['get', 'med_predicted_value'], ['get', 'current_value']],
+            -50000, '#ef4444',
+            0, '#f8f8f8',
+            150000, '#3b82f6'
         ];
 
         resLevels.forEach(res => {
@@ -193,7 +203,7 @@ export default function H3Map({ year = 2026, colorMode = "growth", mapState }: H
                 map.current.setPaintProperty(
                     fillLayerId,
                     'fill-color',
-                    colorMode === 'value' ? valueColorExpr : growthColorExpr
+                    colorMode === 'value' ? valueColorExpr : colorMode === 'growth_dollar' ? growthDollarColorExpr : growthColorExpr
                 );
             }
         });

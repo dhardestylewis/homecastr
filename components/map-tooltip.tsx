@@ -214,9 +214,21 @@ export function MapTooltip({
                                         </div>
                                     </div>
                                     <div>
-                                        <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold truncate">Growth</div>
+                                        <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold truncate">Growth %</div>
                                         <div className={cn("text-sm font-bold tracking-tight truncate", displayProps.O >= 0 ? "text-green-500" : "text-destructive")}>
                                             {formatOpportunity(displayProps.O)}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold truncate">Growth $</div>
+                                        <div className={cn("text-sm font-bold tracking-tight truncate",
+                                            (displayProps.med_predicted_value ?? displayProps.p50) && (displayProps.current_value ?? displayProps.value) &&
+                                                ((displayProps.med_predicted_value ?? displayProps.p50) - (displayProps.current_value ?? displayProps.value)) >= 0
+                                                ? "text-green-500" : "text-destructive"
+                                        )}>
+                                            {(displayProps.med_predicted_value ?? displayProps.p50) && (displayProps.current_value ?? displayProps.value)
+                                                ? formatCurrency((displayProps.med_predicted_value ?? displayProps.p50) - (displayProps.current_value ?? displayProps.value))
+                                                : "N/A"}
                                         </div>
                                     </div>
                                     <div className="col-span-2">
@@ -264,14 +276,26 @@ export function MapTooltip({
                                         </div>
                                     )}
                                 </div>
-                                <div className="text-center pr-6">
-                                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Growth</div>
+                                <div className="text-center">
+                                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Growth %</div>
                                     <div className={cn("text-xl font-bold tracking-tight flex items-center justify-center gap-1", displayProps.O >= 0 ? "text-green-500" : "text-destructive")}>
                                         {formatOpportunity(displayProps.O)}
                                         {getTrendIcon(displayProps.O >= 0 ? "up" : "down")}
                                     </div>
-                                    <div className="text-[10px] text-muted-foreground mt-1">
-                                        Avg. Annual {year > 2025 ? "Forecast" : "History"}
+                                </div>
+                                <div className="text-center pr-6">
+                                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Growth $</div>
+                                    <div className={cn("text-xl font-bold tracking-tight flex items-center justify-center gap-1",
+                                        (displayProps.med_predicted_value ?? displayProps.p50) && (displayProps.current_value ?? displayProps.value) &&
+                                            ((displayProps.med_predicted_value ?? displayProps.p50) - (displayProps.current_value ?? displayProps.value)) >= 0
+                                            ? "text-green-500" : "text-destructive"
+                                    )}>
+                                        {(displayProps.med_predicted_value ?? displayProps.p50) && (displayProps.current_value ?? displayProps.value)
+                                            ? formatCurrency((displayProps.med_predicted_value ?? displayProps.p50) - (displayProps.current_value ?? displayProps.value))
+                                            : "N/A"}
+                                        {getTrendIcon((displayProps.med_predicted_value ?? displayProps.p50) && (displayProps.current_value ?? displayProps.value) &&
+                                            ((displayProps.med_predicted_value ?? displayProps.p50) - (displayProps.current_value ?? displayProps.value)) >= 0
+                                            ? "up" : "down")}
                                     </div>
                                 </div>
                             </div>
