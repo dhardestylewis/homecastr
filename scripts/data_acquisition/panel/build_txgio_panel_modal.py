@@ -243,10 +243,24 @@ def process_one_year(blob_name: str) -> dict:
             if err:
                 errors.append(err)
             elif gdf is not None and not gdf.empty:
-                if not printed_cols:
-                    print(f"  Sample columns: {list(gdf.columns[:20])}{'...' if len(gdf.columns) > 20 else ''}")
-                    printed_cols = True
-                year_dfs.append(gdf)
+                # ── Pre-filter PER LAYER to avoid massive post-concat OOM ──
+                # Many zip layers are roads/boundaries with no value columns.
+                # If we concat them all into one 40M-row DF, we OOM instantly.
+                val_like = [c for c in gdf.columns
+                            if any(k in c for k in ("land", "imp", "mkt", "tot_val", "total_v", "appr"))]
+                if val_like:
+                    # Drop rows that have no values populated in this chunk
+                    mask = gdf[val_like].notna().any(axis=1)
+                    gdf = gdf[mask].copy()
+                else:
+                    # This entire layer has no value columns -> drop it entirely
+                    gdf = pd.DataFrame()
+
+                if not gdf.empty:
+                    if not printed_cols:
+                        print(f"  Sample columns: {list(gdf.columns[:20])}{'...' if len(gdf.columns) > 20 else ''}")
+                        printed_cols = True
+                    year_dfs.append(gdf)
 
     if errors:
         print(f"  ⚠️ {len(errors)} read errors (first 5):")
@@ -260,19 +274,7 @@ def process_one_year(blob_name: str) -> dict:
     # ── Concat ───────────────────────────────────────────────────────────────
     df = pd.concat(year_dfs, ignore_index=True)
     del year_dfs  # release memory
-    print(f"  {year}: {len(df):,} rows after concat")
-
-    # ── Pre-filter: drop non-parcel rows (roads, boundaries, etc.) ───────────
-    # Some zips include mixed layer types. Non-parcel layers have no value
-    # columns, so any row where ALL value-like columns are null is excluded.
-    val_like = [c for c in df.columns
-                if any(k in c for k in ("land", "imp", "mkt", "tot_val", "total_v", "appr"))]
-    if val_like:
-        parcel_mask = df[val_like].notna().any(axis=1)
-        n_before = len(df)
-        df = df[parcel_mask].reset_index(drop=True)
-        print(f"  After parcel-row pre-filter: {len(df):,} / {n_before:,} rows (dropped non-parcel layers)")
-    print(f"  {year}: {len(df):,} parcels total")
+    print(f"  {year}: {len(df):,} parcels total (after per-layer pre-filter)")
 
     # ── Synthesize parcel ID ─────────────────────────────────────────────────
     fips_cols      = [c for c in df.columns if c.lower() in ("cnty_fips", "fips", "cntyfips", "cnty_cd", "state_cd")]

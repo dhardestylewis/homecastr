@@ -146,6 +146,7 @@ interface MapViewProps {
     mobileSelectionMode?: 'replace' | 'add' | 'range'
     onMobileSelectionModeChange?: (mode: 'replace' | 'add' | 'range') => void
     onConsultAI?: (details: { predictedValue: number | null; opportunityScore: number | null; capRate: number | null }) => void
+    isEmbedded?: boolean
 }
 
 const MANHATTAN_CENTER = { lng: -73.9857, lat: 40.7484 }
@@ -371,7 +372,8 @@ export function MapView({
     onYearChange,
     mobileSelectionMode,
     onMobileSelectionModeChange,
-    onConsultAI
+    onConsultAI,
+    isEmbedded
 }: MapViewProps) {
     // --- STATE & REFS ---
     const basemapCenter = useMemo(() => ({ lng: -73.9857, lat: 40.7484 }), [])
@@ -2125,6 +2127,7 @@ export function MapView({
                         } : undefined}
                         googleMapsApiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY}
                         forecastsHref={forecastsHref || undefined}
+                        isEmbedded={isEmbedded}
                     />
                 )
             })()}

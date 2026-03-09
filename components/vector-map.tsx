@@ -62,6 +62,7 @@ interface VectorMapProps {
     onFeatureHover: (id: string | null) => void
     className?: string
     onConsultAI?: (details: { predictedValue: number | null; opportunityScore: number | null; capRate: number | null }) => void
+    isEmbedded?: boolean
 }
 
 export function VectorMap({
@@ -71,7 +72,8 @@ export function VectorMap({
     onFeatureSelect,
     onFeatureHover,
     className,
-    onConsultAI
+    onConsultAI,
+    isEmbedded
 }: VectorMapProps) {
     const mapContainerRef = useRef<HTMLDivElement>(null)
     const mapRef = useRef<maplibregl.Map | null>(null)
@@ -1102,6 +1104,7 @@ export function VectorMap({
                         } : undefined}
                         googleMapsApiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY}
                         forecastsHref={forecastsHref || undefined}
+                        isEmbedded={isEmbedded}
                     />
                 )
             })()}

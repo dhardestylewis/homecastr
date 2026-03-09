@@ -11,8 +11,8 @@ const VALUE_LABELS = ["$150k", "$525k", "$1M+"]
 
 interface LegendProps {
   className?: string
-  colorMode?: "growth" | "value"
-  onColorModeChange?: (mode: "growth" | "value") => void
+  colorMode?: "growth" | "value" | "growth_dollar"
+  onColorModeChange?: (mode: "growth" | "value" | "growth_dollar") => void
   year?: number
   originYear?: number
 }
@@ -23,6 +23,8 @@ export function Legend({ className, colorMode = "growth", onColorModeChange, yea
   const [growthGradient, setGrowthGradient] = useState<string>(
     "linear-gradient(to right, #3b82f6, #93c5fd 30%, #f8f8f8 50%, #f59e0b 70%, #ef4444)"
   )
+  const GROWTH_DOLLAR_GRADIENT = "linear-gradient(to right, #3b82f6, #f8f8f8 50%, #ef4444)"
+  const GROWTH_DOLLAR_LABELS = ["-$50k", "$0", "+$150k+"]
   const horizonM = (year - originYear) * 12
 
   useEffect(() => {
@@ -61,7 +63,7 @@ export function Legend({ className, colorMode = "growth", onColorModeChange, yea
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5 text-foreground font-medium">
-            <span>{colorMode === "value" ? "Property Value" : "Projected Growth"}</span>
+            <span>{colorMode === "value" ? "Property Value" : colorMode === "growth_dollar" ? "Growth ($)" : "Growth (%)"}</span>
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -71,7 +73,9 @@ export function Legend({ className, colorMode = "growth", onColorModeChange, yea
                   <p>
                     {colorMode === "value"
                       ? "Estimated median property value ($)."
-                      : "Relative growth vs median. White = average."}
+                      : colorMode === "growth_dollar"
+                        ? "Absolute 5-year dollar growth vs current value."
+                        : "Relative growth vs median. White = average."}
                   </p>
                 </TooltipContent>
               </Tooltip>
@@ -79,7 +83,7 @@ export function Legend({ className, colorMode = "growth", onColorModeChange, yea
           </div>
           {/* Color Mode Toggle */}
           {onColorModeChange && (
-            <div className="grid grid-cols-2 gap-1 p-0.5 bg-secondary/50 rounded-md shrink-0">
+            <div className="grid grid-cols-3 gap-1 p-0.5 bg-secondary/50 rounded-md shrink-0">
               <button
                 onClick={() => onColorModeChange("growth")}
                 className={cn(
@@ -89,7 +93,18 @@ export function Legend({ className, colorMode = "growth", onColorModeChange, yea
                     : "text-muted-foreground hover:text-foreground"
                 )}
               >
-                Growth
+                Growth %
+              </button>
+              <button
+                onClick={() => onColorModeChange("growth_dollar")}
+                className={cn(
+                  "px-2 py-1 text-[10px] font-medium rounded transition-all",
+                  colorMode === "growth_dollar"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Growth $
               </button>
               <button
                 onClick={() => onColorModeChange("value")}
@@ -108,7 +123,7 @@ export function Legend({ className, colorMode = "growth", onColorModeChange, yea
         <div className="flex flex-col gap-1">
           <div
             className="h-3 w-full rounded-sm"
-            style={{ background: colorMode === "value" ? VALUE_GRADIENT : growthGradient }}
+            style={{ background: colorMode === "value" ? VALUE_GRADIENT : colorMode === "growth_dollar" ? GROWTH_DOLLAR_GRADIENT : growthGradient }}
           />
           <div className="flex justify-between text-[9px] text-muted-foreground font-mono px-0.5">
             {colorMode === "value" ? (
@@ -116,6 +131,12 @@ export function Legend({ className, colorMode = "growth", onColorModeChange, yea
                 <span>{VALUE_LABELS[0]}</span>
                 <span>{VALUE_LABELS[1]}</span>
                 <span>{VALUE_LABELS[2]}</span>
+              </>
+            ) : colorMode === "growth_dollar" ? (
+              <>
+                <span>{GROWTH_DOLLAR_LABELS[0]}</span>
+                <span>{GROWTH_DOLLAR_LABELS[1]}</span>
+                <span>{GROWTH_DOLLAR_LABELS[2]}</span>
               </>
             ) : (
               <>

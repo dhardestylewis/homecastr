@@ -75,6 +75,8 @@ interface MapTooltipProps {
     googleMapsApiKey?: string
     // Link back to the /forecasts hub page for this geography
     forecastsHref?: string
+    // Whether this is rendered inside an embedded widget
+    isEmbedded?: boolean
 }
 
 export function MapTooltip({
@@ -105,6 +107,7 @@ export function MapTooltip({
     onConsultAI,
     googleMapsApiKey,
     forecastsHref,
+    isEmbedded = false,
 }: MapTooltipProps) {
 
     const getTrendIcon = (trend: "up" | "down" | "stable" | undefined) => {
@@ -117,6 +120,8 @@ export function MapTooltip({
     const style = isMobile ? {
         transform: `translateY(calc(${isMinimized ? '100% - 24px' : '0px'} + ${dragOffset}px))`,
         transition: touchStart === null ? 'transform 0.3s ease-out' : 'none'
+    } : isEmbedded ? {
+        // Embedded mode uses CSS positioning entirely (right/top/bottom via classes)
     } : {
         left: globalX ?? x,
         top: globalY ?? y,
@@ -125,11 +130,16 @@ export function MapTooltip({
     const content = (
         <div
             className={cn(
-                "z-[9999] glass-panel shadow-2xl overflow-hidden",
+                "z-[9999] glass-panel shadow-2xl",
+                // Mobile layout
                 isMobile
-                    ? "fixed bottom-0 left-0 right-0 w-full rounded-t-xl rounded-b-none border-t border-x-0 border-b-0 pointer-events-auto transition-transform duration-300 ease-out touch-none"
-                    : "fixed rounded-xl w-[320px]",
-                lockedMode && !isMobile ? "pointer-events-auto cursor-move" : "pointer-events-none",
+                    ? "fixed bottom-0 left-0 right-0 w-full rounded-t-xl rounded-b-none border-t border-x-0 border-b-0 pointer-events-auto transition-transform duration-300 ease-out touch-none overflow-hidden"
+                    // Embedded layouts
+                    : isEmbedded
+                        ? "fixed right-4 top-4 bottom-4 w-[320px] rounded-xl pointer-events-auto overflow-y-auto"
+                        // Default floating desktop layout
+                        : "fixed rounded-xl w-[320px] overflow-hidden",
+                lockedMode && !isMobile && !isEmbedded ? "pointer-events-auto cursor-move" : "pointer-events-none",
                 showDragHint && "animate-pulse"
             )}
             style={style}

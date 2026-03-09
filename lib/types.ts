@@ -297,7 +297,7 @@ export interface FilterState {
   medNYearsMin: number
   showUnderperformers: boolean
   highlightWarnings: boolean
-  colorMode: "growth" | "value"
+  colorMode: "growth" | "value" | "growth_dollar"
   layerOverride?: number
   usePMTiles?: boolean
   useVectorMap?: boolean
@@ -327,7 +327,7 @@ export interface QueryParams {
   yMin?: string
   underperf?: string
   warnings?: string
-  mode?: "growth" | "value"
+  mode?: "growth" | "value" | "growth_dollar"
   layer?: string
   lat?: string
   lng?: string

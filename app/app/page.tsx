@@ -650,6 +650,7 @@ function DashboardContent() {
             year={currentYear}
             className="absolute inset-0 z-0"
             onConsultAI={handleConsultAI}
+            isEmbedded={searchParams.has("embedded")}
           />
         ) : filters.usePMTiles ? (
           <div className="absolute inset-0 z-0">
@@ -667,6 +668,7 @@ function DashboardContent() {
             mobileSelectionMode={mobileSelectionMode}
             onMobileSelectionModeChange={setMobileSelectionMode}
             onConsultAI={handleConsultAI}
+            isEmbedded={searchParams.has("embedded")}
           />
         )}
 

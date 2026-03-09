@@ -43,6 +43,7 @@ BEGIN
             COALESCE(d.opportunity, 0) as opp,
             COALESCE(d.reliability, 0) as rel,
             COALESCE(d.predicted_value, 0) as val,
+            COALESCE(d.current_value, 0) as cv,
             COALESCE(d.property_count, 0) as count,
             COALESCE(d.sample_accuracy, 0) as acc,
             COALESCE(d.med_years, 0) as ny,
