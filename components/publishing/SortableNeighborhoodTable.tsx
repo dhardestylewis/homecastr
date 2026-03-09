@@ -112,7 +112,7 @@ export function SortableNeighborhoodTable({ rows, state, city, avgAppreciation }
 
                             return (
                                 <tr key={t.tractGeoid} className="hover:bg-accent/30 transition-colors">
-                                    <td className="py-3 px-4 text-muted-foreground/40 font-mono text-xs">{i + 1}</td>
+                                    <td className="py-3 px-4 text-muted-foreground/70 font-mono text-xs">{i + 1}</td>
                                     <td className="py-3 px-3">
                                         <Link
                                             href={`/forecasts/${state}/${city}/${t.neighborhoodSlug}/home-price-forecast`}

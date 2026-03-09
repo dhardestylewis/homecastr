@@ -1040,7 +1040,7 @@ export async function getCitiesForState(
 
         // Collect unresolved counties for batch DB lookup
         const unresolved = new Map<string, string[]>() // countyFips -> sampleTracts
-        for (const [countyFips, { count, sampleTracts }] of countyMap) {
+        for (const [countyFips, { tracts, sampleTracts }] of countyMap) {
             let city = COUNTY_CITY[countyFips] || COUNTY_NAMES[countyFips]
 
             // Try ZCTA crosswalk first

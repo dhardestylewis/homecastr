@@ -8,7 +8,7 @@ export const metadata: Metadata = {
         template: "%s | Homecastr",
         default: "Homecastr Forecasts",
     },
-    description: "Homecastr explains where property values are likely headed, why, and what nearby alternatives may have better forward upside.",
+    description: "Homecastr explains where home values are likely headed, why, and which nearby areas may offer stronger appreciation potential.",
 }
 
 export default function ForecastsLayout({
@@ -50,7 +50,7 @@ export default function ForecastsLayout({
                         <div className="space-y-2">
                             <HomecastrLogo size={24} variant="horizontal" className="opacity-60" />
                             <p className="text-xs text-muted-foreground max-w-md">
-                                Homecastr explains where property values are likely headed, why, and what nearby alternatives may have better forward upside. Forecasts are model-generated and should not be construed as financial advice.
+                                Homecastr explains where home values are likely headed, why, and which nearby areas may offer stronger appreciation potential. Forecasts are model outputs, not financial advice.
                             </p>
                         </div>
                         <div className="flex gap-6 text-xs text-muted-foreground">

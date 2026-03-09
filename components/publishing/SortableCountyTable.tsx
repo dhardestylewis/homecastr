@@ -110,7 +110,7 @@ export function SortableCountyTable({ rows, state }: { rows: CountyRow[]; state:
                     <tbody className="divide-y divide-border">
                         {sorted.map((c, i) => (
                             <tr key={`${c.citySlug}-${i}`} className="hover:bg-accent/30 transition-colors">
-                                <td className="py-3 px-4 text-muted-foreground/40 font-mono text-xs">{i + 1}</td>
+                                <td className="py-3 px-4 text-muted-foreground/70 font-mono text-xs">{i + 1}</td>
                                 <td className="py-3 px-3">
                                     <Link
                                         href={`/forecasts/${state}/${c.citySlug}`}

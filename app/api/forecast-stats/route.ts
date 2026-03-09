@@ -57,24 +57,35 @@ export async function GET(request: Request) {
                         continue
                     }
 
-                    // Get p50 at requested horizon and at baseline (h=24)
+                    let horizonQueryBuilder = supabase
+                        .schema(schemaName as any)
+                        .from(level.table)
+                        .select(`${level.key}, p50`)
+                        .eq("origin_year", originYear)
+                        .eq("horizon_m", horizonQuery)
+                        .eq("series_kind", "forecast")
+                        .not("p50", "is", null)
+
+                    if (level.key.includes("geoid")) {
+                        horizonQueryBuilder = horizonQueryBuilder.not(level.key, "like", "00%")
+                    }
+
+                    let baselineQueryBuilder = supabase
+                        .schema(schemaName as any)
+                        .from(level.table)
+                        .select(`${level.key}, p50`)
+                        .eq("origin_year", originYear)
+                        .eq("horizon_m", baselineH)
+                        .eq("series_kind", "forecast")
+                        .not("p50", "is", null)
+
+                    if (level.key.includes("geoid")) {
+                        baselineQueryBuilder = baselineQueryBuilder.not(level.key, "like", "00%")
+                    }
+
                     const [horizonRes, baselineRes] = await Promise.all([
-                        supabase
-                            .schema(schemaName as any)
-                            .from(level.table)
-                            .select(`${level.key}, p50`)
-                            .eq("origin_year", originYear)
-                            .eq("horizon_m", horizonQuery)
-                            .eq("series_kind", "forecast")
-                            .not("p50", "is", null),
-                        supabase
-                            .schema(schemaName as any)
-                            .from(level.table)
-                            .select(`${level.key}, p50`)
-                            .eq("origin_year", originYear)
-                            .eq("horizon_m", baselineH)
-                            .eq("series_kind", "forecast")
-                            .not("p50", "is", null),
+                        horizonQueryBuilder,
+                        baselineQueryBuilder,
                     ])
 
                     if (horizonRes.error || baselineRes.error) {
@@ -141,14 +152,17 @@ export async function GET(request: Request) {
         }
 
         // Default: absolute value percentiles (original behavior)
-        const { data, error } = await supabase
+        let req = supabase
             .schema(schemaName as any)
             .from("metrics_tract_forecast")
             .select("p50")
             .eq("origin_year", originYear)
             .eq("horizon_m", horizonM)
             .not("p50", "is", null)
-            .order("p50", { ascending: true })
+
+        req = req.not("tract_geoid20", "like", "00%")
+
+        const { data, error } = await req.order("p50", { ascending: true })
 
         if (error) {
             console.error("[FORECAST-STATS] Query error:", error)

@@ -10,6 +10,7 @@ interface Props {
     currentTractGeoid: string
     stateSlug: string
     citySlug: string
+    aiComparableNarrative?: string | null
 }
 
 export function ComparablesTable({
@@ -19,6 +20,7 @@ export function ComparablesTable({
     currentTractGeoid,
     stateSlug,
     citySlug,
+    aiComparableNarrative,
 }: Props) {
     const fmtVal = (v: number) => {
         if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(2)}M`
@@ -106,7 +108,7 @@ export function ComparablesTable({
             {isEmpty ? (
                 <div className="glass-panel rounded-xl p-5">
                     <p className="text-sm text-muted-foreground italic">
-                        No comparable neighborhoods found in this county. This can happen when forecast data covers a small number of tracts in the area.
+                        {aiComparableNarrative || "No comparable areas found for this neighborhood. This usually happens when only a small number of tracts in the county have forecast coverage."}
                     </p>
                 </div>
             ) : (
@@ -118,8 +120,8 @@ export function ComparablesTable({
                         highlightCol="appreciation"
                     />
                     <TableSection
-                        title="Higher Upside Alternatives"
-                        subtitle="Nearby areas with stronger expected 5-year appreciation"
+                        title="Stronger Appreciation Potential"
+                        subtitle="Nearby areas where the model expects higher 5-year price growth"
                         tracts={higherUpside}
                         highlightCol="appreciation"
                     />

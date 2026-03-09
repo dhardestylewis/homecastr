@@ -2,7 +2,8 @@ import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 
 import { resolveSlugToTract, parseTractGeoid, enrichWithNeighborhood } from "@/lib/publishing/geo-crosswalk"
-import { fetchForecastPageData } from "@/lib/publishing/forecast-data"
+import { fetchForecastPageData, isForecastOutlier } from "@/lib/publishing/forecast-data"
+import { fetchSeoNarrative } from "@/lib/publishing/seo-narratives"
 
 import { ForecastSummaryCard } from "@/components/publishing/ForecastSummaryCard"
 import { UncertaintyBand } from "@/components/publishing/UncertaintyBand"
@@ -35,13 +36,14 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     let geo = parseTractGeoid(tractGeoid)
     geo = await enrichWithNeighborhood(geo)
 
-    const data = await fetchForecastPageData(tractGeoid, 2025, SCHEMA)
+    const isOutlier = isForecastOutlier(data)
     const h5 = data?.forecast.horizons.find(h => h.horizon_m === 60)
-    const appreciation = h5 ? `${h5.appreciation > 0 ? "+" : ""}${h5.appreciation.toFixed(1)}%` : ""
+    const appreciation = (h5 && !isOutlier) ? `${h5.appreciation > 0 ? "+" : ""}${h5.appreciation.toFixed(1)}%` : ""
 
     const title = `${geo.neighborhoodName} Home Price Forecast, 2026–2030`
-    const description = `Homecastr forecasts ${geo.neighborhoodName} (${geo.city}, ${geo.stateAbbr}) home values ${appreciation ? `to change ${appreciation}` : ""} by 2030 (p50). See upside, downside, comparables, and uncertainty.`
-
+    const description = isOutlier
+        ? `Detailed modeling and market outlook for ${geo.neighborhoodName} (${geo.city}, ${geo.stateAbbr}). Data access available by request.`
+        : `Homecastr forecasts ${geo.neighborhoodName} (${geo.city}, ${geo.stateAbbr}) home values ${appreciation ? `to change ${appreciation}` : ""} by 2030 (p50). See upside, downside, comparables, and uncertainty.`
     return {
         title,
         description,
@@ -76,24 +78,37 @@ export default async function NeighborhoodForecastPage({ params, searchParams }:
     let geo = parseTractGeoid(tractGeoid)
     geo = await enrichWithNeighborhood(geo)
 
-    // Fetch all forecast data
-    const data = await fetchForecastPageData(tractGeoid, 2025, schema)
-    console.log(`[forecast-page] data for ${tractGeoid}: exists=${!!data} tokens=${data?.uniqueDataTokens}`)
+    // Fetch all forecast data + AI narrative in parallel
+    const [data, narrative] = await Promise.all([
+        fetchForecastPageData(tractGeoid, 2025, schema),
+        fetchSeoNarrative(tractGeoid, "tract"),
+    ])
+    console.log(`[forecast-page] data for ${tractGeoid}: exists=${!!data} tokens=${data?.uniqueDataTokens} narrative=${!!narrative}`)
     if (!data) notFound()
 
-    // Filter out extreme outliers, matching the city hub page criteria
-    const h5 = data.forecast.horizons.find(h => h.horizon_m === 60)
-    let isOutlier = false
-    if (
-        h5 &&
-        (h5.appreciation > 100 ||
-            h5.appreciation <= -95 ||
-            data.forecast.baselineP50 < 20_000 ||
-            data.forecast.baselineP50 >= 5_000_000)
-    ) {
-        console.log(`[forecast-page] tract ${tractGeoid} is defined as an outlier: appreciation=${h5.appreciation.toFixed(1)}%, baselineP50=${data.forecast.baselineP50}`)
-        isOutlier = true
+    // Determine outlier status and scrub data for the DOM if necessary
+    const isOutlier = isForecastOutlier(data)
+    if (isOutlier) {
+        console.log(`[forecast-page] tract ${tractGeoid} is defined as an outlier: baselineP50=${data.forecast.baselineP50}`)
+        // Redact data to ensure extreme numbers don't show up in SEO or source code while keeping enough shape for the blur.
+        data.forecast.baselineP50 = 500000;
+        data.forecast.horizons = data.forecast.horizons.map(h => ({
+            ...h,
+            p10: 450000,
+            p25: 480000,
+            p50: 520000,
+            p75: 560000,
+            p90: 600000,
+            appreciation: 4,
+            spread: 150000
+        }))
+        data.history = data.history.map(h => ({ ...h, value: Math.max(100000, h.value) }))
+        data.comparables.similar = []
+        data.comparables.higherUpside = []
+        data.comparables.lowerRisk = []
     }
+
+    const h5 = data.forecast.horizons.find(h => h.horizon_m === 60)
 
     // Build JSON-LD structured data
     const jsonLd = {
@@ -126,10 +141,12 @@ export default async function NeighborhoodForecastPage({ params, searchParams }:
             {isOutlier && <RequestAnalysisModal neighborhoodName={geo.neighborhoodName} />}
             <div className={`space-y-10 ${isOutlier ? "pointer-events-none blur-sm select-none opacity-80 overflow-hidden max-h-screen" : ""}`}>
                 {/* JSON-LD */}
-                <script
-                    type="application/ld+json"
-                    dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-                />
+                {!isOutlier && (
+                    <script
+                        type="application/ld+json"
+                        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+                    />
+                )}
 
                 {/* Breadcrumbs */}
                 <nav aria-label="Breadcrumb" className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
@@ -154,6 +171,12 @@ export default async function NeighborhoodForecastPage({ params, searchParams }:
                     <p className="text-base text-muted-foreground">
                         {geo.city}, {geo.stateAbbr} · {data.forecast.originYear}–{data.forecast.originYear + 5} outlook · Census Tract {geo.tractGeoid}
                     </p>
+                    {/* AI market summary (when available) */}
+                    {narrative?.market_summary && !isOutlier && (
+                        <p className="text-sm text-muted-foreground leading-relaxed mt-2">
+                            {narrative.market_summary}
+                        </p>
+                    )}
                     <div className="flex items-center gap-3">
                         {data.rankings.metroRank > 0 && data.rankings.metroTotal > 1 && (
                             <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary border border-primary/20">
@@ -191,6 +214,7 @@ export default async function NeighborhoodForecastPage({ params, searchParams }:
                     horizons={data.forecast.horizons}
                     neighborhoodName={geo.neighborhoodName}
                     city={geo.city}
+                    aiNarrative={isOutlier ? null : narrative}
                 />
 
                 {/* 4. Uncertainty Band */}
@@ -204,6 +228,7 @@ export default async function NeighborhoodForecastPage({ params, searchParams }:
                     currentTractGeoid={tractGeoid}
                     stateSlug={state}
                     citySlug={city}
+                    aiComparableNarrative={isOutlier ? null : narrative?.comparable_narrative}
                 />
 
                 {/* 6. Method / Caveat */}

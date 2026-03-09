@@ -2,7 +2,8 @@
 
 import { useMemo } from "react"
 import { createPortal } from "react-dom"
-import { TrendingUp, TrendingDown, Minus, Bot } from "lucide-react"
+import Link from "next/link"
+import { TrendingUp, TrendingDown, Minus, Bot, Map } from "lucide-react"
 import { HomecastrLogo } from "@/components/homecastr-logo"
 import { cn } from "@/lib/utils"
 import { FanChart } from "@/components/fan-chart"
@@ -72,6 +73,8 @@ interface MapTooltipProps {
     onConsultAI?: () => void
     // Google Maps API Key
     googleMapsApiKey?: string
+    // Link back to the /forecasts hub page for this geography
+    forecastsHref?: string
 }
 
 export function MapTooltip({
@@ -100,7 +103,8 @@ export function MapTooltip({
     onTouchEnd,
     coordinates,
     onConsultAI,
-    googleMapsApiKey
+    googleMapsApiKey,
+    forecastsHref,
 }: MapTooltipProps) {
 
     const getTrendIcon = (trend: "up" | "down" | "stable" | undefined) => {
@@ -305,7 +309,6 @@ export function MapTooltip({
                                 </div>
                             </div>
 
-                            {/* Talk to Homecastr Live Agent Button */}
                             {lockedMode && onConsultAI && (
                                 <div className="pt-2 mt-1 border-t border-border/50">
                                     <button
@@ -318,6 +321,22 @@ export function MapTooltip({
                                         <HomecastrLogo variant="horizontal" size={14} />
                                         <span>Talk to live agent</span>
                                     </button>
+                                </div>
+                            )}
+
+                            {/* View Forecast Hub link — appears when forecast URL is resolved */}
+                            {lockedMode && forecastsHref && (
+                                <div className={onConsultAI ? "pt-1" : "pt-2 mt-1 border-t border-border/50"}>
+                                    <Link
+                                        href={forecastsHref}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-muted/30 hover:bg-muted/60 border border-border/50 text-muted-foreground hover:text-foreground text-xs font-medium transition-all hover:scale-[1.01]"
+                                    >
+                                        <Map className="w-3 h-3 text-primary" />
+                                        <span>View Forecast Hub →</span>
+                                    </Link>
                                 </div>
                             )}
                         </div>

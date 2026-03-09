@@ -170,6 +170,47 @@ export async function GET(request: Request) {
                     historicalValues = [2019, 2020, 2021, 2022, 2023, 2024, 2025].map(
                         (yr) => histMap.get(yr) ?? null
                     )
+
+                    // --- Outlier detection: interpolate over spikes ---
+                    // If a value jumps >40% relative to BOTH neighbors, it's likely bad data.
+                    // Replace with linear interpolation between the surrounding valid values.
+                    const OUTLIER_THRESHOLD = 0.40
+                    for (let i = 0; i < historicalValues.length; i++) {
+                        const v = historicalValues[i]
+                        if (v == null || v <= 0) continue
+
+                        // Find previous and next non-null neighbors
+                        let prev: number | null = null, prevIdx = -1
+                        for (let j = i - 1; j >= 0; j--) {
+                            if (historicalValues[j] != null && historicalValues[j]! > 0) {
+                                prev = historicalValues[j]!; prevIdx = j; break
+                            }
+                        }
+                        let next: number | null = null, nextIdx = -1
+                        for (let j = i + 1; j < historicalValues.length; j++) {
+                            if (historicalValues[j] != null && historicalValues[j]! > 0) {
+                                next = historicalValues[j]!; nextIdx = j; break
+                            }
+                        }
+
+                        // Check if this value is an outlier relative to neighbors
+                        const isOutlierVsPrev = prev != null && Math.abs(v - prev) / prev > OUTLIER_THRESHOLD
+                        const isOutlierVsNext = next != null && Math.abs(v - next) / next > OUTLIER_THRESHOLD
+
+                        if (isOutlierVsPrev && isOutlierVsNext && prev != null && next != null) {
+                            // Interpolate between prev and next
+                            const span = nextIdx - prevIdx
+                            const frac = (i - prevIdx) / span
+                            historicalValues[i] = Math.round(prev + frac * (next - prev))
+                            console.log(`[FORECAST-DETAIL] Outlier interpolated: year=${2019 + i}, was=${v}, now=${historicalValues[i]}, prev=${prev}, next=${next}`)
+                        } else if (prev == null && isOutlierVsNext && next != null) {
+                            // Edge case: first value is outlier, use next
+                            historicalValues[i] = next
+                        } else if (next == null && isOutlierVsPrev && prev != null) {
+                            // Edge case: last value is outlier, use prev
+                            historicalValues[i] = prev
+                        }
+                    }
                 }
             } catch (histErr) {
                 // Non-fatal: just skip history if table doesn't exist yet

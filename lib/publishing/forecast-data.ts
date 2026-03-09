@@ -3,6 +3,11 @@ import { withRedisCache } from "@/lib/redis"
 
 const SCHEMA = process.env.FORECAST_SCHEMA || "forecast_queue"
 
+// Quality gate: suppress tracts whose (p90-p10)/p50 exceeds this at ANY horizon.
+// Empirical analysis of 162k tracts shows a smooth tail up to ~3.8; values above
+// 4.0 are discontinuous outliers (broken forecasts, invalid GEOIDs, etc.).
+const MAX_REL_SPREAD = 4.0
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -113,6 +118,13 @@ export async function fetchForecastPageData(
             spread: (r.p90 || 0) - (r.p10 || 0),
             appreciation: baselineP50 > 0 ? (((r.p50 || 0) / baselineP50) - 1) * 100 : 0,
         }))
+
+        // Quality gate: reject tracts with exceptionally wide spreads at any
+        // horizon. These are broken forecasts (bad GEOIDs, degenerate inputs).
+        const hasOutlierSpread = horizons.some(h =>
+            h.p50 > 0 && (h.spread / h.p50) > MAX_REL_SPREAD
+        )
+        if (hasOutlierSpread) return null
 
         // Fire history and rankings in parallel
         const historyPromise = supabase
@@ -344,4 +356,20 @@ function countUniqueTokens(
     if (rankings.metroRank > 0) tokens += 3
 
     return tokens
+}
+
+// ---------------------------------------------------------------------------
+// Outlier Detection
+// ---------------------------------------------------------------------------
+
+export function isForecastOutlier(data: ForecastPageData): boolean {
+    const h5 = data.forecast.horizons.find(h => h.horizon_m === 60)
+    if (!h5) return false
+
+    return (
+        h5.appreciation > 100 ||
+        h5.appreciation <= -95 ||
+        data.forecast.baselineP50 < 20_000 ||
+        data.forecast.baselineP50 >= 5_000_000
+    )
 }

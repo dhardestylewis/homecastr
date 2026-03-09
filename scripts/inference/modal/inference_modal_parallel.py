@@ -275,35 +275,60 @@ def run_inference_shard(
         }
         import io as _io
         macro_frames = {}
-        for gcs_path, col_name in MACRO_SERIES.items():
-            try:
-                blob = bucket.blob(gcs_path)
-                if not blob.exists():
-                    continue
-                raw = _pd.read_csv(_io.BytesIO(blob.download_as_bytes()), on_bad_lines="skip")
-                if len(raw.columns) < 2:
-                    continue
-                date_col, val_col = raw.columns[0], raw.columns[1]
-                raw[date_col] = _pd.to_datetime(raw[date_col], errors="coerce")
-                raw[val_col] = _pd.to_numeric(raw[val_col], errors="coerce")
-                raw = raw.dropna(subset=[date_col, val_col])
-                raw["_year"] = raw[date_col].dt.year
-                annual = raw.groupby("_year")[val_col].mean().reset_index()
-                annual.columns = ["_year", col_name]
-                macro_frames[col_name] = annual
-            except Exception as _me:
-                print(f"[{_ts()}] ⚠️ Macro {gcs_path}: {_me}")
-        if macro_frames:
-            merged = None
-            for _name, _frame in macro_frames.items():
-                merged = _frame if merged is None else merged.merge(_frame, on="_year", how="outer")
-            merged = merged.sort_values("_year")
-            macro_pl = pl.from_pandas(merged).rename({"_year": "yr"}).cast({"yr": pl.Int32})
-            _df2 = pl.read_parquet(panel_path)
-            _df2 = _df2.join(macro_pl, on="yr", how="left")
-            _df2.write_parquet(panel_path)
-            print(f"[{_ts()}] Macro enrichment: {len(macro_frames)} features added → {len(_df2.columns)} total cols")
-            del _df2
+
+        # ── Fast path: try pre-staged annual lookup parquet first ──
+        # Run scripts/inference/utils/stage_macro_lookup.py once to build it.
+        _lookup_blob = bucket.blob("macro/macro_annual_lookup.parquet")
+        _used_fast_path = False
+        try:
+            if _lookup_blob.exists():
+                import io as _io2
+                _lookup_bytes = _lookup_blob.download_as_bytes(timeout=60)
+                macro_pl = pl.read_parquet(_io2.BytesIO(_lookup_bytes))
+                if "yr" in macro_pl.columns:
+                    macro_pl = macro_pl.cast({"yr": pl.Int32})
+                    _df2 = pl.read_parquet(panel_path)
+                    _df2 = _df2.join(macro_pl, on="yr", how="left")
+                    _df2.write_parquet(panel_path)
+                    n_macro_cols = len([c for c in macro_pl.columns if c != "yr"])
+                    print(f"[{_ts()}] Macro enrichment (fast path): {n_macro_cols} features from "
+                          f"macro_annual_lookup.parquet → {len(_df2.columns)} total cols")
+                    del _df2
+                    _used_fast_path = True
+        except Exception as _fast_err:
+            print(f"[{_ts()}] ⚠️ Macro fast path failed ({_fast_err}), falling back to per-CSV loop")
+
+        # ── Slow path: per-CSV download and join (fallback) ──
+        if not _used_fast_path:
+            for gcs_path, col_name in MACRO_SERIES.items():
+                try:
+                    blob = bucket.blob(gcs_path)
+                    if not blob.exists():
+                        continue
+                    raw = _pd.read_csv(_io.BytesIO(blob.download_as_bytes()), on_bad_lines="skip")
+                    if len(raw.columns) < 2:
+                        continue
+                    date_col, val_col = raw.columns[0], raw.columns[1]
+                    raw[date_col] = _pd.to_datetime(raw[date_col], errors="coerce")
+                    raw[val_col] = _pd.to_numeric(raw[val_col], errors="coerce")
+                    raw = raw.dropna(subset=[date_col, val_col])
+                    raw["_year"] = raw[date_col].dt.year
+                    annual = raw.groupby("_year")[val_col].mean().reset_index()
+                    annual.columns = ["_year", col_name]
+                    macro_frames[col_name] = annual
+                except Exception as _me:
+                    print(f"[{_ts()}] ⚠️ Macro {gcs_path}: {_me}")
+            if macro_frames:
+                merged = None
+                for _name, _frame in macro_frames.items():
+                    merged = _frame if merged is None else merged.merge(_frame, on="_year", how="outer")
+                merged = merged.sort_values("_year")
+                macro_pl = pl.from_pandas(merged).rename({"_year": "yr"}).cast({"yr": pl.Int32})
+                _df2 = pl.read_parquet(panel_path)
+                _df2 = _df2.join(macro_pl, on="yr", how="left")
+                _df2.write_parquet(panel_path)
+                print(f"[{_ts()}] Macro enrichment (slow path): {len(macro_frames)} features added → {len(_df2.columns)} total cols")
+                del _df2
     except Exception as _ee:
         print(f"[{_ts()}] ⚠️ Macro enrichment failed (non-fatal): {_ee}")
 
@@ -324,9 +349,9 @@ def run_inference_shard(
         "TARGET_SCHEMA": schema,
         "CKPT_VARIANT_SUFFIX": "" if _use_sb else "SF500K",  # SB trained on all property types — skip SF filter
         "MODEL_VARIANT": model,
-        "APPLY_CALIBRATION": False if _use_sb else True,  # no calibrators for SB
+        "APPLY_CALIBRATION": False,  # disabled globally per user request
         "RUN_FULL_BACKTEST": False,
-        "H": 6,
+        "H": 5 if "florida" in jurisdiction else 6,
         "S_SCENARIOS": 256,
         "OUT_ROOT": out_root,
         "SUITE_ID": suite_id,
@@ -353,6 +378,19 @@ def run_inference_shard(
         # Raise statement timeout to 20 min for large parcel history/forecast inserts
         # (default 5 min was too short for 500K+ row chunks hitting index rebuild)
         "PG_STATEMENT_TIMEOUT_MS": 1200_000,  # 20 minutes
+        # ── Large-jurisdiction history write bypass ──────────────────────────────
+        # For FL DOR (and other large jurisdictions), history chunks are ~2.7M rows
+        # each.  The Supabase upsert causes a 10-minute stall between chunks and
+        # crashes the run at exactly 13.87%.  Set SKIP_HISTORY_DB_WRITE=True to
+        # write only to GCS (parquets still saved by watchdog).  Run
+        # upload_vol_to_supabase_modal.py post-inference to replay history to Supabase.
+        "SKIP_HISTORY_DB_WRITE": "florida" in jurisdiction or "fl_" in jurisdiction,
+        # ── GCS-based resume skip-scan ───────────────────────────────────────────
+        # Provides a second skip-source alongside Supabase: scans already-written
+        # GCS forecast parquets in the resumed suite so accounts whose DB write
+        # failed (but whose parquet landed) are not re-inferred.
+        "GCS_SKIP_BUCKET": "properlytic-raw-data",
+        "GCS_SKIP_SUITE_ID": suite_id,  # same suite_id used for resume
     })
 
     # Patch DB URL to raise statement_timeout from Supabase's default (~30s)
@@ -516,12 +554,43 @@ def run_inference_shard(
     memory=16384,
 )
 def _load_accounts(jurisdiction: str, panel_gcs_path: str = "") -> list:
-    """Load all account IDs from GCS panel — runs in Modal with cloud creds."""
+    """Load all account IDs from GCS panel — runs in Modal with cloud creds.
+
+    Fast path: if acct_lists/{jurisdiction}_acct_list.parquet exists in GCS and
+    was written within the last 30 days, download only that tiny file instead of
+    the full 500MB+ panel.  Falls back to full panel download and writes a fresh
+    cache on completion.
+    """
     import json, polars as pl, time as _time
     from google.cloud import storage
     creds = json.loads(os.environ["GOOGLE_APPLICATION_CREDENTIALS_JSON"])
     client = storage.Client.from_service_account_info(creds)
     bucket = client.bucket("properlytic-raw-data")
+
+    # ── Fast path: GCS acct-list cache ──────────────────────────────────────
+    _cache_key = f"acct_lists/{jurisdiction}_acct_list.parquet"
+    _cache_ttl_days = 30
+    _cache_blob = bucket.blob(_cache_key)
+    try:
+        _cache_blob.reload()  # fetch metadata
+        from datetime import timezone, timedelta
+        _age = (_time.time() -
+                _cache_blob.updated.replace(tzinfo=timezone.utc).timestamp()) / 86400
+        if _age < _cache_ttl_days:
+            import io as _io
+            import pyarrow.parquet as _pq
+            _raw = _cache_blob.download_as_bytes(timeout=120)
+            _tbl = _pq.read_table(_io.BytesIO(_raw), columns=["acct"])
+            all_accts = [str(a) for a in _tbl["acct"].to_pylist()]
+            print(f"[_load_accounts] ⚡ Cache HIT: loaded {len(all_accts):,} accts from "
+                  f"{_cache_key} (age={_age:.1f}d)")
+            return all_accts
+        else:
+            print(f"[_load_accounts] Cache stale ({_age:.1f}d > {_cache_ttl_days}d), refreshing from panel")
+    except Exception as _ce:
+        print(f"[_load_accounts] Cache miss or error ({_ce}), loading from panel")
+
+    # ── Slow path: download full panel ───────────────────────────────────────
     panel_path = "/tmp/panel_split.parquet"
     _panel_blob_path = _resolve_panel_gcs_path(jurisdiction, panel_gcs_path)
     blob = bucket.blob(_panel_blob_path)
@@ -539,43 +608,77 @@ def _load_accounts(jurisdiction: str, panel_gcs_path: str = "") -> list:
     acct_col = "acct" if "acct" in schema else ("parcel_id" if "parcel_id" in schema else "geoid")
     # Only read the acct column to minimize memory for large panels
     all_accts = pl.scan_parquet(panel_path).select(acct_col).unique().collect().to_series().to_list()
+    all_accts = [str(a) for a in all_accts]
     print(f"[_load_accounts] Loaded {len(all_accts):,} unique accounts ({acct_col}) from {jurisdiction}")
-    return [str(a) for a in all_accts]
+
+    # ── Write cache for next resume ──────────────────────────────────────────
+    try:
+        import pyarrow as _pa
+        import pyarrow.parquet as _pq
+        import io as _io
+        _tbl = _pa.table({"acct": _pa.array(all_accts, type=_pa.string())})
+        _buf = _io.BytesIO()
+        _pq.write_table(_tbl, _buf)
+        bucket.blob(_cache_key).upload_from_string(_buf.getvalue(), content_type="application/octet-stream")
+        print(f"[_load_accounts] ✅ Wrote acct cache to GCS: {_cache_key} ({len(all_accts):,} accts)")
+    except Exception as _we:
+        print(f"[_load_accounts] ⚠️ Failed to write acct cache (non-fatal): {_we}")
+
+    return all_accts
 
 
-@app.local_entrypoint()
-def main(
-    jurisdiction: str = "acs_nationwide",
-    origin: int = 2024,
-    n_shards: int = 6,
-    resume_run_id: str = "",   # pass the run_id from a cancelled job to resume from last chunk
-    suite_id_override: str = "",  # pass the suite_id from a cancelled job to reuse output dir
-    schema: str = "forecast_queue",
-    panel_gcs_path: str = "",  # override GCS blob path for non-standard panels
-    model: str = "v11",        # "v11" or "v12_sb" — which worldmodel to use
+@app.function(
+    image=image,
+    secrets=[gcs_secret, supabase_secret],
+    timeout=600,
+    memory=16384,
+)
+def _dispatch_and_run(
+    jurisdiction: str,
+    origin: int,
+    n_shards: int,
+    run_id: str,
+    suite_id: str,
+    schema: str,
+    panel_gcs_path: str,
+    model: str,
 ):
-    """Fan out inference across N parallel A100 containers.
+    """Split accounts into shards and fan out run_inference_shard — all inside Modal.
 
-    Resume a cancelled run:
-        modal run ... --resume-run-id forecast_2024_20260302T131234Z_abc123 --suite-id-override suite_20260302T131230Z_def456
+    By running this as a Modal function rather than in the @local_entrypoint, the
+    17M+ account ID list is never serialized across the local↔Modal wire.  The list
+    is loaded, shuffled, split, and dispatched entirely within the Modal network.
     """
-    import uuid, time, random
+    import uuid, time, random, json, io
+    import polars as pl
+    from google.cloud import storage
 
-    print(f"🚀 Parallel inference ({model}): {jurisdiction} o={origin} n_shards={n_shards}")
-    if resume_run_id:
-        print(f"🔄 RESUME mode: run_id={resume_run_id} suite_id={suite_id_override or '(new suite)'}")
+    creds  = json.loads(os.environ["GOOGLE_APPLICATION_CREDENTIALS_JSON"])
+    client = storage.Client.from_service_account_info(creds)
+    bucket = client.bucket("properlytic-raw-data")
 
-    # Load accounts inside Modal (has GCS creds)
-    all_accts = _load_accounts.remote(jurisdiction, panel_gcs_path)
-    print(f"✅ Loaded {len(all_accts):,} unique accounts from GCS")
+    # ── Read account list from GCS cache (written by _load_accounts) ──────────
+    _cache_key = f"acct_lists/{jurisdiction}_acct_list.parquet"
+    _cache_blob = bucket.blob(_cache_key)
+    try:
+        import pyarrow.parquet as _pq
+        _raw = _cache_blob.download_as_bytes(timeout=120)
+        _tbl = _pq.read_table(io.BytesIO(_raw), columns=["acct"])
+        all_accts = [str(a) for a in _tbl["acct"].to_pylist()]
+        print(f"[dispatch] Loaded {len(all_accts):,} accts from cache {_cache_key}")
+    except Exception as _ce:
+        # Fallback: scan the panel directly
+        print(f"[dispatch] Cache miss ({_ce}), loading from panel")
+        panel_path = "/tmp/panel_dispatch.parquet"
+        from inference_modal_parallel import _resolve_panel_gcs_path
+        blob = bucket.blob(_resolve_panel_gcs_path(jurisdiction, panel_gcs_path))
+        blob.download_to_filename(panel_path, timeout=600)
+        schema_names = pl.scan_parquet(panel_path).collect_schema().names()
+        acct_col = "acct" if "acct" in schema_names else ("parcel_id" if "parcel_id" in schema_names else "geoid")
+        all_accts = [str(a) for a in pl.scan_parquet(panel_path).select(acct_col).unique().collect().to_series().to_list()]
+        print(f"[dispatch] Loaded {len(all_accts):,} accts from panel")
 
-    # Shared identifiers so all shards write under the same run/suite
-    suite_id = suite_id_override if suite_id_override else f"suite_{time.strftime('%Y%m%dT%H%M%SZ')}_{uuid.uuid4().hex[:16]}"
-    run_id = resume_run_id if resume_run_id else f"forecast_{origin}_{time.strftime('%Y%m%dT%H%M%SZ')}_{uuid.uuid4().hex[:16]}"
-    print(f"  suite_id: {suite_id}")
-    print(f"  run_id:   {run_id}")
-
-    # Split accounts into N equal shards
+    # ── Shard and dispatch ─────────────────────────────────────────────────────
     random.seed(42)
     random.shuffle(all_accts)
     chunk_size = max(1, len(all_accts) // n_shards)
@@ -585,11 +688,10 @@ def main(
         end = start + chunk_size if i < n_shards - 1 else len(all_accts)
         shards.append(all_accts[start:end])
 
-    print(f"\n🔀 Dispatching {n_shards} shards:")
+    print(f"[dispatch] Dispatching {n_shards} shards:")
     for i, s in enumerate(shards):
         print(f"  Shard {i+1}: {len(s):,} accounts")
 
-    # Fan out via Modal starmap — all shards run in parallel
     t0 = time.time()
     inputs = [
         (jurisdiction, origin, shard, run_id, i, n_shards, suite_id, schema, panel_gcs_path, model)
@@ -602,5 +704,55 @@ def main(
     print(f"\n✅ All {n_shards} shards complete in {elapsed/60:.1f} min")
     for r in results:
         print(f"  Shard {r['shard']+1}: {r['accounts']:,} accts in {r['elapsed_min']} min")
-    print(f"\nTotal accounts: {sum(r['accounts'] for r in results):,}")
+    total = sum(r['accounts'] for r in results)
+    print(f"\nTotal accounts processed: {total:,}")
+    return {"total_accounts": total, "elapsed_min": round(elapsed / 60, 1), "n_shards": n_shards}
+
+
+@app.local_entrypoint()
+def main(
+    jurisdiction: str = "acs_nationwide",
+    origin: int = 2024,
+    n_shards: int = 6,
+    resume_run_id: str = "forecast_2025_20260309T022308Z_cc38ca113e00434681196b3375cb4d47",   # FL DOR cancelled @13.87% — pass empty string to start fresh
+    suite_id_override: str = "suite_20260309T022308Z_2a1dd29f6dd446c59f1353b07c329e72",  # FL DOR suite — pass empty string for a new suite
+    schema: str = "forecast_queue",
+    panel_gcs_path: str = "",  # override GCS blob path for non-standard panels
+    model: str = "v11",        # "v11" or "v12_sb" — which worldmodel to use
+):
+    """Fan out inference across N parallel A100 containers.
+
+    Resume a cancelled run:
+        modal run ... --resume-run-id RUN_ID --suite-id-override SUITE_ID
+
+    NOTE: shard-splitting runs inside Modal (_dispatch_and_run) so large account
+    lists are never serialized across the local↔Modal wire.
+    """
+    import uuid, time
+
+    print(f"🚀 Parallel inference ({model}): {jurisdiction} o={origin} n_shards={n_shards}")
+    if resume_run_id:
+        print(f"🔄 RESUME mode: run_id={resume_run_id} suite_id={suite_id_override or '(new suite)'}")
+
+    # Ensure acct list is cached in GCS before dispatch (Modal function with GCS creds)
+    _load_accounts.remote(jurisdiction, panel_gcs_path)
+
+    # Build shared run/suite IDs locally (just strings — cheap to pass)
+    suite_id = suite_id_override if suite_id_override else f"suite_{time.strftime('%Y%m%dT%H%M%SZ')}_{uuid.uuid4().hex[:16]}"
+    run_id   = resume_run_id    if resume_run_id    else f"forecast_{origin}_{time.strftime('%Y%m%dT%H%M%SZ')}_{uuid.uuid4().hex[:16]}"
+    print(f"  suite_id : {suite_id}")
+    print(f"  run_id   : {run_id}")
+
+    # Dispatch: all heavy work (shuffle, split, starmap) happens inside Modal
+    result = _dispatch_and_run.remote(
+        jurisdiction=jurisdiction,
+        origin=origin,
+        n_shards=n_shards,
+        run_id=run_id,
+        suite_id=suite_id,
+        schema=schema,
+        panel_gcs_path=panel_gcs_path,
+        model=model,
+    )
+    print(f"\n✅ Done: {result['total_accounts']:,} accounts in {result['elapsed_min']} min")
 

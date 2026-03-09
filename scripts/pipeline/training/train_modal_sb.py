@@ -246,6 +246,22 @@ def train_worldmodel_sb(
     all_null_cols = [c for c in df.columns if null_counts[c][0] == n_rows and c not in ("acct", "yr", "tot_appr_val")]
     if all_null_cols: df = df.drop(all_null_cols)
 
+    # ─── Deduplicate to one row per (acct, yr) ───
+    # TxGIO panels can have duplicate acct-year rows which break the
+    # shift(-1).over("acct") label extraction (shift hits next duplicate
+    # at the SAME year instead of the next year).
+    _n_before = len(df)
+    _group_cols = ["acct", "yr"]
+    _agg_exprs = [pl.col("tot_appr_val").mean()]
+    for c in df.columns:
+        if c not in _group_cols and c != "tot_appr_val":
+            _agg_exprs.append(pl.col(c).first())
+    df = df.group_by(_group_cols).agg(_agg_exprs).sort(_group_cols)
+    _n_after = len(df)
+    if _n_before != _n_after:
+        print(f"[{ts()}] Deduped panel: {_n_before:,} → {_n_after:,} rows "
+              f"({_n_before - _n_after:,} duplicate acct-year rows removed)")
+
     adapted_path = f"/tmp/panel_{jurisdiction_suffix}_adapted.parquet"
     df.write_parquet(adapted_path)
 
@@ -253,6 +269,20 @@ def train_worldmodel_sb(
     yr_max = int(df["yr"].max())
     n_accts = df["acct"].n_unique()
     print(f"[{ts()}] Adapted: {len(df):,} rows, {n_accts:,} parcels, years {yr_min}-{yr_max}")
+
+    # ─── Panel health diagnostic ───
+    _yr_dist = df.group_by("yr").agg(pl.len().alias("n")).sort("yr").collect() if hasattr(df, 'collect') else df.group_by("yr").agg(pl.len().alias("n")).sort("yr")
+    print(f"[{ts()}] PANEL DIAG — rows per year:")
+    for r in (_yr_dist if not hasattr(_yr_dist, 'collect') else _yr_dist).iter_rows(named=True):
+        print(f"    yr={int(r['yr'])}: {int(r['n']):,} rows")
+    _yrs_per_acct = df.group_by("acct").agg(pl.col("yr").n_unique().alias("n_yrs"))
+    _ypa_dist = _yrs_per_acct.group_by("n_yrs").agg(pl.len().alias("n_accts")).sort("n_yrs")
+    print(f"[{ts()}] PANEL DIAG — years per account:")
+    for r in _ypa_dist.iter_rows(named=True):
+        print(f"    {int(r['n_yrs'])} year(s): {int(r['n_accts']):,} accounts")
+    _multi = int(_yrs_per_acct.filter(pl.col("n_yrs") >= 2).height)
+    print(f"[{ts()}] PANEL DIAG — accounts with ≥2 years: {_multi:,} / {n_accts:,} "
+          f"({100*_multi/max(1,n_accts):.1f}%)")
 
     # ─── Environment setup ───
     os.environ["WM_MAX_ACCTS"] = str(sample_size)
@@ -380,6 +410,24 @@ def train_worldmodel_sb(
 
     if n_train == 0:
         raise ValueError(f"No training data for origin {origin}")
+
+    # ─── Infer TRUE hist_len from actual shard data ───────────────────────────
+    # cfg["FULL_HIST_LEN"] defaults to 21 (HCAD baseline) but panels with fewer
+    # calendar years (e.g. NYC 2009–2026 = 18 yrs) produce hist_y of width 18.
+    # Building networks with hist_len=21 while data has 18 causes a
+    # RuntimeError: mat1 (Bx191) × mat2 (194x64) shape mismatch at batch 0.
+    # Fix: peek at the first raw shard's hist_y dim and override _hist_len.
+    import numpy as _np_peek
+    try:
+        _first_shard_z = _np_peek.load(origin_shards[0], allow_pickle=True)
+        _actual_hist_len = int(_first_shard_z["hist_y"].shape[1])
+        if _actual_hist_len != _hist_len:
+            print(f"[{ts()}] ⚠️  hist_len mismatch: cfg says {_hist_len}, shard has {_actual_hist_len}. "
+                  f"Overriding to {_actual_hist_len} to match actual data.")
+            _hist_len = _actual_hist_len
+    except Exception as _peek_err:
+        print(f"[{ts()}] ⚠️  Could not peek shard for hist_len ({_peek_err}). Using cfg value {_hist_len}.")
+
 
     # ─── Create v12_sb model components ───
     sf2m_net = create_sf2m_network(

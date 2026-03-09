@@ -62,21 +62,21 @@ export default function HoustonCoveragePage() {
                                 <div className="w-2 h-2 rounded-full bg-lime-500 mt-2 shrink-0"></div>
                                 <div>
                                     <div className="font-bold">Harris County</div>
-                                    <div className="text-sm text-muted-foreground mt-1">Full parcel and H3 hex coverage. Active v11 models.</div>
+                                    <div className="text-sm text-muted-foreground mt-1">Full parcel and H3 hex coverage. Active v12 models.</div>
                                 </div>
                             </li>
                             <li className="flex gap-4">
                                 <div className="w-2 h-2 rounded-full bg-lime-500 mt-2 shrink-0"></div>
                                 <div>
                                     <div className="font-bold">Fort Bend County</div>
-                                    <div className="text-sm text-muted-foreground mt-1">Parcel and H3 hex coverage. Active v11 models.</div>
+                                    <div className="text-sm text-muted-foreground mt-1">Parcel and H3 hex coverage. Active v12 models.</div>
                                 </div>
                             </li>
                             <li className="flex gap-4">
                                 <div className="w-2 h-2 rounded-full bg-lime-500 mt-2 shrink-0"></div>
                                 <div>
                                     <div className="font-bold">Montgomery County</div>
-                                    <div className="text-sm text-muted-foreground mt-1">Parcel and H3 hex coverage. Active v11 models.</div>
+                                    <div className="text-sm text-muted-foreground mt-1">Parcel and H3 hex coverage. Active v12 models.</div>
                                 </div>
                             </li>
                         </ul>

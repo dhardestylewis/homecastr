@@ -11,7 +11,9 @@ import { getOpportunityColor, getValueColor, formatOpportunity, formatCurrency }
 import { TrendingUp, TrendingDown, Minus, Building2, X, Bot } from "lucide-react"
 import type { FilterState, FeatureProperties, MapState, DetailsResponse } from "@/lib/types"
 import { getH3CellDetails } from "@/app/actions/h3-details"
+import { h3ToForecastUrl } from "@/app/actions/h3-to-forecast-url"
 import { getH3ChildTimelines } from "@/app/actions/h3-children"
+import { getParcels } from "@/app/actions/parcels"
 import { getH3DataBatch } from "@/app/actions/h3-data-batch"
 import { FanChart } from "./fan-chart"
 import { MapTooltip } from "./map-tooltip"
@@ -399,6 +401,24 @@ export function MapView({
     const [selectedHexes, setSelectedHexes] = useState<string[]>([])
     const [selectionDetails, setSelectionDetails] = useState<DetailsResponse | null>(null)
     const [hoveredDetails, setHoveredDetails] = useState<DetailsResponse | null>(null)
+    const [forecastsHref, setForecastsHref] = useState<string | null>(null)
+
+    // Resolve /forecasts hub link when primary selection changes
+    useEffect(() => {
+        if (!primaryDetails?.coordinates) return
+        let isStale = false
+        const lat = primaryDetails.coordinates.lat
+        const lng = primaryDetails.coordinates.lng
+
+        setForecastsHref(null) // Reset while resolving
+        h3ToForecastUrl(lat, lng).then(result => {
+            if (!isStale && result) {
+                setForecastsHref(result.href)
+            }
+        })
+
+        return () => { isStale = true }
+    }, [primaryDetails?.coordinates])
     const [selectedHexGeoCenter, setSelectedHexGeoCenter] = useState<{ lat: number; lng: number } | null>(null)
     const [fixedTooltipPos, setFixedTooltipPos] = useState<{ globalX: number; globalY: number } | null>(null)
     const [tooltipData, setTooltipData] = useState<{ x: number; y: number; globalX: number; globalY: number; properties: FeatureProperties } | null>(null)
@@ -2104,6 +2124,7 @@ export function MapView({
                             })
                         } : undefined}
                         googleMapsApiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY}
+                        forecastsHref={forecastsHref || undefined}
                     />
                 )
             })()}

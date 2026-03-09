@@ -26,7 +26,7 @@ export function MethodCaveat({ schemaVersion, originYear }: Props) {
                         <p className="text-xs uppercase tracking-wider text-muted-foreground">Citation</p>
                         <p className="text-foreground/70 text-xs italic">
                             Hardesty Lewis, D. ({new Date().getFullYear()}). Homecastr Home Price Forecast. Retrieved from{' '}
-                            <a href="https://devpost.com/software/homecastr" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors underline decoration-muted-foreground/50 underline-offset-2">
+                            <a href="https://www.homecastr.com" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors underline decoration-muted-foreground/50 underline-offset-2">
                                 homecastr.com
                             </a>.
                         </p>

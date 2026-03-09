@@ -61,19 +61,19 @@ def wb_log_artifact(path: str, name: str, artifact_type: str='model'):
     _WB_RUN.log_artifact(art)
 
 # =============================================================================
-# Config — v12_sb
+# Config — v12_sb (use globals().get() so train_modal_sb.py can inject values)
 # =============================================================================
 PANEL_PATH_DRIVE = '/content/drive/MyDrive/HCAD_Archive_Aggregates/hcad_master_panel_2005_2025_leakage_strict_FIXEDYR_WITHGIS.parquet'
 PANEL_PATH_LOCAL = '/content/local_panel.parquet'
 SEED = 42
-MIN_YEAR = 2005
-MAX_YEAR = 2025
-SEAM_YEAR = 2025
-H = 5
-FULL_PANEL_MODE = True
-FULL_HORIZON_ONLY = True
+MIN_YEAR = globals().get("MIN_YEAR", 2005)
+MAX_YEAR = globals().get("MAX_YEAR", 2025)
+SEAM_YEAR = globals().get("SEAM_YEAR", MAX_YEAR)
+H = globals().get("H", 5)
+FULL_PANEL_MODE = globals().get("FULL_PANEL_MODE", True)
+FULL_HORIZON_ONLY = globals().get("FULL_HORIZON_ONLY", False)
 OUT_DIR = globals().get("OUT_DIR", "/content/drive/MyDrive/worldmodel_out_v12sb")
-FULL_HIST_LEN = globals().get("FULL_HIST_LEN", 10)
+FULL_HIST_LEN = globals().get("FULL_HIST_LEN", MAX_YEAR - MIN_YEAR + 1)
 
 HASH_BUCKET_SIZE = 32768
 GEO_BUCKETS = 4096

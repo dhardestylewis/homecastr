@@ -130,6 +130,21 @@ PG_STATEMENT_TIMEOUT_MS = 300_000   # 5 minutes per SQL statement
 PG_TX_MAX_RETRIES = 100               # retries on transient DB errors
 PG_TX_BACKOFF_BASE = 5              # base seconds for exponential backoff
 
+# Skip writing history to Supabase during per-chunk loop.
+# When True, history parquets are still written to disk and streamed to GCS by
+# the watchdog thread in inference_modal_parallel.py — they just skip the
+# _pg_tx upsert that causes 10-min timeouts on large jurisdictions (FL: ~2.7M
+# rows/chunk).  Run upload_vol_to_supabase_modal.py post-inference to replay.
+# Set via globals() injection from inference_modal_parallel.py.
+SKIP_HISTORY_DB_WRITE = bool(globals().get("SKIP_HISTORY_DB_WRITE", False))
+
+# GCS bucket/suite_id to scan for already-written forecast parquets during
+# resume.  Supplements the Supabase acct-skip query so chunks whose Supabase
+# write failed (but whose GCS parquet landed) are not re-inferred.
+# Set via globals() injection from inference_modal_parallel.py.
+GCS_SKIP_BUCKET   = globals().get("GCS_SKIP_BUCKET", "")    # e.g. "properlytic-raw-data"
+GCS_SKIP_SUITE_ID = globals().get("GCS_SKIP_SUITE_ID", "")  # suite_id from cancelled run
+
 # Schema compatibility:
 # Set this True only if <schema>.metrics_parcel_forecast has a column named "n".
 # Many DDLs keep only "n_scenarios" on parcel forecast rows.
@@ -253,6 +268,52 @@ def _get_completed_accts_from_db(schema: str, run_id: str, table: str = "metrics
         with conn.cursor() as cur:
             cur.execute(sql, (run_id,))
             return {row[0] for row in cur.fetchall()}
+
+
+def _get_completed_accts_from_gcs(bucket_name: str, suite_id: str, jurisdiction: str) -> set:
+    """
+    Scan GCS forecast-chunk parquets from a previous (possibly interrupted) run
+    and return the set of acct IDs that were already written.
+
+    This supplements _get_completed_accts_from_db() for runs where the GCS
+    watchdog wrote parquets but the Supabase upsert failed (e.g. the FL DOR
+    history-write timeout scenario).  Prevents redundant re-inference.
+
+    GCS path pattern:
+        inference_output/{jurisdiction}/{suite_id}/*/forecast_chunks/*.parquet
+    """
+    if not bucket_name or not suite_id:
+        return set()
+    try:
+        from google.cloud import storage as _gcs
+        import pyarrow.parquet as _pq
+        import io as _io
+
+        _client = _gcs.Client()
+        _bucket = _client.bucket(bucket_name)
+        _prefix = f"inference_output/{jurisdiction}/{suite_id}/"
+        _blobs = list(_bucket.list_blobs(prefix=_prefix))
+        _fc_blobs = [b for b in _blobs if "/forecast_chunks/" in b.name and b.name.endswith(".parquet")]
+
+        if not _fc_blobs:
+            print(f"[{_ts()}] GCS skip-scan: no forecast parquets found under {_prefix}")
+            return set()
+
+        accts: set = set()
+        for _blob in _fc_blobs:
+            try:
+                _raw = _blob.download_as_bytes(timeout=120)
+                _tbl = _pq.read_table(_io.BytesIO(_raw), columns=["acct"])
+                accts.update(str(a) for a in _tbl["acct"].to_pylist())
+            except Exception as _be:
+                print(f"[{_ts()}] GCS skip-scan: failed to read {_blob.name}: {_be}")
+
+        print(f"[{_ts()}] GCS skip-scan: found {len(accts):,} already-written accts "
+              f"across {len(_fc_blobs)} forecast parquet(s) in {_prefix}")
+        return accts
+    except Exception as _e:
+        print(f"[{_ts()}] GCS skip-scan: non-fatal error (proceeding without GCS skip): {_e}")
+        return set()
 
 
 # -----------------------------------------------------------------------------
@@ -1857,7 +1918,24 @@ def _run_one_origin(
     if resume_run_id:
         run_id = resume_run_id
         print(f"[{_ts()}] RESUME MODE: reusing run_id={run_id}")
-        done_accts = _get_completed_accts_from_db(schema, run_id, "metrics_parcel_forecast")
+
+        # 1) Supabase-based skip (primary)
+        try:
+            done_accts = _get_completed_accts_from_db(schema, run_id, "metrics_parcel_forecast")
+        except Exception as _dbe:
+            print(f"[{_ts()}] RESUME: Supabase skip-query failed ({_dbe}), proceeding with GCS-only skip")
+            done_accts = set()
+
+        # 2) GCS-based skip (supplement — catches chunks written to GCS but not Supabase)
+        _gcs_bucket = globals().get("GCS_SKIP_BUCKET", "")
+        _gcs_suite  = globals().get("GCS_SKIP_SUITE_ID", "")
+        if _gcs_bucket and _gcs_suite:
+            gcs_done = _get_completed_accts_from_gcs(_gcs_bucket, _gcs_suite, JURISDICTION)
+            n_gcs_extra = len(gcs_done - done_accts)
+            done_accts |= gcs_done
+            if n_gcs_extra > 0:
+                print(f"[{_ts()}] RESUME: +{n_gcs_extra:,} additional accts found via GCS parquet scan")
+
         n_already = len(done_accts)
         all_accts_prod = [a for a in all_accts_prod if a not in done_accts]
         # Shuffle remaining accounts so chunks get a random mix of forecastable/non-forecastable
@@ -1865,7 +1943,7 @@ def _run_one_origin(
         import random as _rng
         _rng.seed(42)  # fixed seed for reproducibility across restarts
         _rng.shuffle(all_accts_prod)
-        print(f"[{_ts()}] RESUME: {n_already} accounts already done, {len(all_accts_prod)} remaining (shuffled)")
+        print(f"[{_ts()}] RESUME: {n_already} accounts already done (Supabase+GCS), {len(all_accts_prod)} remaining (shuffled)")
         if not all_accts_prod:
             print(f"[{_ts()}] RESUME: nothing left to do for this run, skipping.")
             return {
@@ -2209,35 +2287,46 @@ def _run_one_origin(
 
             if not hist_chunk_df.empty:
                 hist_chunk_df["jurisdiction"] = JURISDICTION
-                try:
-                    with _pg_tx(label=f"hist_chunk_{chunk_idx}") as conn:
-                        hist_rows_upserted = _upsert_df_pg(
-                            conn=conn,
-                            schema=schema,
-                            table="metrics_parcel_history",
-                            df=hist_chunk_df,
-                            conflict_cols=["acct", "year", "series_kind", "variant_id"],
-                            update_cols=[
-                                "value", "p50", "n",
-                                "run_id", "backtest_id", "model_version", "as_of_date",
-                                "updated_at"
-                            ],
-                        )
-
-                        hist_agg_rows_upserted = _aggregate_history_levels_for_chunk(
-                            conn=conn,
-                            schema=schema,
-                            acct_chunk=_acct_chunk_for_hist,
-                            run_id=run_id,
-                            series_kind=series_kind_history,
-                            variant_id=(hist_variant_id if hist_variant_id is not None else "__history__"),
-                            backtest_id=hist_backtest_id,
-                            as_of_date=as_of_date,
-                        )
-                except Exception as exc:
-                    print(f"[{_ts()}] Chunk {chunk_idx}: ⚠️  HISTORY DB write failed after retries, SKIPPING: {exc}")
+                # SKIP_HISTORY_DB_WRITE: skip Supabase upsert for large jurisdictions (FL, etc.)
+                # where ~2.7M history rows/chunk cause a 10-min timeout stall between chunks.
+                # The parquet is still on disk and will be picked up by the GCS watchdog.
+                # Replay into Supabase post-inference via upload_vol_to_supabase_modal.py.
+                _skip_hist_db = bool(globals().get("SKIP_HISTORY_DB_WRITE", False))
+                if _skip_hist_db:
+                    print(f"[{_ts()}] Chunk {chunk_idx}: SKIP_HISTORY_DB_WRITE=True — "
+                          f"history parquet saved to GCS only (replay post-run)")
                     hist_rows_upserted = 0
                     hist_agg_rows_upserted = 0
+                else:
+                    try:
+                        with _pg_tx(label=f"hist_chunk_{chunk_idx}") as conn:
+                            hist_rows_upserted = _upsert_df_pg(
+                                conn=conn,
+                                schema=schema,
+                                table="metrics_parcel_history",
+                                df=hist_chunk_df,
+                                conflict_cols=["acct", "year", "series_kind", "variant_id"],
+                                update_cols=[
+                                    "value", "p50", "n",
+                                    "run_id", "backtest_id", "model_version", "as_of_date",
+                                    "updated_at"
+                                ],
+                            )
+
+                            hist_agg_rows_upserted = _aggregate_history_levels_for_chunk(
+                                conn=conn,
+                                schema=schema,
+                                acct_chunk=_acct_chunk_for_hist,
+                                run_id=run_id,
+                                series_kind=series_kind_history,
+                                variant_id=(hist_variant_id if hist_variant_id is not None else "__history__"),
+                                backtest_id=hist_backtest_id,
+                                as_of_date=as_of_date,
+                            )
+                    except Exception as exc:
+                        print(f"[{_ts()}] Chunk {chunk_idx}: ⚠️  HISTORY DB write failed after retries, SKIPPING: {exc}")
+                        hist_rows_upserted = 0
+                        hist_agg_rows_upserted = 0
 
                 history_rows_total += int(hist_rows_upserted)
                 history_agg_rows_total += int(hist_agg_rows_upserted)

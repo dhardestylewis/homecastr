@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 import Link from "next/link"
 import { getTractsForCity, batchEnrichTracts, getStatesWithData, getCitiesForState, getLatestOriginYear } from "@/lib/publishing/geo-crosswalk"
+import { isOutlierTract, logFlaggedOutliers, createOutlierTag, type OutlierTag } from "@/lib/publishing/forecast-outlier-filter"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
 import { SortableNeighborhoodTable } from "@/components/publishing/SortableNeighborhoodTable"
 import { DownloadButton } from "@/components/publishing/DownloadButton"
@@ -122,6 +123,7 @@ export default async function CityHubPage({ params, searchParams }: PageProps) {
                     p50_current: h12.p50,
                     appreciation_5yr: h60 ? ((h60.p50 - h12.p50) / h12.p50 * 100) : 0,
                     spread_5yr: h60 ? (h60.p90 - h60.p10) : 0,
+                    h60_p50: h60?.p50 ?? null,
                 })
             }
         }
@@ -130,6 +132,8 @@ export default async function CityHubPage({ params, searchParams }: PageProps) {
     // Build slug from enriched name, with disambiguation for duplicates
     const slugify = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 
+    // Centralized outlier filter + tagging
+    const flagged: OutlierTag[] = []
     const tractDataRaw = tracts
         .map(t => {
             const enriched = enrichedNames.get(t.tractGeoid)
@@ -137,12 +141,19 @@ export default async function CityHubPage({ params, searchParams }: PageProps) {
                 ...t,
                 neighborhoodName: enriched?.name || t.neighborhoodName,
                 zcta5: enriched?.zcta5 || null,
-                ...tractLookup.get(t.tractGeoid) || { p50_current: 0, appreciation_5yr: 0, spread_5yr: 0 },
+                ...tractLookup.get(t.tractGeoid) || { p50_current: 0, appreciation_5yr: 0, spread_5yr: 0, h60_p50: null },
             }
         })
-        // Filter: must have data, and filter outliers (likely commercial/institutional tracts)
-        .filter(t => t.p50_current >= 20_000 && t.p50_current < 5_000_000 && t.appreciation_5yr > -95 && t.appreciation_5yr <= 100)
+        .filter(t => {
+            const check = isOutlierTract(t.p50_current, t.h60_p50)
+            if (check.outlier) {
+                flagged.push(createOutlierTag(t.tractGeoid, check.reason!, t.p50_current, t.h60_p50, schema))
+                return false
+            }
+            return true
+        })
         .sort((a, b) => b.appreciation_5yr - a.appreciation_5yr)
+    await logFlaggedOutliers(flagged)
 
     // Two-pass disambiguation: use ZIP code as qualifier for duplicate names
     const nameFreq = new Map<string, number>()

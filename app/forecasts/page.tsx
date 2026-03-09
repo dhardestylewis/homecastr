@@ -5,6 +5,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin"
 import { SortableStateTable, type StateRow } from "@/components/publishing/SortableStateTable"
 import { DownloadButton } from "@/components/publishing/DownloadButton"
 import { DatasetJsonLd } from "@/components/publishing/DatasetJsonLd"
+import { isOutlierTract, logFlaggedOutliers, createOutlierTag, type OutlierTag } from "@/lib/publishing/forecast-outlier-filter"
 
 export const revalidate = 3600
 
@@ -128,19 +129,24 @@ async function getStateOutlooksFast(stateFips: string) {
         const h60Map = new Map<string, number>()
         for (const row of h60Rows) h60Map.set(row.tract_geoid20, row.p50)
 
-        // Compute per-tract appreciation
+        // Compute per-tract appreciation (centralized outlier filter)
         const appreciations: number[] = []
         const values: number[] = []
+        const flagged: OutlierTag[] = []
         for (const [tractId, h12] of h12Map) {
-            const h60 = h60Map.get(tractId)
-            if (h12 >= 20_000 && h60 && h12 < 5_000_000) {
+            const h60 = h60Map.get(tractId) ?? null
+            const check = isOutlierTract(h12, h60)
+            if (check.outlier) {
+                flagged.push(createOutlierTag(tractId, check.reason!, h12, h60, SCHEMA))
+                continue
+            }
+            if (h60 != null) {
                 const appr = ((h60 - h12) / h12) * 100
-                if (appr > -95 && appr <= 100) {
-                    appreciations.push(appr)
-                    values.push(h12)
-                }
+                appreciations.push(appr)
+                values.push(h12)
             }
         }
+        await logFlaggedOutliers(flagged)
 
         if (appreciations.length === 0) {
             return {
@@ -224,7 +230,7 @@ export default async function ForecastsIndexPage() {
             {/* Summary stats */}
             <div className="grid gap-4 sm:grid-cols-4">
                 <div className="glass-panel rounded-xl p-4">
-                    <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1">States Covered</p>
+                    <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1">States & Territories</p>
                     <p className="text-2xl font-bold text-foreground">{stateDetails.length}</p>
                 </div>
                 <div className="glass-panel rounded-xl p-4">

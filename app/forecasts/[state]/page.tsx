@@ -1,8 +1,9 @@
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 import Link from "next/link"
-import { getCitiesForState, getStatesWithData, getLatestOriginYear } from "@/lib/publishing/geo-crosswalk"
+import { getCitiesForState, getStatesWithData } from "@/lib/publishing/geo-crosswalk"
 import { withRedisCache } from "@/lib/redis"
+import { isOutlierTract, logFlaggedOutliers, createOutlierTag, type OutlierTag } from "@/lib/publishing/forecast-outlier-filter"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
 import { SortableCountyTable, type CountyRow } from "@/components/publishing/SortableCountyTable"
 import { DownloadButton } from "@/components/publishing/DownloadButton"
@@ -117,8 +118,9 @@ async function getCountyOutlooks(stateFips: string) {
             }
         }
 
-        // Group by county FIPS and compute appreciation
+        // Group by county FIPS and compute appreciation (centralized outlier filter)
         const countyData = new Map<string, { appreciations: number[]; values: number[] }>()
+        const flagged: OutlierTag[] = []
 
         for (const [tractId, h12Data] of h12Map) {
             const h60Data = h60Map.get(tractId)
@@ -129,16 +131,19 @@ async function getCountyOutlooks(stateFips: string) {
             const h12 = h12Data.p50
             const h60 = h60Data.p50
 
-            if (h12 >= 20_000 && h60 && h12 < 5_000_000) {
-                const appr = ((h60 - h12) / h12) * 100
-                if (appr > -95 && appr <= 300) {
-                    if (!countyData.has(countyFips)) countyData.set(countyFips, { appreciations: [], values: [] })
-                    const cd = countyData.get(countyFips)!
-                    cd.appreciations.push(appr)
-                    cd.values.push(h12)
-                }
+            const check = isOutlierTract(h12, h60)
+            if (check.outlier) {
+                flagged.push(createOutlierTag(tractId, check.reason!, h12, h60, SCHEMA))
+                continue
             }
+
+            const appr = ((h60 - h12) / h12) * 100
+            if (!countyData.has(countyFips)) countyData.set(countyFips, { appreciations: [], values: [] })
+            const cd = countyData.get(countyFips)!
+            cd.appreciations.push(appr)
+            cd.values.push(h12)
         }
+        await logFlaggedOutliers(flagged)
 
         const result: Record<string, { medianAppreciation: number; highestUpside: number; medianValue: number }> = {}
 

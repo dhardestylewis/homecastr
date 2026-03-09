@@ -6,6 +6,7 @@ import maplibregl from "maplibre-gl"
 import "maplibre-gl/dist/maplibre-gl.css"
 import type { FilterState, MapState, DetailsResponse } from "@/lib/types"
 import { getH3CellDetails } from "@/app/actions/h3-details"
+import { h3ToForecastUrl } from "@/app/actions/h3-to-forecast-url"
 import { getParcels } from "@/app/actions/parcels"
 import { cn } from "@/lib/utils"
 import { getOpportunityColor, getValueColor, formatOpportunity, formatCurrency, formatReliability } from "@/lib/utils/colors"
@@ -103,6 +104,25 @@ export function VectorMap({
     // SYNC TOOLTIP POSITION WHEN SELECTED EXTERNALLY
     // Unlike MapView which builds its own state, VectorMap uses the hook.
     // However, projection (getCenter/unproject) needs the map instance.
+    const [fixedTooltipPos, setFixedTooltipPos] = useState<{ globalX: number, globalY: number } | null>(null)
+    const [forecastsHref, setForecastsHref] = useState<string | null>(null)
+
+    // Resolve /forecasts hub link when primary selection changes
+    useEffect(() => {
+        if (!primaryDetails?.coordinates) return
+        let isStale = false
+        const lat = primaryDetails.coordinates.lat
+        const lng = primaryDetails.coordinates.lng
+
+        setForecastsHref(null) // Reset while resolving
+        h3ToForecastUrl(lat, lng).then(result => {
+            if (!isStale && result) {
+                setForecastsHref(result.href)
+            }
+        })
+
+        return () => { isStale = true }
+    }, [primaryDetails?.coordinates])
     useEffect(() => {
         if (!mapRef.current || !isLoaded || !mapState.selectedId) return
 
@@ -1082,6 +1102,7 @@ export function VectorMap({
                             })
                         } : undefined}
                         googleMapsApiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY}
+                        forecastsHref={forecastsHref || undefined}
                     />
                 )
             })()}

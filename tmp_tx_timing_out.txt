@@ -1,0 +1,23 @@
+﻿python : Traceback (most recent call 
+last):
+At line:1 char:1
++ python tmp_tx_timing.py 2>&1 | 
+Out-File -Encoding UTF8 tmp_tx_timing_ 
+...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecifi 
+   ed: (Traceback (most recent call las  
+  t)::String) [], RemoteException
+    + FullyQualifiedErrorId : NativeComm 
+   andError
+ 
+  File "C:\Users\dhl\data\Projects\Proper
+lytic_UI\v0-properlytic-8v\tmp_tx_timing.
+py", line 10, in <module>
+    cur.execute(f"""
+psycopg2.errors.UndefinedColumn: column 
+"inserted_at" does not exist
+LINE 2:     SELECT min(inserted_at), 
+max(inserted_at), count(*)
+                       ^
+

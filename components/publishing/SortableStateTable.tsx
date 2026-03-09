@@ -118,7 +118,7 @@ export function SortableStateTable({ rows }: { rows: StateRow[] }) {
                     <tbody className="divide-y divide-border">
                         {sorted.map((s, i) => (
                             <tr key={s.stateSlug} className="hover:bg-accent/30 transition-colors">
-                                <td className="py-3 px-4 text-muted-foreground/40 font-mono text-xs">{i + 1}</td>
+                                <td className="py-3 px-4 text-muted-foreground/70 font-mono text-xs">{i + 1}</td>
                                 <td className="py-3 px-3">
                                     <Link
                                         href={`/forecasts/${s.stateSlug}`}
@@ -126,7 +126,7 @@ export function SortableStateTable({ rows }: { rows: StateRow[] }) {
                                     >
                                         {s.stateName}
                                     </Link>
-                                    <span className="ml-2 text-xs font-mono text-muted-foreground/40">{s.stateAbbr}</span>
+                                    <span className="ml-2 text-xs font-mono text-muted-foreground/70">{s.stateAbbr}</span>
                                 </td>
                                 <td className="text-right py-3 px-3 font-mono text-muted-foreground tabular-nums">
                                     {s.countyCount}

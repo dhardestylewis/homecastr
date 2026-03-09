@@ -22,19 +22,19 @@ export function UncertaintyBand({ horizons }: Props) {
     if (spreadPct < 15) {
         barWidth = "w-[20%]"
         barColor = "bg-chart-high"
-        uncertaintyText = "Low uncertainty. The model has high conviction in this forecast range."
+        uncertaintyText = "Low uncertainty. The model is relatively confident in this forecast range."
     } else if (spreadPct < 30) {
         barWidth = "w-[45%]"
         barColor = "bg-chart-mid"
-        uncertaintyText = "Moderate uncertainty, typical for this geography and forecast horizon."
+        uncertaintyText = "Moderate uncertainty, typical for this area and time horizon."
     } else if (spreadPct < 50) {
         barWidth = "w-[70%]"
         barColor = "bg-warning"
-        uncertaintyText = "High uncertainty. Wide outcome range, possibly driven by sparse comparables, recent volatility, or structural change."
+        uncertaintyText = "Higher uncertainty than usual. The range of possible outcomes is wide — likely due to limited nearby sales data, recent market volatility, or ongoing neighborhood change."
     } else {
         barWidth = "w-[90%]"
         barColor = "bg-chart-negative"
-        uncertaintyText = "Very high uncertainty. Exceptionally wide dispersion. Exercise caution with point estimates in this geography."
+        uncertaintyText = "Very high uncertainty. The gap between the optimistic and pessimistic scenarios is unusually large. Treat any single number here with caution."
     }
 
     const fmtVal = (v: number) => {

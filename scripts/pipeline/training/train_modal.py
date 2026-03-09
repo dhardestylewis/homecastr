@@ -374,6 +374,22 @@ def train_worldmodel(
         print(f"[{ts()}] Dropping {len(all_null_cols)} all-null columns: {all_null_cols}")
         df = df.drop(all_null_cols)
 
+    # ─── Deduplicate to one row per (acct, yr) ───
+    # Panels like TxGIO can have duplicate acct-year rows which break the
+    # shift(-1).over("acct") label extraction (shift hits next duplicate
+    # at the SAME year instead of the next year).
+    _n_before = len(df)
+    _group_cols = ["acct", "yr"]
+    _agg_exprs = [pl.col("tot_appr_val").mean()]
+    for c in df.columns:
+        if c not in _group_cols and c != "tot_appr_val":
+            _agg_exprs.append(pl.col(c).first())
+    df = df.group_by(_group_cols).agg(_agg_exprs).sort(_group_cols)
+    _n_after = len(df)
+    if _n_before != _n_after:
+        print(f"[{ts()}] Deduped panel: {_n_before:,} → {_n_after:,} rows "
+              f"({_n_before - _n_after:,} duplicate acct-year rows removed)")
+
     adapted_path = f"/tmp/panel_{jurisdiction_suffix}_adapted.parquet"
     df.write_parquet(adapted_path)
 

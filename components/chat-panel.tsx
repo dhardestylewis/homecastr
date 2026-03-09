@@ -271,9 +271,9 @@ export function ChatPanel({ isOpen, onClose, onMapAction, forecastMode, onTavusR
                             </div>
                             <div className="flex flex-col gap-2 w-full max-w-[260px]">
                                 {[
-                                    "Show me Montrose",
                                     "Where has the most growth potential?",
-                                    "Compare Heights vs Montrose",
+                                    "Show me Brooklyn, NY",
+                                    "Compare Lincoln Park vs Wicker Park",
                                     "What does growth potential mean?",
                                 ].map((suggestion) => (
                                     <button

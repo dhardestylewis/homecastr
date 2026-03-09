@@ -43,7 +43,7 @@ export default function MethodologyPage() {
                             <li><strong className="text-foreground">Market Transaction Data:</strong> Aggregated sales records to calibrate appraisals to actual market clearing prices.</li>
                             <li><strong className="text-foreground">Macro-Demographics:</strong> American Community Survey (ACS) and localized census data to measure structural demand shifts.</li>
                         </ul>
-                        <p className="mt-6 text-muted-foreground"><strong className="text-foreground">Model Version:</strong> v11 (Current). <strong className="text-foreground">Refresh Cadence:</strong> Models are recalibrated quarterly to capture seasonal variance and immediate macroeconomic shifts.</p>
+                        <p className="mt-6 text-muted-foreground"><strong className="text-foreground">Model Version:</strong> Schrödinger Bridge v12 (Current). <strong className="text-foreground">Refresh Cadence:</strong> Models are recalibrated quarterly to capture seasonal variance and immediate macroeconomic shifts.</p>
                     </section>
 
                     <section>

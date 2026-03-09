@@ -799,12 +799,33 @@ def build_master_training_shards_v102_local(
             year_aligned = (yr_curr == expected_curr) & (yr_prev == expected_prev)
             valid = np.isfinite(y_curr) & np.isfinite(y_prev) & year_aligned & (yr_curr <= int(train_max_year))
 
+            # ── DIAGNOSTIC: log per-horizon label stats for first chunk ──
+            if s == 0 and k <= 3:
+                _fc = np.isfinite(y_curr).mean()
+                _fp = np.isfinite(y_prev).mean()
+                _ya = year_aligned.mean() if year_aligned.size > 0 else 0
+                _vf = valid.mean() if valid.size > 0 else 0
+                _yc_samp = yr_curr[:5].tolist() if yr_curr.size >= 5 else yr_curr.tolist()
+                _ec_samp = expected_curr[:5].tolist() if expected_curr.size >= 5 else expected_curr.tolist()
+                _yp_samp = yr_prev[:5].tolist() if yr_prev.size >= 5 else yr_prev.tolist()
+                _ep_samp = expected_prev[:5].tolist() if expected_prev.size >= 5 else expected_prev.tolist()
+                print(f"  [DIAG-LABEL] k={k}: finite_curr={_fc:.4f} finite_prev={_fp:.4f} yr_aligned={_ya:.4f} valid={_vf:.4f}")
+                print(f"    yr_curr[:5]={_yc_samp}  expected={_ec_samp}")
+                print(f"    yr_prev[:5]={_yp_samp}  expected={_ep_samp}")
+                print(f"    yr_curr.dtype={yr_curr.dtype} expected_curr.dtype={expected_curr.dtype}")
+
             target[:, k - 1] = np.where(valid, y_curr - y_prev, 0.0).astype(np.float32)
             mask[:, k - 1] = valid.astype(np.float32)
             yr_label[:, k - 1] = expected_curr.astype(np.int32)
 
             if valid.any():
                 max_label_year_used = max(max_label_year_used, int(np.max(yr_curr[valid])))
+
+        # ── DIAGNOSTIC: mask summary ──
+        if s == 0:
+            _ms = mask.sum(axis=1)
+            print(f"  [DIAG-MASK] mask_sum: min={_ms.min():.0f} max={_ms.max():.0f} mean={_ms.mean():.2f} any_ge_1={(_ms >= 1).any()}")
+            print(f"  [DIAG-MASK] unique anchor_years: {np.unique(anchor_years).tolist()}")
 
         if full_horizon_only:
             keep = (mask.sum(axis=1) == float(H))
