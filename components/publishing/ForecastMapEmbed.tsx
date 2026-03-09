@@ -16,13 +16,13 @@ interface ForecastMapEmbedProps {
 }
 
 export function ForecastMapEmbed({ lat, lng, zoom = 11, bbox, label, height = 420 }: ForecastMapEmbedProps) {
-    let src = \`/app?lat=\${lat.toFixed(5)}&lng=\${lng.toFixed(5)}&zoom=\${zoom}&embedded=true\`
-    let fullUrl = \`/app?lat=\${lat.toFixed(5)}&lng=\${lng.toFixed(5)}&zoom=\${zoom}\`
+    let src = `/app?lat=${lat.toFixed(5)}&lng=${lng.toFixed(5)}&zoom=${zoom}&embedded=true`
+    let fullUrl = `/app?lat=${lat.toFixed(5)}&lng=${lng.toFixed(5)}&zoom=${zoom}`
 
     if (bbox) {
         const bboxStr = bbox.map(v => v.toFixed(5)).join(",")
-        src += \`&bbox=\${bboxStr}\`
-        fullUrl += \`&bbox=\${bboxStr}\`
+        src += `&bbox=${bboxStr}`
+        fullUrl += `&bbox=${bboxStr}`
     }
 
     return (
