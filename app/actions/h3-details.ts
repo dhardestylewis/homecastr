@@ -4,6 +4,29 @@ import { getSupabaseServerClient } from "@/lib/supabase/server"
 import type { DetailsResponse, FanChartData } from "@/lib/types"
 
 /**
+ * Reverse-geocode lat/lng via Nominatim and return a short human-readable label.
+ * Returns suburb/neighbourhood/city_district/city, falling back to coords.
+ */
+async function reverseGeoLabel(lat: number, lng: number): Promise<string> {
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&zoom=14&addressdetails=1`
+    const res = await fetch(url, {
+      headers: { "User-Agent": "Homecastr/1.0 (contact@homecastr.com)" },
+      // cache for 1 hour
+      next: { revalidate: 3600 }
+    })
+    if (!res.ok) throw new Error(`Nominatim HTTP ${res.status}`)
+    const data = await res.json()
+    const addr = data?.address ?? {}
+    const label = addr.suburb || addr.neighbourhood || addr.city_district || addr.city || addr.town || addr.village
+    if (label) return label
+  } catch {
+    // ignore – fall through to coordinate fallback
+  }
+  return `${lat.toFixed(4)}, ${lng.toFixed(4)}`
+}
+
+/**
  * Fetches cell details from h3_precomputed_hex_details table.
  * This is the authoritative source for the inspector panel.
  */
@@ -80,7 +103,7 @@ export async function getH3CellDetails(h3Id: string, forecastYear = 2026): Promi
     const historyMap = new Map(historyData?.map(r => [r.forecast_year, r.predicted_value]) ?? [])
     const historicalValues = [2019, 2020, 2021, 2022, 2023, 2024, 2025].map(y => historyMap.get(y) ?? 0)
 
-    return buildFullResponse(h3Id, detailsData, historicalValues, gridData, fanSourceData)
+    return await buildFullResponse(h3Id, detailsData, historicalValues, gridData, fanSourceData)
   } catch (err) {
     console.error(`[SERVER] Critical error in getH3CellDetails for ${h3Id}:`, err)
     return null
@@ -97,10 +120,13 @@ export async function getH3CellDetails(h3Id: string, forecastYear = 2026): Promi
  * - Additional: ape, pred_cv, med_years
  * - V14: Coordinates from h3_aoi_grid
  */
-function buildFullResponse(h3Id: string, d: any, historicalValues?: number[], grid?: { lat: number; lng: number } | null, fanData?: any): DetailsResponse {
+async function buildFullResponse(h3Id: string, d: any, historicalValues?: number[], grid?: { lat: number; lng: number } | null, fanData?: any): Promise<DetailsResponse> {
+  const locationLabel = grid
+    ? await reverseGeoLabel(grid.lat, grid.lng)
+    : `Res ${d.h3_res} Cell`
   return {
     id: h3Id,
-    locationLabel: `H3 Cell (Res ${d.h3_res})`,
+    locationLabel,
     coordinates: grid ? { lat: grid.lat, lng: grid.lng } : undefined,
     historicalValues, // Pass through
     opportunity: {
@@ -152,7 +178,7 @@ function buildFullResponse(h3Id: string, d: any, historicalValues?: number[], gr
 function buildPartialResponse(h3Id: string, d: any): DetailsResponse {
   return {
     id: h3Id,
-    locationLabel: `H3 Cell (Res ${d.h3_res})`,
+    locationLabel: `Res ${d.h3_res ?? "?"} Cell`,
     opportunity: {
       value: d.opportunity != null ? d.opportunity * 100 : null,
       unit: "%",

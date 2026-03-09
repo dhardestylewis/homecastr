@@ -166,9 +166,9 @@ export function MapTooltip({
                                         {displayProps.n_accts} Prop
                                     </div>
                                 </div>
-                                {coordinates && (
-                                    <div className="font-mono text-xs text-muted-foreground truncate">
-                                        {coordinates.map((n: number) => n.toFixed(5)).join(", ")}
+                                {(displayDetails?.locationLabel || coordinates) && (
+                                    <div className="text-xs text-foreground font-medium truncate mt-0.5">
+                                        {displayDetails?.locationLabel || (coordinates ? coordinates.map((n: number) => n.toFixed(5)).join(", ") : null)}
                                     </div>
                                 )}
                             </div>
