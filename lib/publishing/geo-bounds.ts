@@ -3,9 +3,11 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin"
 /**
  * Fetches the exact bounding box [minLng, minLat, maxLng, maxLat] for a geographic feature
  * by directly querying the PostGIS geometry extent via Supabase RPC.
+ *
+ * Supported levels: state, county, zcta, tract, parcel, neighborhood
  */
 export async function getDynamicBounds(
-    level: "state" | "county" | "tract" | "parcel" | "neighborhood",
+    level: "state" | "county" | "zcta" | "tract" | "parcel" | "neighborhood",
     geoid: string,
     stateSlug?: string
 ): Promise<[number, number, number, number] | null> {
@@ -23,8 +25,27 @@ export async function getDynamicBounds(
             return null
         }
 
-        if (Array.isArray(data) && data.length === 4) {
-            return data as [number, number, number, number]
+        // Supabase returns PostgreSQL float[] in different formats depending on client:
+        // - As a JS array: [minLng, minLat, maxLng, maxLat]
+        // - As a string:   "{-71.08,43.06,-66.95,47.46}"
+        // Handle both cases.
+        if (data == null) return null
+
+        let bbox: number[]
+
+        if (Array.isArray(data)) {
+            bbox = data
+        } else if (typeof data === "string") {
+            // Parse PostgreSQL array string: "{-71.08,43.06,-66.95,47.46}"
+            const cleaned = data.replace(/[{}]/g, "")
+            bbox = cleaned.split(",").map(Number)
+        } else {
+            console.warn(`[geo-bounds] Unexpected RPC response type for ${level} ${geoid}:`, typeof data, data)
+            return null
+        }
+
+        if (bbox.length === 4 && bbox.every(v => !isNaN(v))) {
+            return bbox as [number, number, number, number]
         }
 
         return null
