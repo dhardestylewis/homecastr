@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import Link from "next/link"
 import { ArrowLeft, ArrowRight } from "lucide-react"
+import { BacktestChart } from "@/components/backtest-chart"
 
 export const metadata: Metadata = {
     title: "Engineering & Methodology | Homecastr",
@@ -53,7 +54,7 @@ export default function MethodologyPage() {
                     <p>
                         At national scale, manual ETL does not hold up. Our pipeline ingests county assessment rolls, parcel geometries, and macro features from multiple public sources, including:
                     </p>
-                    <ul>
+                    <ul className="list-disc pl-6 space-y-2">
                         <li><strong className="text-foreground"><a href="https://hcad.org/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Harris County Appraisal District (HCAD)</a>:</strong> Parcel-level appraisal records for the Houston metro area.</li>
                         <li><strong className="text-foreground"><a href="https://floridarevenue.com/property/Pages/DataPortal.aspx" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Florida Dept. of Revenue (DOR)</a>:</strong> Statewide NAL/NAP/SDF property records across all 67 counties.</li>
                         <li><strong className="text-foreground"><a href="https://data.cityofnewyork.us/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">NYC DOF RPAD</a>:</strong> Assessment roll data for all five boroughs, joined with MapPLUTO geometries.</li>
@@ -148,8 +149,19 @@ export default function MethodologyPage() {
                     </div>
 
                     <p>
-                        Beyond standard error metrics, all model candidates pass through a calibration suite we call <strong>Calibration Packets</strong>—a set of diagnostics that check Probability Integral Transform (PIT) behavior, empirical interval coverage, and tail calibration before we promote a model to production.
+                        Beyond standard error metrics, all model candidates pass through a calibration suite before promotion to production: PIT (Probability Integral Transform) histograms to verify that forecast quantiles are uniformly distributed, empirical interval coverage checks (does the 80% band actually contain ~80% of outcomes?), and tail calibration tests to ensure the P10 and P90 bands are not systematically too narrow or too wide.
                     </p>
+
+                    {/* Interactive Backtest Coverage Chart */}
+                    <div className="my-12 not-prose">
+                        <div className="p-6 md:p-8 border border-border/50 rounded-2xl bg-muted/10">
+                            <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground mb-1">Backtest Coverage — NYC Upper West Side (ZCTA 10025)</h3>
+                            <p className="text-xs text-muted-foreground mb-6">
+                                Each colored band shows what the model predicted (P10–P90) from a given origin year. The solid line shows what actually happened. Well-calibrated predictions should consistently cover the actuals. Click legend items to toggle vintages.
+                            </p>
+                            <BacktestChart level="zcta" id="10025" height={280} />
+                        </div>
+                    </div>
 
                     <h2 className="text-3xl font-bold mt-16 mb-6">4. Explainable Forecasts</h2>
                     <p>
