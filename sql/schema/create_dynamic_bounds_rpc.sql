@@ -6,12 +6,12 @@
 -- Actual table inventory (geometry_columns):
 --   geo_state_us        (state_fips, state_abbr, state_name, geom)
 --   geo_zcta20_us       (zcta5ce20, geom)         -- ZIP code areas (national)
---   geo_tract20_tx      (geoid, geom)              -- ALL US tracts (national, legacy _tx name)
+--   geo_tract20_us      (geoid, geom)              -- ALL US tracts (national, legacy _tx name)
 --   geo_tabblock20_tx   (geoid20, geom)            -- census blocks
 --   geo_parcel_poly     (acct, geom)               -- parcels
 --   geo_neighborhood_tx (neighborhood_id, geom)    -- neighborhoods
 --
--- NOTE: geo_tract20_tx contains tracts for ALL 53 states/territories despite
+-- NOTE: geo_tract20_us contains tracts for ALL 53 states/territories despite
 --       the _tx suffix (legacy naming from initial Texas onboarding).
 --       No geo_county table exists — county bounds are derived from
 --       the extent of all tracts whose geoid starts with the 5-digit county FIPS.
@@ -49,7 +49,7 @@ begin
   elsif p_level = 'county' then
     v_query := format(
       'SELECT ARRAY[ST_XMin(b), ST_YMin(b), ST_XMax(b), ST_YMax(b)]
-       FROM (SELECT ST_Extent(geom) as b FROM public.geo_tract20_tx WHERE geoid LIKE %L) sub
+       FROM (SELECT ST_Extent(geom) as b FROM public.geo_tract20_us WHERE geoid LIKE %L) sub
        WHERE b IS NOT NULL',
       p_geoid || '%'
     );
@@ -66,12 +66,12 @@ begin
     );
 
   -- ================================================================
-  -- 4) TRACT → geo_tract20_tx (national table, geoid column)
+  -- 4) TRACT → geo_tract20_us (national table, geoid column)
   -- ================================================================
   elsif p_level = 'tract' then
     v_query := format(
       'SELECT ARRAY[ST_XMin(b), ST_YMin(b), ST_XMax(b), ST_YMax(b)]
-       FROM (SELECT ST_Extent(geom) as b FROM public.geo_tract20_tx WHERE geoid = %L) sub
+       FROM (SELECT ST_Extent(geom) as b FROM public.geo_tract20_us WHERE geoid = %L) sub
        WHERE b IS NOT NULL',
       p_geoid
     );

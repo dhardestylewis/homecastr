@@ -163,12 +163,12 @@ create table if not exists public.geo_tabblock20_tx (
 create index if not exists geo_tabblock20_tx_geom_gix
   on public.geo_tabblock20_tx using gist (geom);
 
-create table if not exists public.geo_tract20_tx (
+create table if not exists public.geo_tract20_us (
   geoid text primary key,
   geom geometry(MultiPolygon, 4326) not null
 );
-create index if not exists geo_tract20_tx_geom_gix
-  on public.geo_tract20_tx using gist (geom);
+create index if not exists geo_tract20_us_geom_gix
+  on public.geo_tract20_us using gist (geom);
 
 create table if not exists public.geo_zcta20_us (
   zcta5 text primary key,
@@ -201,12 +201,12 @@ create table if not exists public.geo_zcta20_us_z7 (
 create index if not exists geo_zcta20_us_z7_geom_gix
   on public.geo_zcta20_us_z7 using gist (geom);
 
-create table if not exists public.geo_tract20_tx_z10 (
+create table if not exists public.geo_tract20_us_z10 (
   geoid text primary key,
   geom geometry(MultiPolygon, 4326) not null
 );
-create index if not exists geo_tract20_tx_z10_geom_gix
-  on public.geo_tract20_tx_z10 using gist (geom);
+create index if not exists geo_tract20_us_z10_geom_gix
+  on public.geo_tract20_us_z10 using gist (geom);
 
 create table if not exists public.geo_tabblock20_tx_z13 (
   geoid20 text primary key,
@@ -958,7 +958,7 @@ as $$
 declare
   v_geom text;
 begin
-  v_geom := forecast_20260220_7f31c6e4._pick_geom_table('public.geo_tract20_tx_z10', 'public.geo_tract20_tx');
+  v_geom := forecast_20260220_7f31c6e4._pick_geom_table('public.geo_tract20_us_z10', 'public.geo_tract20_us');
   return forecast_20260220_7f31c6e4._mvt_forecast_generic(
     'tract', v_geom, 'geoid',
     'forecast_20260220_7f31c6e4.metrics_tract_forecast', 'tract_geoid20',
@@ -1113,7 +1113,7 @@ as $$
 declare
   v_geom text;
 begin
-  v_geom := forecast_20260220_7f31c6e4._pick_geom_table('public.geo_tract20_tx_z10', 'public.geo_tract20_tx');
+  v_geom := forecast_20260220_7f31c6e4._pick_geom_table('public.geo_tract20_us_z10', 'public.geo_tract20_us');
   return forecast_20260220_7f31c6e4._mvt_history_generic(
     'tract', v_geom, 'geoid',
     'forecast_20260220_7f31c6e4.metrics_tract_history', 'tract_geoid20',
