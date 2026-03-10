@@ -90,13 +90,40 @@ export function BacktestChart({
         const fetchData = async () => {
             setLoading(true)
             try {
+                // Try live API first
                 const res = await fetch(
                     `/api/backtest-coverage?level=${level}&id=${id}&schema=${schema}`
                 )
                 if (!res.ok) throw new Error(`HTTP ${res.status}`)
                 const json = await res.json()
+
+                // If live data has enough vintages (3+), use it
+                const vintageCount = Object.keys(json.vintages || {}).length
+                if (vintageCount >= 3) {
+                    setData(json)
+                    return
+                }
+
+                // Otherwise fall back to static demo data
+                const demoRes = await fetch("/data/backtest-demo.json")
+                if (demoRes.ok) {
+                    const demoJson = await demoRes.json()
+                    setData(demoJson)
+                    return
+                }
+
+                // If demo also fails, use whatever the API returned
                 setData(json)
             } catch (e: any) {
+                // API failed entirely — try static demo
+                try {
+                    const demoRes = await fetch("/data/backtest-demo.json")
+                    if (demoRes.ok) {
+                        const demoJson = await demoRes.json()
+                        setData(demoJson)
+                        return
+                    }
+                } catch { /* ignore */ }
                 setError(e.message)
             } finally {
                 setLoading(false)
