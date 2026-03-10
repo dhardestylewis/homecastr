@@ -52,7 +52,12 @@ export async function withRedisCache<T>(key: string, fetcher: () => Promise<T>, 
     const fresh = await fetcher()
 
     try {
-        await redis.set(key, JSON.stringify(fresh), 'EX', ttlSeconds)
+        // Use a short TTL for empty results so newly loaded data appears quickly
+        const isEmpty = fresh == null
+            || (Array.isArray(fresh) && fresh.length === 0)
+            || (typeof fresh === 'object' && !Array.isArray(fresh) && Object.keys(fresh as any).length === 0)
+        const effectiveTtl = isEmpty ? Math.min(ttlSeconds, 300) : ttlSeconds  // 5 min cap for empty
+        await redis.set(key, JSON.stringify(fresh), 'EX', effectiveTtl)
     } catch (e) {
         console.warn(`[Redis Cache] Error setting key ${key}:`, e)
     }
