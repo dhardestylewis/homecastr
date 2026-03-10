@@ -6,6 +6,9 @@ const DEMO_KEY = "hc_demo_public_readonly"
 const DEMO_LIMIT = 50 // requests per hour per IP
 const demoRateLimit = new Map<string, { count: number; resetAt: number }>()
 
+// ── RapidAPI proxy: verify requests coming through RapidAPI marketplace ──
+const RAPIDAPI_PROXY_SECRET = process.env.RAPIDAPI_PROXY_SECRET || ""
+
 /**
  * Validate an API key from the request headers.
  * Returns the key row if valid, null if invalid.
@@ -44,6 +47,14 @@ export async function validateApiKey(req: NextRequest) {
  * Use in any API route: const auth = await requireApiKey(req); if (auth) return auth;
  */
 export async function requireApiKey(req: NextRequest) {
+    // RapidAPI proxy — if request came through RapidAPI marketplace, allow it
+    if (RAPIDAPI_PROXY_SECRET) {
+        const proxySecret = req.headers.get("x-rapidapi-proxy-secret")
+        if (proxySecret === RAPIDAPI_PROXY_SECRET) {
+            return null // Verified RapidAPI proxy request
+        }
+    }
+
     const apiKey = req.headers.get("x-api-key")
 
     // Demo key — rate-limited, no DB lookup
