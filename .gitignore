@@ -49,3 +49,6 @@ logs/gcs_investigation/
 # Scratch work
 _scratch/
 .env*.local
+
+mcp-server/node_modules
+mcp-server/dist
