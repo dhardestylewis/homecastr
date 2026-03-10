@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 
 export default function MethodologyPage() {
     return (
-        <div className="min-h-screen bg-background text-foreground font-sans selection:bg-primary/20">
+        <div className="h-screen overflow-y-auto bg-background text-foreground font-sans selection:bg-primary/20">
             <header className="py-4 px-6 md:px-12 border-b border-border/40 sticky top-0 bg-background/80 backdrop-blur-md z-10">
                 <Link href="/" className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors group">
                     <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" /> Back to Homecastr
