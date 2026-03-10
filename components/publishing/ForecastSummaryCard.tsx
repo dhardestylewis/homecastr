@@ -9,12 +9,14 @@ interface Props {
     metroTotal?: number
     nationalPercentile?: number
     neighborhoodName: string
+    suppressConfidence?: boolean
 }
 
 export function ForecastSummaryCard({
     horizons,
     baselineP50,
     neighborhoodName,
+    suppressConfidence = false,
 }: Props) {
     const h1 = horizons.find(h => h.horizon_m === 12)
     const h3 = horizons.find(h => h.horizon_m === 36)
@@ -72,20 +74,22 @@ export function ForecastSummaryCard({
                                     {fmtPct(data.appreciation)} expected
                                 </p>
                             </div>
-                            <div className="space-y-1.5 pt-1">
-                                <div className="flex justify-between text-xs">
-                                    <span className="text-muted-foreground">Downside</span>
-                                    <span className="text-chart-negative font-mono">{fmtVal(data.p10)}</span>
+                            {!suppressConfidence && (
+                                <div className="space-y-1.5 pt-1">
+                                    <div className="flex justify-between text-xs">
+                                        <span className="text-muted-foreground">Downside</span>
+                                        <span className="text-chart-negative font-mono">{fmtVal(data.p10)}</span>
+                                    </div>
+                                    <div className="flex justify-between text-xs">
+                                        <span className="text-muted-foreground">Median</span>
+                                        <span className="text-foreground/80 font-mono">{fmtVal(data.p50)}</span>
+                                    </div>
+                                    <div className="flex justify-between text-xs">
+                                        <span className="text-muted-foreground">Upside</span>
+                                        <span className="text-chart-high font-mono">{fmtVal(data.p90)}</span>
+                                    </div>
                                 </div>
-                                <div className="flex justify-between text-xs">
-                                    <span className="text-muted-foreground">Median</span>
-                                    <span className="text-foreground/80 font-mono">{fmtVal(data.p50)}</span>
-                                </div>
-                                <div className="flex justify-between text-xs">
-                                    <span className="text-muted-foreground">Upside</span>
-                                    <span className="text-chart-high font-mono">{fmtVal(data.p90)}</span>
-                                </div>
-                            </div>
+                            )}
                         </div>
                     )
                 })}

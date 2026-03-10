@@ -18,9 +18,10 @@ interface Props {
     history: HistoryPoint[]
     horizons: ForecastHorizon[]
     originYear: number
+    suppressConfidence?: boolean
 }
 
-export function HistoryForecastChart({ history, horizons, originYear }: Props) {
+export function HistoryForecastChart({ history, horizons, originYear, suppressConfidence = false }: Props) {
     const bridgeYear = originYear + 1
 
     const chartData = useMemo(() => {
@@ -160,8 +161,8 @@ export function HistoryForecastChart({ history, horizons, originYear }: Props) {
                             <ReferenceLine x={bridgeYear} stroke={gridColor} strokeDasharray="4 4"
                                 label={{ value: "Forecast →", position: "top", fill: axisColor, fontSize: 10 }} />
 
-                            <Area dataKey="range_p10_p90" fill="url(#fanOuterGrad)" stroke="none" isAnimationActive={false} />
-                            <Area dataKey="range_p25_p75" fill="url(#fanInnerGrad)" stroke="none" isAnimationActive={false} />
+                            {!suppressConfidence && <Area dataKey="range_p10_p90" fill="url(#fanOuterGrad)" stroke="none" isAnimationActive={false} />}
+                            {!suppressConfidence && <Area dataKey="range_p25_p75" fill="url(#fanInnerGrad)" stroke="none" isAnimationActive={false} />}
                             <Line dataKey="forecast" stroke={primaryColor} strokeWidth={2} strokeDasharray="6 3" dot={false} isAnimationActive={false} />
                             <Line dataKey="historical" stroke={primaryColor} strokeWidth={2} dot={{ r: 3, fill: primaryColor, strokeWidth: 0 }} isAnimationActive={false} />
                         </ComposedChart>
@@ -178,10 +179,12 @@ export function HistoryForecastChart({ history, horizons, originYear }: Props) {
                         <span className="w-4 h-0.5 bg-primary rounded-full" style={{ borderTop: "2px dashed", height: 0, width: 16 }} />
                         Forecast (p50)
                     </span>
-                    <span className="flex items-center gap-1.5">
-                        <span className="w-4 h-3 bg-primary/15 rounded-sm" />
-                        Confidence range
-                    </span>
+                    {!suppressConfidence && (
+                        <span className="flex items-center gap-1.5">
+                            <span className="w-4 h-3 bg-primary/15 rounded-sm" />
+                            Confidence range
+                        </span>
+                    )}
                 </div>
             </div>
 
@@ -259,33 +262,36 @@ export function HistoryForecastChart({ history, horizons, originYear }: Props) {
                                     })}
                                 </tr>
 
-                                {/* Row 3: P10 (downside) — only for forecast years */}
-                                <tr className="border-t border-border/30">
-                                    <td className="py-2 pr-3 text-muted-foreground/60 whitespace-nowrap sticky left-0 bg-inherit text-xs">Downside (P10)</td>
-                                    {uniqueYears.map(yr => {
-                                        if (yr <= bridgeYear) return <td key={yr} className="text-right py-2 px-1.5" />
-                                        const h = fcstMap.get(yr)
-                                        return (
-                                            <td key={yr} className="text-right py-2 px-1.5 font-mono text-xs text-muted-foreground/60 whitespace-nowrap">
-                                                {h?.p10 != null ? fmtVal(h.p10) : '—'}
-                                            </td>
-                                        )
-                                    })}
-                                </tr>
+                                {!suppressConfidence && (
+                                    <>
+                                        {/* Row 3: P10 (downside) — only for forecast years */}
+                                        <tr className="border-t border-border/30">
+                                            <td className="py-2 pr-3 text-muted-foreground/60 whitespace-nowrap sticky left-0 bg-inherit text-xs">Downside (P10)</td>
+                                            {uniqueYears.map(yr => {
+                                                if (yr <= bridgeYear) return <td key={yr} className="text-right py-2 px-1.5" />
+                                                const h = fcstMap.get(yr)
+                                                return (
+                                                    <td key={yr} className="text-right py-2 px-1.5 font-mono text-xs text-muted-foreground/60 whitespace-nowrap">
+                                                        {h?.p10 != null ? fmtVal(h.p10) : '—'}
+                                                    </td>
+                                                )
+                                            })}
+                                        </tr>
 
-                                {/* Row 4: P90 (upside) — only for forecast years */}
-                                <tr className="border-t border-border/30">
-                                    <td className="py-2 pr-3 text-muted-foreground/60 whitespace-nowrap sticky left-0 bg-inherit text-xs">Upside (P90)</td>
-                                    {uniqueYears.map(yr => {
-                                        if (yr <= bridgeYear) return <td key={yr} className="text-right py-2 px-1.5" />
-                                        const h = fcstMap.get(yr)
-                                        return (
-                                            <td key={yr} className="text-right py-2 px-1.5 font-mono text-xs text-muted-foreground/60 whitespace-nowrap">
-                                                {h?.p90 != null ? fmtVal(h.p90) : '—'}
-                                            </td>
-                                        )
-                                    })}
-                                </tr>
+                                        {/* Row 4: P90 (upside) — only for forecast years */}
+                                        <tr className="border-t border-border/30">
+                                            <td className="py-2 pr-3 text-muted-foreground/60 whitespace-nowrap sticky left-0 bg-inherit text-xs">Upside (P90)</td>
+                                            {uniqueYears.map(yr => {
+                                                if (yr <= bridgeYear) return <td key={yr} className="text-right py-2 px-1.5" />
+                                                const h = fcstMap.get(yr)
+                                                return (
+                                                    <td key={yr} className="text-right py-2 px-1.5 font-mono text-xs text-muted-foreground/60 whitespace-nowrap">
+                                                        {h?.p90 != null ? fmtVal(h.p90) : '—'}
+                                                    </td>
+                                                )
+                                            })}
+                                        </tr>
+                                    </>)}
                             </tbody>
                         </table>
                     </div>

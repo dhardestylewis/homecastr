@@ -41,10 +41,13 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     const h5 = data?.forecast.horizons.find(h => h.horizon_m === 60)
     const appreciation = (h5 && !isOutlier) ? `${h5.appreciation > 0 ? "+" : ""}${h5.appreciation.toFixed(1)}%` : ""
 
-    const title = `${geo.neighborhoodName} Home Price Forecast, 2026–2030`
+    const originYear = data?.forecast.originYear ?? 2025
+    const startYear = originYear + 1
+    const endYear = originYear + 5
+    const title = `${geo.neighborhoodName} Home Price Forecast, ${startYear}–${endYear}`
     const description = isOutlier
         ? `Detailed modeling and market outlook for ${geo.neighborhoodName} (${geo.city}, ${geo.stateAbbr}). Data access available by request.`
-        : `Homecastr forecasts ${geo.neighborhoodName} (${geo.city}, ${geo.stateAbbr}) home values ${appreciation ? `to change ${appreciation}` : ""} by 2030 (p50). See upside, downside, comparables, and uncertainty.`
+        : `Homecastr forecasts ${geo.neighborhoodName} (${geo.city}, ${geo.stateAbbr}) home values ${appreciation ? `to change ${appreciation}` : ""} by ${endYear} (p50). See upside, downside, comparables, and uncertainty.`
     return {
         title,
         description,
@@ -201,6 +204,7 @@ export default async function NeighborhoodForecastPage({ params, searchParams }:
                     history={data.history}
                     horizons={data.forecast.horizons}
                     originYear={data.forecast.originYear}
+                    suppressConfidence={data.forecast.originYear >= 2026}
                 />
 
                 {/* 2. Forecast Summary */}
@@ -208,6 +212,7 @@ export default async function NeighborhoodForecastPage({ params, searchParams }:
                     horizons={data.forecast.horizons}
                     baselineP50={data.forecast.baselineP50}
                     neighborhoodName={geo.neighborhoodName}
+                    suppressConfidence={data.forecast.originYear >= 2026}
                 />
 
                 {/* 3. Interpretation */}
@@ -219,7 +224,9 @@ export default async function NeighborhoodForecastPage({ params, searchParams }:
                 />
 
                 {/* 4. Uncertainty Band */}
-                <UncertaintyBand horizons={data.forecast.horizons} />
+                {data.forecast.originYear < 2026 && (
+                    <UncertaintyBand horizons={data.forecast.horizons} />
+                )}
 
                 {/* 5. Comparable Alternatives */}
                 <ComparablesTable
