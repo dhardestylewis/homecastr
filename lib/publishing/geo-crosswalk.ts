@@ -600,8 +600,16 @@ const TRACT_ZCTA: Record<string, string> = tractZctaRaw as any
 import tractNameCacheRaw from "./tract-name-cache.json"
 const TRACT_NAME_CACHE: Record<string, string> = tractNameCacheRaw as any
 
+// Spatial tract labels (populated by build_tract_labels.py — TIGER Places, Cousubs, GNIS)
+import tractLabelsRaw from "./tract_labels.json"
+const TRACT_LABELS: Record<string, {
+    anchor_name: string; anchor_type: string; anchor_overlap_share: number;
+    confidence: string; label_short: string; label_medium: string; label_long: string;
+}> = tractLabelsRaw as any
+
 /**
  * Batch-enrich tract GeoIDs with human-readable names.
+ * Phase 0: Spatial tract labels (TIGER Places / Cousubs / GNIS — highest quality).
  * Phase 1: Census tract-to-ZCTA crosswalk (static, instant).
  * Phase 2: parcel_ladder_v1 DB fallback.
  * Phase 3: Static tract-name-cache.json (populated by build script).
@@ -613,9 +621,22 @@ export async function batchEnrichTracts(
     const result = new Map<string, { name: string; slug: string; zcta5: string }>()
     if (tractGeoids.length === 0) return result
 
-    // Phase 1: Census crosswalk (instant, covers ~85K tracts)
+    // Phase 0: Spatial tract labels (best quality — place/cousub/GNIS inference)
+    for (const tractId of tractGeoids) {
+        const label = TRACT_LABELS[tractId]
+        if (label && label.label_short) {
+            result.set(tractId, {
+                name: label.label_short,
+                slug: slugify(label.label_short),
+                zcta5: "",
+            })
+        }
+    }
+
+    // Phase 1: Census crosswalk (instant, covers ~85K tracts) — fills gaps
     const missing: string[] = []
     for (const tractId of tractGeoids) {
+        if (result.has(tractId)) continue
         const zcta = TRACT_ZCTA[tractId]
         if (zcta) {
             const placeName = ZIP_NAMES[zcta]
