@@ -51,12 +51,19 @@ export default function MethodologyPage() {
 
                     <h2 className="text-3xl font-bold mt-16 mb-6">1. Data and MLOps</h2>
                     <p>
-                        At national scale, manual ETL does not hold up. Our pipeline ingests county assessment rolls, parcel geometries, and macro features from sources including NYC RPAD roll data and Florida DOR property records.
+                        At national scale, manual ETL does not hold up. Our pipeline ingests county assessment rolls, parcel geometries, and macro features from multiple public sources, including:
                     </p>
                     <ul>
-                        <li><strong className="text-foreground">Spatial Indexing:</strong> We use Uber's H3 hexagonal grid to standardize neighborhood context and accelerate nearby-parcel lookups across inconsistent county geometries.</li>
-                        <li><strong className="text-foreground">Feature Store:</strong> We store 114 spatial and macroeconomic features in PostGIS, Supabase, and Redis to support both batch inference and low-latency serving.</li>
+                        <li><strong className="text-foreground"><a href="https://hcad.org/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Harris County Appraisal District (HCAD)</a>:</strong> Parcel-level appraisal records for the Houston metro area.</li>
+                        <li><strong className="text-foreground"><a href="https://floridarevenue.com/property/Pages/DataPortal.aspx" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Florida Dept. of Revenue (DOR)</a>:</strong> Statewide NAL/NAP/SDF property records across all 67 counties.</li>
+                        <li><strong className="text-foreground"><a href="https://data.cityofnewyork.us/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">NYC DOF RPAD</a>:</strong> Assessment roll data for all five boroughs, joined with MapPLUTO geometries.</li>
+                        <li><strong className="text-foreground"><a href="https://comptroller.texas.gov/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">TxGIO</a>:</strong> Texas statewide property data from the Comptroller's office.</li>
+                        <li><strong className="text-foreground"><a href="https://www.census.gov/programs-surveys/acs" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">American Community Survey (ACS)</a>:</strong> Census-tract-level demographic and housing features used for nationwide coverage.</li>
+                        <li><strong className="text-foreground"><a href="https://fred.stlouisfed.org/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">FRED Macroeconomic Series</a>:</strong> Eight time series including 30-year mortgage rates, federal funds rate, CPI, 10-year treasury yield, oil prices, unemployment, VIX, and global economic policy uncertainty.</li>
                     </ul>
+                    <p>
+                        Transformed features are stored in PostGIS, Supabase, and Redis to support both batch training and low-latency serving.
+                    </p>
 
                     {/* Architecture Diagram */}
                     <div className="my-12 p-6 md:p-8 border border-border/50 rounded-2xl bg-muted/20 relative overflow-hidden not-prose">
@@ -77,8 +84,8 @@ export default function MethodologyPage() {
                             {/* Feature Store */}
                             <div className="flex flex-col items-center flex-1 w-full relative group">
                                 <div className="bg-card border border-border/50 rounded-xl p-5 w-full h-full text-center shadow-md ring-1 ring-primary/10 group-hover:ring-primary/30 transition-shadow flex flex-col justify-center">
-                                    <div className="text-[10px] font-bold uppercase text-primary mb-3 tracking-wider">H3 Feature Store</div>
-                                    <div className="font-semibold text-sm">114 Spatial Features</div>
+                                    <div className="text-[10px] font-bold uppercase text-primary mb-3 tracking-wider">Feature Store</div>
+                                    <div className="font-semibold text-sm">Structural + Macro</div>
                                     <div className="text-xs text-muted-foreground mt-2">Redis Batch Retrieval</div>
                                 </div>
                                 <div className="h-6 w-px bg-border md:hidden my-2"></div>
@@ -110,10 +117,10 @@ export default function MethodologyPage() {
 
                     <h2 className="text-3xl font-bold mt-16 mb-6">2. Model Architecture</h2>
                     <p>
-                        In our experiments, gradient-boosted baselines did not capture multi-horizon uncertainty as well as a generative approach. Our current model combines an <strong>FT-Transformer</strong> tabular encoder (a self-attention model over heterogeneous features) with learned <strong>spatial tokens</strong> that summarize nearby parcel context, and a Schrödinger Bridge diffusion decoder for multi-horizon uncertainty.
+                        In our experiments, gradient-boosted baselines produced competitive point forecasts but did not capture multi-horizon uncertainty as well as a generative approach. Our current model combines an <strong>FT-Transformer</strong> tabular encoder (a self-attention model over heterogeneous features) with learned <strong>spatial tokens</strong> that summarize nearby parcel context, and a Schrödinger Bridge diffusion decoder for multi-horizon uncertainty.
                     </p>
                     <p>
-                        We use <strong>DDIM (Denoising Diffusion Implicit Models) sampling</strong> to generate percentile paths (P10, P50, P90) directly, with loss normalized independently at each forecast horizon, instead of fitting uncertainty after the point forecast is produced.
+                        The feature set spans several categories: <strong>structural</strong> attributes (living area, land area, year built, bedrooms, bathrooms, stories), <strong>locational</strong> coordinates (latitude, longitude), and <strong>macroeconomic</strong> indicators (mortgage rates, federal funds rate, CPI, oil prices, unemployment, VIX, 10-year treasury, global economic policy uncertainty). We use <strong>DDIM (Denoising Diffusion Implicit Models) sampling</strong> to generate percentile paths (P10, P50, P90) directly, with loss normalized independently at each forecast horizon, instead of fitting uncertainty after the point forecast is produced.
                     </p>
 
                     <h2 className="text-3xl font-bold mt-16 mb-6">3. Evaluation</h2>
