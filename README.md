@@ -1,48 +1,78 @@
-# Properlytic
+# Homecastr
 
-**Property-Level Home Price Forecasting & Risk Intelligence**
+**Probabilistic home value forecasts for any US address.**
 
-![Properlytic Banner](https://img.shields.io/badge/Status-Active-success)
-[![Deployed on Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?style=for-the-badge&logo=vercel)](https://houston-price-prediction.vercel.app)
+Homecastr delivers parcel-level, forward-looking price forecasts with confidence bands — not backward-looking comps. Powered by a machine learning model trained on millions of property records.
 
-Properlytic is an API-first forecasting platform that brings institutional-grade risk intelligence to the residential real estate market. Instead of a single point estimate, we provide time-stamped, probabilistic forecasts with confidence bands and scenario views, empowering buyers, sellers, and homeowners to make data-driven decisions.
-
-## 🚀 The Vision
-
-Real estate is the largest financial decision for most, yet consumers rely on backward-looking comps and broad indices. Properlytic changes this by offering a forward-looking view that quantifies risk and makes uncertainty explicit at the property level.
-
-Our long-term vision is to become the national decision layer for residential real estate—delivering forecasts, risk ranges, and alerts that outperform today’s portals and spreadsheets.
-
-## 💡 Key Features
-
-*   **Probabilistic Forecasts:** 256 Monte Carlo scenario paths per property.
-*   **Property-Level Granularity:** Insights specific to the building, unit, and micro-location.
-*   **Scenario Analysis:** "What if" views for rates, inventory, and policy shifts.
-*   **API-First Design:** Built for integration into underwriting, portfolio monitoring, and advisory workflows.
-*   **Open Evaluation:** Transparent model monitoring (coverage, drift, segment accuracy).
-
-## 🛠️ Technology
-
-Properlytic ingests public records, retrains frequently, and delivers fast, interpretable forecasts at parcel scale.
-
-*   **Live Demo:** [houston-price-prediction.vercel.app](https://houston-price-prediction.vercel.app) (Houston Pilot)
-*   **Wedge Market:** New York City (High heterogeneity & regime shifts)
-*   **Stack:** Python, Next.js, GCP (Compute/Data)
-
-## 👥 Team
-
-*   **Daniel Hardesty Lewis** (Founder/CEO-CTO): Leads modeling, data engineering, and product.
-
-## 📈 Market & Validation
-
-We are targeting the ~$13T U.S. residential market. Our go-to-market strategy involves a dual track:
-1.  **Public Distribution:** Free consumer layer to drive adoption and "standard-setting."
-2.  **Institutional Pilots:** Paid API access for lenders, servicers, and investors requiring auditable, scenario-level forecasts.
-
-## 🔗 Links
-
-*   **Live App:** [houston-price-prediction.vercel.app](https://houston-price-prediction.vercel.app)
-*   **GitHub:** [dhardestylewis/v0-properlytic-8v](https://github.com/dhardestylewis/v0-properlytic-8v)
+🌐 **[homecastr.com](https://www.homecastr.com)** · 📄 **[API Docs](https://www.homecastr.com/api-docs)** · 🛒 **[RapidAPI](https://rapidapi.com/dhardestylewis/api/homecastr-home-price-forecast-api)**
 
 ---
-*Submitted for the Columbia Venture Competition 2026*
+
+## What You Get
+
+- **P10 / P50 / P90 forecast bands** across 1–5 year horizons
+- **Current assessed value** and appreciation projections
+- **Model reliability score** per address
+- **Fan chart data** for visualization
+- **H3 neighborhood cell** mapping
+
+## Quick Start
+
+### REST API
+
+```bash
+curl -H "x-api-key: hc_demo_public_readonly" \
+  "https://www.homecastr.com/api/v1/forecast?address=123+Main+St+Houston+TX"
+```
+
+### MCP Server (Claude, Cursor, Windsurf)
+
+Connect your AI agent to Homecastr — no installation required:
+
+```json
+{
+  "mcpServers": {
+    "homecastr": {
+      "url": "https://www.homecastr.com/api/mcp/mcp"
+    }
+  }
+}
+```
+
+Then ask: *"What's the 5-year price forecast for 742 Evergreen Terrace, Springfield, IL?"*
+
+### RapidAPI
+
+Subscribe at [RapidAPI Hub](https://rapidapi.com/dhardestylewis/api/homecastr-home-price-forecast-api) — free tier available.
+
+## API Endpoints
+
+| Endpoint | Description |
+|---|---|
+| `GET /api/v1/forecast?address=...` | Forecast by street address |
+| `GET /api/v1/forecast/hex?h3_id=...` | Forecast by H3 cell (res 8) |
+| `GET /api/v1/forecast/lot?acct=...` | Forecast by tax parcel ID |
+| `GET /api/ping` | Health check |
+
+## MCP Tools
+
+| Tool | Description |
+|---|---|
+| `forecast_by_address` | Forecast any US home by street address |
+| `forecast_by_h3_cell` | Forecast by H3 hex cell ID |
+| `forecast_by_parcel` | Forecast by county tax parcel ID |
+
+## Technology
+
+- **Model**: Probabilistic ML with 256 Monte Carlo paths per property
+- **Frontend**: Next.js, React, TypeScript
+- **Deployment**: Vercel
+- **Data**: Public records, census, macro indicators
+
+## Team
+
+**Daniel Hardesty Lewis** — Founder/CEO-CTO
+
+## License
+
+MIT
