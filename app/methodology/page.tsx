@@ -4,7 +4,7 @@ import { ArrowLeft, ArrowRight } from "lucide-react"
 
 export const metadata: Metadata = {
     title: "Engineering & Methodology | Homecastr",
-    description: "Deep dive into the architecture, spatial diffusion models, and evaluation rigor powering Homecastr's probabilistic forecasts.",
+    description: "Architecture, spatial generative models, calibration testing, and inference optimization behind Homecastr's probabilistic forecasts.",
 }
 
 export default function MethodologyPage() {
@@ -28,7 +28,7 @@ export default function MethodologyPage() {
                         Architecting Nationwide Probabilistic Forecasts at the Parcel Level
                     </h1>
                     <p className="text-xl text-muted-foreground leading-relaxed">
-                        How we beat Zillow's benchmark by leveraging spatial diffusion models, rigorous calibration, and optimized inference engines.
+                        How we evaluated against a Zillow-based baseline using spatial generative models, calibration testing, and faster inference.
                     </p>
                     <div className="flex items-center gap-4 mt-8 pt-8 border-t border-border/40">
                          <div className="w-12 h-12 rounded-full overflow-hidden border border-border/50">
@@ -46,16 +46,16 @@ export default function MethodologyPage() {
                 <div className="prose prose-neutral dark:prose-invert prose-lg max-w-none">
                     
                     <p className="lead text-xl text-muted-foreground">
-                        Most real estate platforms treat forecasting as a point-estimation problem. Homecastr operates on the premise that single-point estimates (e.g., "this home will be worth exactly $450,000 next year") are fundamentally misleading due to thermodynamic noise in local markets. Instead, we architected an end-to-end pipeline that outputs rigorous <strong>probabilistic trajectories</strong> for over 150 million parcels.
+                        Many consumer real-estate products present a single forecast value. We instead estimate a distribution over future parcel values, because local housing markets are noisy, heterogeneous, and exposed to shocks that point forecasts compress into one number. Homecastr's pipeline produces <strong>probabilistic forecasts</strong> for over 150 million parcels.
                     </p>
 
-                    <h2 className="text-3xl font-bold mt-16 mb-6">1. MLOps & Data Architecture</h2>
+                    <h2 className="text-3xl font-bold mt-16 mb-6">1. Data and MLOps</h2>
                     <p>
-                        Scale requires dropping manual ETL processes in favor of automated, spatial DAGs. Our pipeline ingests hundreds of disparate sources—from localized NYC RPAD roll data to Florida DOR geometric dumps.
+                        At national scale, manual ETL does not hold up. Our pipeline ingests county assessment rolls, parcel geometries, and macro features from sources including NYC RPAD roll data and Florida DOR property records.
                     </p>
                     <ul>
-                        <li><strong className="text-foreground">Spatial Indexing:</strong> We leverage Uber's H3 topological grid to map messy county geometries into consistent feature spaces, enabling fast neighbor lookups.</li>
-                        <li><strong className="text-foreground">Feature Store:</strong> A centralized repository aggregates 114 spatial and macroeconomic features, pushing transformations into Supabase and Redis for low-latency batch retrieval.</li>
+                        <li><strong className="text-foreground">Spatial Indexing:</strong> We use Uber's H3 hexagonal grid to standardize neighborhood context and accelerate nearby-parcel lookups across inconsistent county geometries.</li>
+                        <li><strong className="text-foreground">Feature Store:</strong> We store 114 spatial and macroeconomic features in PostGIS, Supabase, and Redis to support both batch inference and low-latency serving.</li>
                     </ul>
 
                     {/* Architecture Diagram */}
@@ -108,27 +108,27 @@ export default function MethodologyPage() {
                         </div>
                     </div>
 
-                    <h2 className="text-3xl font-bold mt-16 mb-6">2. Schrödinger Bridge Architecture</h2>
+                    <h2 className="text-3xl font-bold mt-16 mb-6">2. Model Architecture</h2>
                     <p>
-                        Predicting trajectories subject to macro-economic shocks requires moving beyond standard gradient boosting. We operate a Schrödinger Bridge architecture relying on <strong>spatial inducing tokens</strong> and FT-Transformer backbones.
+                        In our experiments, gradient-boosted baselines did not capture multi-horizon uncertainty as well as a generative approach. Our current model combines an <strong>FT-Transformer</strong> tabular encoder (a self-attention model over heterogeneous features) with learned <strong>spatial tokens</strong> that summarize nearby parcel context, and a Schrödinger Bridge diffusion decoder for multi-horizon uncertainty.
                     </p>
                     <p>
-                        Our objective is to balance deterministic predictive precision with calibrated generative trajectories. We employ <strong>DDIM (Denoising Diffusion Implicit Models) sampling</strong>, normalized across per-horizon loss surfaces. This allows us to explicitly model the uncertainty bands (P10 downside, P90 upside) rather than guessing at confidence intervals post-hoc.
+                        We use <strong>DDIM (Denoising Diffusion Implicit Models) sampling</strong> to generate percentile paths (P10, P50, P90) directly, with loss normalized independently at each forecast horizon, instead of fitting uncertainty after the point forecast is produced.
                     </p>
 
-                    <h2 className="text-3xl font-bold mt-16 mb-6">3. Evaluation Rigor & The Benchmark</h2>
+                    <h2 className="text-3xl font-bold mt-16 mb-6">3. Evaluation</h2>
                     <p>
-                        Shipping a model to production without rigorous offline evaluation is a recipe for silent degradation. We evaluate model performance across two primary axes: predictive accuracy against industry standards, and probabilistic calibration.
+                        Skipping offline evaluation raises the risk of unnoticed performance drift. We evaluate each model candidate on held-out years across two axes: point-forecast accuracy against an industry baseline, and probabilistic calibration.
                     </p>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 my-8 not-prose">
                         <div className="p-6 rounded-xl bg-muted/30 border border-border/50">
-                            <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground mb-2">1-Year Error (vs. Zillow)</h3>
+                            <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground mb-2">1-Year Error (vs. Zillow Baseline)</h3>
                             <div className="flex items-baseline gap-2">
                                 <span className="text-4xl font-extrabold text-primary">8.0%</span>
                                 <span className="text-sm text-muted-foreground line-through decoration-destructive/50">8.4%</span>
                             </div>
-                            <p className="text-sm text-muted-foreground mt-2">Homecastr outperformed the baseline benchmark in held-out test sets.</p>
+                            <p className="text-sm text-muted-foreground mt-2">Lower 1-year held-out error than the Zillow baseline in our test set.</p>
                         </div>
                         <div className="p-6 rounded-xl bg-muted/30 border border-border/50">
                             <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground mb-2">Long-Horizon Stability</h3>
@@ -136,28 +136,28 @@ export default function MethodologyPage() {
                                 <span className="text-4xl font-extrabold text-primary">25%</span>
                                 <span className="text-sm font-medium text-muted-foreground">MdAE</span>
                             </div>
-                            <p className="text-sm text-muted-foreground mt-2">Median Absolute Error maintained stably over a 4-year forecast horizon.</p>
+                            <p className="text-sm text-muted-foreground mt-2">Median Absolute Error remained roughly stable over a 4-year forecast horizon.</p>
                         </div>
                     </div>
 
                     <p>
-                        Beyond standard error metrics, all model candidates must pass through our <strong>Calibration Packets</strong> framework. This suite optimizes for specific statistical guarantees, including Probability Integral Transform (PIT) uniformity, sharp interval coverage, and tail risk validation.
+                        Beyond standard error metrics, all model candidates pass through a calibration suite we call <strong>Calibration Packets</strong>—a set of diagnostics that check Probability Integral Transform (PIT) behavior, empirical interval coverage, and tail calibration before we promote a model to production.
                     </p>
 
-                    <h2 className="text-3xl font-bold mt-16 mb-6">4. Explainable Forecasts via Surrogate SHAP</h2>
+                    <h2 className="text-3xl font-bold mt-16 mb-6">4. Explainable Forecasts</h2>
                     <p>
-                        Black-box deep learning models are notoriously difficult to trust in high-stakes environments. High predictive accuracy is useless if we cannot explain <em>why</em> a trajectory shifted.
+                        Accuracy alone is not enough if users cannot understand <em>why</em> a forecast changed. We run a post-hoc attribution step we call <strong>Surrogate SHAP</strong>: a gradient-based method that extracts approximate local feature attributions from the FT-Transformer layers and maps them to readable variables (e.g., interest rates, local zoning changes, demographic shifts).
                     </p>
                     <p>
-                        We implemented a post-hoc attribution script utilizing <strong>gradient-based Surrogate SHAP</strong>. This allows us to extract feature gradients directly from the FT-Transformer layers and map them backward to raw, human-readable variables (e.g., "Interest Rates", "Local Zoning", "Demographics"). This powers the "Explainable Forecasts" UI visible on the platform, directly aligning model weights with human intuition.
+                        These attributions feed the "Explainable Forecasts" UI on the platform, giving users per-forecast breakdowns of which inputs contributed most to the predicted trajectory.
                     </p>
 
-                    <h2 className="text-3xl font-bold mt-16 mb-6">5. Production Serving & Latency Optimization</h2>
+                    <h2 className="text-3xl font-bold mt-16 mb-6">5. Serving and Cost</h2>
                     <p>
-                        A robust model is worthless if it costs too much to run or takes too long to load. Once the offline pipeline completes, we run a deterministic, shard-level parallelized inference engine to dump the probabilistic arrays.
+                        A model is less useful if inference cost or latency is too high for production. Once the offline pipeline completes, we split the workload into deterministic shards and run them in parallel to produce the full set of probabilistic arrays.
                     </p>
                     <p>
-                        On the frontend, every millisecond counts. We deployed a three-tier server-side caching architecture (Supabase + GCS + Google APIs) backed by localized LRU caches for our Google Street View integration. This drops our effective image cost to <strong>$0.007 per image</strong> while guaranteeing sub-second render times, even on mobile.
+                        On the frontend, we use a three-tier server-side cache (Supabase, GCS, and Google APIs) with localized LRU caches for Street View images. This reduces our effective image cost to <strong>$0.007 per image</strong> and keeps typical render times below one second on tested mobile devices.
                     </p>
                     
                     <hr className="my-16 border-border/40" />
