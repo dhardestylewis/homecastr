@@ -31,7 +31,7 @@ function TryItWidget() {
     const [response, setResponse] = useState<string | null>(null)
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
-    const [origin, setOrigin] = useState("https://homecastr.ai")
+    const [origin, setOrigin] = useState("https://homecastr.com")
 
     useEffect(() => {
         setOrigin(window.location.origin)
@@ -314,11 +314,11 @@ export default function ApiDocsPage() {
                         </p>
                         <div className="relative">
                             <div className="absolute top-2 right-3 z-10">
-                                <CopyButton text={`curl -s -H "x-api-key: ${DEMO_KEY}" "https://homecastr.ai/api/v1/forecast?address=123+Main+St+Houston+TX"`} />
+                                <CopyButton text={`curl -s -H "x-api-key: ${DEMO_KEY}" "https://homecastr.com/api/v1/forecast?address=123+Main+St+Houston+TX"`} />
                             </div>
                             <pre className="text-[12px] font-mono bg-zinc-950 text-zinc-300 rounded-lg p-5 overflow-x-auto leading-relaxed">
                                 {`curl -s -H "x-api-key: ${DEMO_KEY}" \\
-  "https://homecastr.ai/api/v1/forecast?address=123+Main+St+Houston+TX"`}
+  "https://homecastr.com/api/v1/forecast?address=123+Main+St+Houston+TX"`}
                             </pre>
                         </div>
                     </div>
@@ -373,7 +373,7 @@ export default function ApiDocsPage() {
                                 { name: "year", type: "integer", required: false, description: "Target forecast year (default: 2030). Range: 2026\u20132030." },
                             ]}
                             curlExample={`curl -s -H "x-api-key: YOUR_API_KEY" \\
-  "https://homecastr.ai/api/v1/forecast?address=123+Main+St+Houston+TX&year=2028"`}
+  "https://homecastr.com/api/v1/forecast?address=123+Main+St+Houston+TX&year=2028"`}
                         />
 
                         <EndpointCard
@@ -385,7 +385,7 @@ export default function ApiDocsPage() {
                                 { name: "year", type: "integer", required: false, description: "Target forecast year (default: 2026)" },
                             ]}
                             curlExample={`curl -s -H "x-api-key: YOUR_API_KEY" \\
-  "https://homecastr.ai/api/v1/forecast/hex?h3_id=882a100c65fffff&year=2028"`}
+  "https://homecastr.com/api/v1/forecast/hex?h3_id=882a100c65fffff&year=2028"`}
                         />
 
                         <EndpointCard
@@ -396,7 +396,7 @@ export default function ApiDocsPage() {
                                 { name: "acct", type: "string", required: true, description: "County tax account / parcel ID" },
                             ]}
                             curlExample={`curl -s -H "x-api-key: YOUR_API_KEY" \\
-  "https://homecastr.ai/api/v1/forecast/lot?acct=1234567890123"`}
+  "https://homecastr.com/api/v1/forecast/lot?acct=1234567890123"`}
                         />
 
                         <EndpointCard
@@ -406,7 +406,7 @@ export default function ApiDocsPage() {
                             params={[
                                 { name: "email", type: "string (body)", required: true, description: "Your email address" },
                             ]}
-                            curlExample={`curl -s -X POST "https://homecastr.ai/api/v1/keys" \\
+                            curlExample={`curl -s -X POST "https://homecastr.com/api/v1/keys" \\
   -H "Content-Type: application/json" \\
   -d '{"email": "you@company.com"}'`}
                         />
@@ -423,7 +423,7 @@ export default function ApiDocsPage() {
                                 </div>
                                 <pre className="text-[11px] font-mono bg-zinc-950 text-zinc-300 rounded-lg p-4 overflow-x-auto leading-relaxed h-full">
                                     {`const res = await fetch(
-  "https://homecastr.ai/api/v1/forecast" +
+  "https://homecastr.com/api/v1/forecast" +
   "?address=123+Main+St+Houston+TX",
   {
     headers: {
@@ -445,7 +445,7 @@ console.log(data.forecasts);
                                     {`import requests
 
 r = requests.get(
-    "https://homecastr.ai/api/v1/forecast",
+    "https://homecastr.com/api/v1/forecast",
     params={"address": "123 Main St Houston TX"},
     headers={"x-api-key": "YOUR_API_KEY"},
 )
