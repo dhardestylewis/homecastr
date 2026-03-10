@@ -622,13 +622,15 @@ export async function batchEnrichTracts(
     if (tractGeoids.length === 0) return result
 
     // Phase 0: Spatial tract labels (best quality — place/cousub/GNIS inference)
+    // Still carry ZCTA from crosswalk for downstream disambiguation
     for (const tractId of tractGeoids) {
         const label = TRACT_LABELS[tractId]
         if (label && label.label_short) {
+            const zcta = TRACT_ZCTA[tractId] || ""
             result.set(tractId, {
                 name: label.label_short,
                 slug: slugify(label.label_short),
-                zcta5: "",
+                zcta5: zcta,
             })
         }
     }
