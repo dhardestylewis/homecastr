@@ -1,24 +1,24 @@
 /**
- * Build script: populate tract-name-cache.json using Census tract gazetteer.
+ * Build script: populate tract-name-cache.json for tracts without ZCTA-based names.
  * 
- * Reads the Census Bureau tract gazetteer (pre-downloaded to C:\tmp\tracts_gaz)
- * and uses the `zipcodes` npm package to find the nearest city for each tract
- * that doesn't already have a ZCTA-based name.
+ * Strategy: Comprehensive lookup using multiple centroid sources.
+ * 1. Queries DB geometry tables (geo_tract20_us, geo_tract20_tx) for exact tract centroids used in active forecasts.
+ * 2. Falls back to Census Bureau tract gazetteer (pre-downloaded to C:\tmp\tracts_gaz) for missing tracts.
+ * 3. Uses `zipcodes` npm package to find the nearest city for the centroid.
  * 
- * Prerequisites:
- *   [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
- *   Invoke-WebRequest -Uri "https://www2.census.gov/geo/docs/maps-data/data/gazetteer/2020_Gazetteer/2020_Gaz_tracts_national.zip" -OutFile "C:\tmp\tracts_gaz.zip" -UseBasicParsing
- *   Expand-Archive -Path "C:\tmp\tracts_gaz.zip" -DestinationPath "C:\tmp\tracts_gaz" -Force
- * 
- * Usage:  npx tsx scripts/build_tract_name_cache.ts
+ * Usage:  $env:NODE_TLS_REJECT_UNAUTHORIZED="0"; npx tsx scripts/build_tract_name_cache.ts
  * Output: lib/publishing/tract-name-cache.json
  */
 
 import * as fs from "fs"
 import * as path from "path"
+import { Client } from "pg"
+import { loadEnvConfig } from "@next/env"
 
 // @ts-ignore
 import zipcodes from "zipcodes"
+
+loadEnvConfig(process.cwd())
 
 const OUT_FILE = path.join(__dirname, "..", "lib", "publishing", "tract-name-cache.json")
 const ZCTA_XWALK_FILE = path.join(__dirname, "..", "lib", "publishing", "tract-zcta-crosswalk.json")
@@ -42,18 +42,18 @@ function titleCase(s: string): string {
     }).join(" ")
 }
 
-function main() {
-    console.log("Building tract-name-cache.json from Census gazetteer...")
+async function main() {
+    console.log("Building tract-name-cache.json (DB + Gazetteer approach)...")
 
     // Step 1: Load existing name sources
     const zctaXwalk: Record<string, string> = JSON.parse(fs.readFileSync(ZCTA_XWALK_FILE, "utf-8"))
     const zipNames: Record<string, string> = JSON.parse(fs.readFileSync(ZIP_NAMES_FILE, "utf-8"))
 
-    const tractsWithName = new Set<string>()
+    const tractsWithZctaName = new Set<string>()
     for (const [tract, zcta] of Object.entries(zctaXwalk)) {
-        if (zipNames[zcta]) tractsWithName.add(tract)
+        if (zipNames[zcta]) tractsWithZctaName.add(tract)
     }
-    console.log(`  Tracts with ZCTA+name: ${tractsWithName.size}`)
+    console.log(`  Tracts already named via ZCTA: ${tractsWithZctaName.size}`)
 
     // Step 2: Build ZIP spatial index
     console.log("  Building ZIP spatial index...")
@@ -88,43 +88,93 @@ function main() {
                 }
             }
         }
-        return bestDist < 500 ? bestCity : null // 500km for remote Alaska
+        return bestDist < 500 ? bestCity : null
     }
 
-    // Step 3: Read Census tract gazetteer
-    console.log("  Loading Census tract gazetteer...")
-    const gazFiles = fs.readdirSync(GAZ_DIR).filter(f => f.endsWith(".txt"))
-    if (gazFiles.length === 0) {
-        console.error("No .txt file in C:\\tmp\\tracts_gaz. See script header for download instructions.")
-        process.exit(1)
+    const allCentroids = new Map<string, { lat: number; lng: number; source: string }>()
+
+    // Step 3: Fetch exact centroids from DB geometry tables
+    console.log("  Fetching tract centroids from DB geometry tables...")
+    const dbUrl = process.env.POSTGRES_URL_NON_POOLING || process.env.POSTGRES_URL
+    if (dbUrl) {
+        const client = new Client({ connectionString: dbUrl })
+        try {
+            await client.connect()
+            const tables = ["geo_tract20_us", "geo_tract20_tx"]
+            for (const table of tables) {
+                try {
+                    const { rows } = await client.query(`
+                        SELECT geoid, ST_Y(ST_Centroid(geom)) as lat, ST_X(ST_Centroid(geom)) as lng
+                        FROM public.${table}
+                    `)
+                    for (const row of rows) {
+                        if (row.geoid && !isNaN(row.lat) && !isNaN(row.lng)) {
+                            allCentroids.set(row.geoid, { lat: row.lat, lng: row.lng, source: "db" })
+                        }
+                    }
+                    console.log(`    Successfully loaded ${rows.length} centroids from ${table}`)
+                } catch (e) {
+                    console.log(`    Skipped ${table}: ${(e as Error).message?.substring(0, 50)}`)
+                }
+            }
+        } catch (e) {
+            console.error(`    DB connection failed: ${e}`)
+        } finally {
+            await client.end()
+        }
+    } else {
+        console.log("    Skipping DB: POSTGRES_URL not set in environment.")
     }
 
-    const gazText = fs.readFileSync(path.join(GAZ_DIR, gazFiles[0]), "utf-8")
-    const lines = gazText.split("\n")
-    const header = lines[0].split("\t").map(h => h.trim().toUpperCase())
-    const geoidIdx = header.findIndex(h => h === "GEOID")
-    const latIdx = header.findIndex(h => h.includes("INTPTLAT"))
-    const lngIdx = header.findIndex(h => h.includes("INTPTLONG"))
-    console.log(`  Columns: GEOID=${geoidIdx}, LAT=${latIdx}, LNG=${lngIdx}`)
-    console.log(`  ${lines.length - 1} tracts in gazetteer`)
+    // Step 4: Fallback to Census Gazetteers (2010 and 2020)
+    console.log("  Loading Census tract gazetteers...")
+    const gazDirs = ["C:\\tmp\\tracts_gaz", "C:\\tmp\\tracts_gaz_2010"]
+    for (const d of gazDirs) {
+        if (fs.existsSync(d)) {
+            const gazFiles = fs.readdirSync(d).filter(f => f.endsWith(".txt"))
+            for (const file of gazFiles) {
+                const gazText = fs.readFileSync(path.join(d, file), "utf-8")
+                const lines = gazText.split("\n")
+                if (lines.length === 0) continue
+                const header = lines[0].split("\t").map(h => h.trim().toUpperCase())
+                const geoidIdx = header.findIndex(h => h === "GEOID" || h === "GEOID10")
+                const latIdx = header.findIndex(h => h.includes("INTPTLAT"))
+                const lngIdx = header.findIndex(h => h.includes("INTPTLONG"))
 
-    // Step 4: Process ALL tracts (not just ones missing from ZCTA)
-    // This builds the comprehensive cache that the runtime can use
+                let count = 0
+                for (let i = 1; i < lines.length; i++) {
+                    const cols = lines[i].split("\t").map(c => c.trim())
+                    if (cols.length <= Math.max(geoidIdx, latIdx, lngIdx)) continue
+
+                    const geoid = cols[geoidIdx]
+                    const lat = parseFloat(cols[latIdx])
+                    const lng = parseFloat(cols[lngIdx])
+
+                    if (geoid && !isNaN(lat) && !isNaN(lng)) {
+                        // Only add if DB didn't already have it
+                        if (!allCentroids.has(geoid)) {
+                            allCentroids.set(geoid, { lat, lng, source: "gazetteer" })
+                            count++
+                        }
+                    }
+                }
+                console.log(`    Added ${count} missing centroids from gazetteer (${path.basename(d)})`)
+            }
+        } else {
+            console.log(`    Gazetteer directory not found: ${d}`)
+        }
+    }
+
+    // Step 5: Process all collected centroids that don't have a ZCTA name
     const result: Record<string, string> = {}
-    let processed = 0, named = 0, alreadyHasZcta = 0
+    let named = 0
+    let skipped = 0
 
-    for (let i = 1; i < lines.length; i++) {
-        const cols = lines[i].split("\t").map(c => c.trim())
-        if (cols.length <= Math.max(geoidIdx, latIdx, lngIdx)) continue
-
-        const geoid = cols[geoidIdx]
-        const lat = parseFloat(cols[latIdx])
-        const lng = parseFloat(cols[lngIdx])
-        if (!geoid || isNaN(lat) || isNaN(lng)) continue
-        processed++
-
-        // Skip tracts that already have a ZCTA-based name
-        if (tractsWithName.has(geoid)) { alreadyHasZcta++; continue }
+    for (const [geoid, { lat, lng }] of allCentroids.entries()) {
+        if (tractsWithZctaName.has(geoid)) {
+            skipped++
+            continue
+        }
 
         const city = findNearest(lat, lng)
         if (city) {
@@ -133,30 +183,22 @@ function main() {
         }
     }
 
-    console.log(`  Processed: ${processed}, have ZCTA name: ${alreadyHasZcta}, newly named: ${named}`)
+    console.log(`  Processed unnamed tracts. Skipped (has ZCTA name): ${skipped}, Newly named: ${named}`)
 
     // Sort and write
     const sorted: Record<string, string> = {}
     for (const key of Object.keys(result).sort()) sorted[key] = result[key]
 
-    console.log(`\nFinal: ${Object.keys(sorted).length} tract name mappings`)
-
-    const stateGroups: Record<string, number> = {}
-    for (const geoid of Object.keys(sorted)) {
-        const st = geoid.substring(0, 2)
-        stateGroups[st] = (stateGroups[st] || 0) + 1
-    }
-    const topStates = Object.entries(stateGroups).sort((a, b) => b[1] - a[1]).slice(0, 10)
-    console.log("Top 10 states by newly named tracts:")
-    for (const [st, count] of topStates) console.log(`  FIPS ${st}: ${count}`)
+    console.log(`\nFinal mapping covers ${Object.keys(sorted).length} tracts`)
 
     const akTracts = Object.keys(sorted).filter(k => k.startsWith("02"))
-    console.log(`\nAlaska: ${akTracts.length} tracts`)
-    if (akTracts.length > 0)
+    console.log(`Alaska coverage: ${akTracts.length} tracts`)
+    if (akTracts.length > 0) {
         console.log(`  Samples: ${akTracts.slice(0, 8).map(k => `${k}=${sorted[k]}`).join(", ")}`)
+    }
 
     fs.writeFileSync(OUT_FILE, JSON.stringify(sorted, null, 2) + "\n")
     console.log(`\nWritten to ${OUT_FILE}`)
 }
 
-main()
+main().catch(console.error)
