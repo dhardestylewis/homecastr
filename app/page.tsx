@@ -136,7 +136,7 @@ export default function AboutPage() {
                                 AI-Powered Home Forecasts
                             </div>
                             <h1 className="text-5xl md:text-7xl font-bold tracking-tight leading-[1.1] mb-6">
-                                Your home&apos;s future &mdash;
+                                Your home&apos;s future
                                 <br className="hidden md:block" />
                                 <span className="text-primary">at your fingertips</span>
                             </h1>
@@ -154,11 +154,15 @@ export default function AboutPage() {
                             </Link>
                         </div>
                         {/* Mini Interactive App */}
-                        <div className="hidden md:block h-[560px] rounded-2xl overflow-hidden glass-panel border border-border/50 relative shadow-2xl">
+                        <div className="hidden md:block h-[560px] rounded-2xl overflow-hidden glass-panel border border-border/50 relative shadow-2xl hover:scale-[1.02] transition-transform duration-500 ease-out group">
                             <div className="absolute top-4 left-4 z-10 bg-background/90 backdrop-blur-md px-3 py-1.5 rounded-full text-xs font-bold shadow-sm border border-border flex items-center gap-2">
                                 <div className="w-2 h-2 rounded-full bg-lime-500 animate-pulse" />
                                 Live Interactive Forecasts
                             </div>
+                            <Link href="/app" className="absolute top-4 right-4 z-10 bg-primary/90 hover:bg-primary backdrop-blur-md px-4 py-2 rounded-full text-sm font-bold text-primary-foreground shadow-sm border border-border flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                                Open Map
+                                <ArrowRight className="w-4 h-4" />
+                            </Link>
                             {/* We load a simplified MapView */}
                             <iframe
                                 src="/app?yr=2027&embedded=true"
@@ -218,7 +222,7 @@ export default function AboutPage() {
                             <h2 className="text-3xl font-bold tracking-tight mb-6">Nationwide Coverage</h2>
                             <p className="text-muted-foreground leading-relaxed mb-6">
                                 We&apos;re live across the United States, covering Texas, New York,
-                                Florida, and more &mdash; with new markets added regularly.
+                                Florida, and more with new markets added regularly.
                             </p>
                             <div className="flex gap-8">
                                 <div>

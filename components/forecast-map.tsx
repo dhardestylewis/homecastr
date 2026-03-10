@@ -400,8 +400,16 @@ export function ForecastMap({
                 const addr = data.address || {}
                 let name: string | null = null
                 if (geoLevel === "tract") {
-                    // Tract: show neighbourhood
-                    name = addr.suburb || addr.neighbourhood || null
+                    // Tracts often get too-broad names like "Bronx" from reverse geocoding.
+                    // We parse the human-readable tract number directly from the 11-digit GEOID at the end.
+                    const tractNum = selectedId ? selectedId.slice(-6) : ""
+                    if (tractNum && tractNum.length === 6) {
+                        const main = parseInt(tractNum.slice(0, 4), 10)
+                        const suffix = tractNum.slice(4)
+                        name = suffix === "00" ? `Tract ${main}` : `Tract ${main}.${suffix}`
+                    } else {
+                        name = addr.suburb || addr.neighbourhood || null
+                    }
                 } else if (geoLevel === "parcel") {
                     // Parcel: show full address (e.g. "1747 West 25th Street")
                     const street = addr.road || null
@@ -463,7 +471,14 @@ export function ForecastMap({
                 const addr = data.address || {}
                 let name: string | null = null
                 if (geoLevel === "tract") {
-                    name = addr.suburb || addr.neighbourhood || null
+                    const tractNum = compId ? compId.slice(-6) : ""
+                    if (tractNum && tractNum.length === 6) {
+                        const main = parseInt(tractNum.slice(0, 4), 10)
+                        const suffix = tractNum.slice(4)
+                        name = suffix === "00" ? `Tract ${main}` : `Tract ${main}.${suffix}`
+                    } else {
+                        name = addr.suburb || addr.neighbourhood || null
+                    }
                 } else if (geoLevel === "parcel") {
                     const street = addr.road || null
                     const num = addr.house_number || null
@@ -1046,7 +1061,7 @@ export function ForecastMap({
                         layout: { visibility: visible ? "visible" : "none" },
                         paint: {
                             "fill-color": fillColor,
-                            "fill-opacity": 0.55,
+                            "fill-opacity": 0.35,
                             "fill-outline-color": "rgba(255,255,255,0.2)",
                         },
                     })
