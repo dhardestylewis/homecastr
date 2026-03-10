@@ -8,6 +8,8 @@ Homecastr delivers parcel-level, forward-looking price forecasts with confidence
 
 ---
 
+![Homecastr Homepage](docs/images/homepage.png)
+
 ## What You Get
 
 - **P10 / P50 / P90 forecast bands** across 1–5 year horizons
@@ -53,6 +55,12 @@ Subscribe at [RapidAPI Hub](https://rapidapi.com/dhardestylewis/api/homecastr-ho
 | `GET /api/v1/forecast/hex?h3_id=...` | Forecast by H3 cell (res 8) |
 | `GET /api/v1/forecast/lot?acct=...` | Forecast by tax parcel ID |
 | `GET /api/ping` | Health check |
+
+## Interactive API Docs
+
+![API Documentation](docs/images/api-docs.png)
+
+Try the API instantly at [homecastr.com/api-docs](https://www.homecastr.com/api-docs) — no signup required.
 
 ## MCP Tools
 
