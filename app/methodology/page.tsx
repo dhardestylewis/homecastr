@@ -89,7 +89,7 @@ export default function MethodologyPage() {
                             <div className="flex flex-col items-center flex-1 w-full relative group">
                                 <div className="bg-primary/5 border border-primary/30 rounded-xl p-5 w-full h-full text-center shadow-md group-hover:bg-primary/10 transition-colors flex flex-col justify-center">
                                     <div className="text-[10px] font-bold uppercase text-primary mb-3 tracking-wider">Model Inference</div>
-                                    <div className="font-semibold text-sm">V11 Spatial Diffusion</div>
+                                    <div className="font-semibold text-sm">Schrödinger Bridge</div>
                                     <div className="text-xs text-primary/80 mt-2">FT-Transformer</div>
                                 </div>
                                 <div className="h-6 w-px bg-border md:hidden my-2"></div>
@@ -108,9 +108,9 @@ export default function MethodologyPage() {
                         </div>
                     </div>
 
-                    <h2 className="text-3xl font-bold mt-16 mb-6">2. V11 Architecture: Spatial Diffusion Models</h2>
+                    <h2 className="text-3xl font-bold mt-16 mb-6">2. Schrödinger Bridge Architecture</h2>
                     <p>
-                        Predicting trajectories subject to macro-economic shocks requires moving beyond standard gradient boosting. We operate a V11 architecture relying on <strong>spatial inducing tokens</strong> and FT-Transformer backbones.
+                        Predicting trajectories subject to macro-economic shocks requires moving beyond standard gradient boosting. We operate a Schrödinger Bridge architecture relying on <strong>spatial inducing tokens</strong> and FT-Transformer backbones.
                     </p>
                     <p>
                         Our objective is to balance deterministic predictive precision with calibrated generative trajectories. We employ <strong>DDIM (Denoising Diffusion Implicit Models) sampling</strong>, normalized across per-horizon loss surfaces. This allows us to explicitly model the uncertainty bands (P10 downside, P90 upside) rather than guessing at confidence intervals post-hoc.
