@@ -283,16 +283,17 @@ export async function createTavusConversation({
             type: "function",
             function: {
               name: "rank_forecast_areas",
-              description: "Rank geography units by forecasted value or growth.",
+              description: "Rank geography units by forecasted value or growth within a specific city or state.",
               parameters: {
                 type: "object",
                 properties: {
+                  query: { type: "string", description: "City (e.g. 'Houston', 'nyc') or State (e.g. 'TX', 'Florida') to filter the ranking." },
                   level: { type: "string", enum: ["zcta", "tract", "tabblock", "parcel"] },
                   forecast_year: { type: "integer" },
                   objective: { type: "string", enum: ["value", "growth"] },
                   limit: { type: "integer" }
                 },
-                required: ["objective"]
+                required: ["objective", "query"]
               }
             }
           },

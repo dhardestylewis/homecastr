@@ -271,6 +271,7 @@ export async function executeTopLevelForecastTool(
                     const currentHorizonM = 12 // 2026 = origin + 1 year
 
                     // 1. Get a pool of areas at the forecast horizon
+                    const fetchLimit = args.query ? 3000 : 100
                     const { data: futureData, error: futureErr } = await (supabase as any)
                         .schema(FORECAST_SCHEMA)
                         .from(meta.table)
@@ -279,7 +280,7 @@ export async function executeTopLevelForecastTool(
                         .eq("horizon_m", horizonM)
                         .not("p50", "is", null)
                         .order("p50", { ascending: false })
-                        .limit(100)
+                        .limit(fetchLimit)
 
                     if (futureErr || !futureData || futureData.length === 0) {
                         return JSON.stringify({ areas: [], error: futureErr?.message || "No forecast data" })
@@ -313,9 +314,30 @@ export async function executeTopLevelForecastTool(
                         })
                         .filter((row: any) => row.growthPct <= 100 && row.growthPct >= -50) // Strip out extreme anomalies (e.g. empty lots -> skyscrapers)
                         .sort((a: any, b: any) => b.growthPct - a.growthPct)
-                        .slice(0, limit)
 
-                    const areas = withGrowth.map((row: any, i: number) => ({
+                    let filteredGrowth = withGrowth
+                    if (args.query) {
+                        const queryStr = args.query.toLowerCase()
+                        const { parseTractGeoid, ZIP_NAMES } = await import("@/lib/publishing/geo-crosswalk")
+                        filteredGrowth = withGrowth.filter((row: any) => {
+                            const id = row[meta.key]
+                            if (level === "zcta") {
+                                const name = (ZIP_NAMES[id] || "").toLowerCase()
+                                return name.includes(queryStr) || queryStr.includes(name) || id.includes(queryStr)
+                            } else {
+                                try {
+                                    const info = parseTractGeoid(id.substring(0, 11))
+                                    const matchCity = info.city.toLowerCase().includes(queryStr) || queryStr.includes(info.city.toLowerCase())
+                                    const matchState = info.stateName.toLowerCase() === queryStr || info.stateAbbr.toLowerCase() === queryStr
+                                    const isNYCQuery = queryStr === "nyc" || queryStr === "new york" || queryStr === "new york city"
+                                    const isNYCBorough = ["manhattan", "brooklyn", "queens", "bronx", "staten island"].includes(info.city.toLowerCase())
+                                    return matchCity || matchState || (isNYCQuery && isNYCBorough)
+                                } catch { return false }
+                            }
+                        })
+                    }
+
+                    const areas = filteredGrowth.slice(0, limit).map((row: any, i: number) => ({
                         level,
                         id: row[meta.key],
                         metrics: {
@@ -327,13 +349,14 @@ export async function executeTopLevelForecastTool(
                             horizon_m: row.horizon_m,
                         },
                         rank: i + 1,
-                        reason: `Rank #${i + 1} by growth (${Math.round(row.growthPct * 10) / 10}%)${fallbackNote}`,
+                        reason: `Rank #${i + 1} by growth (${Math.round(row.growthPct * 10) / 10}%)${args.query ? ' in ' + args.query : ''}${fallbackNote}`,
                     }))
 
                     return JSON.stringify({ areas })
                 }
 
                 // Value ranking: straightforward sort by p50
+                const fetchLimit = args.query ? 3000 : limit
                 const { data, error } = await (supabase as any)
                     .schema(FORECAST_SCHEMA)
                     .from(meta.table)
@@ -342,11 +365,33 @@ export async function executeTopLevelForecastTool(
                     .eq("horizon_m", horizonM)
                     .not("p50", "is", null)
                     .order("p50", { ascending: false })
-                    .limit(limit)
+                    .limit(fetchLimit)
 
                 if (error) return JSON.stringify({ areas: [], error: error.message })
 
-                const areas = (data || []).map((row: any, i: number) => ({
+                let filteredData = data || []
+                if (args.query) {
+                    const queryStr = args.query.toLowerCase()
+                    const { parseTractGeoid, ZIP_NAMES } = await import("@/lib/publishing/geo-crosswalk")
+                    filteredData = filteredData.filter((row: any) => {
+                        const id = row[meta.key]
+                        if (level === "zcta") {
+                            const name = (ZIP_NAMES[id] || "").toLowerCase()
+                            return name.includes(queryStr) || queryStr.includes(name) || id.includes(queryStr)
+                        } else {
+                            try {
+                                const info = parseTractGeoid(id.substring(0, 11))
+                                const matchCity = info.city.toLowerCase().includes(queryStr) || queryStr.includes(info.city.toLowerCase())
+                                const matchState = info.stateName.toLowerCase() === queryStr || info.stateAbbr.toLowerCase() === queryStr
+                                const isNYCQuery = queryStr === "nyc" || queryStr === "new york" || queryStr === "new york city"
+                                const isNYCBorough = ["manhattan", "brooklyn", "queens", "bronx", "staten island"].includes(info.city.toLowerCase())
+                                return matchCity || matchState || (isNYCQuery && isNYCBorough)
+                            } catch { return false }
+                        }
+                    })
+                }
+
+                const areas = filteredData.slice(0, limit).map((row: any, i: number) => ({
                     level,
                     id: row[meta.key],
                     metrics: {
@@ -356,7 +401,7 @@ export async function executeTopLevelForecastTool(
                         horizon_m: row.horizon_m,
                     },
                     rank: i + 1,
-                    reason: `Rank #${i + 1} by ${objective}${fallbackNote}`,
+                    reason: `Rank #${i + 1} by ${objective}${args.query ? ' in ' + args.query : ''}${fallbackNote}`,
                 }))
 
                 return JSON.stringify({ areas })

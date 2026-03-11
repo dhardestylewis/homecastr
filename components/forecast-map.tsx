@@ -1057,32 +1057,6 @@ export function ForecastMap({
             };
             addCrosshatchPattern();
 
-                // Expose global map capture for PDF export (zoom in for closer view)
-                ; (window as any).__captureMapImage = () => {
-                    return new Promise<string | undefined>((resolve) => {
-                        try {
-                            const origZoom = map.getZoom()
-                            const pdfZoom = origZoom + 5
-                            map.jumpTo({ zoom: pdfZoom })
-                            // Wait for tiles to load after zoom
-                            setTimeout(() => {
-                                map.triggerRepaint()
-                                requestAnimationFrame(() => {
-                                    try {
-                                        const dataUrl = map.getCanvas().toDataURL("image/png")
-                                        // Restore original zoom
-                                        map.jumpTo({ zoom: origZoom })
-                                        resolve(dataUrl)
-                                    } catch {
-                                        map.jumpTo({ zoom: origZoom })
-                                        resolve(undefined)
-                                    }
-                                })
-                            }, 800)
-                        } catch { resolve(undefined) }
-                    })
-                }
-
             const fillColor = buildFillColor()
 
             // Add A/B sources
@@ -1230,7 +1204,6 @@ export function ForecastMap({
                     'line-opacity': 0.85,
                 },
             })
-        })
 
         // Suppress MapLibre tile loading error events (e.g. transient 500s from Supabase)
         map.on("error", (e: any) => {
@@ -1374,17 +1347,17 @@ export function ForecastMap({
             hoveredIdRef.current = id
             onFeatureHover(id)
 
-                // Set hover state
-                ;["forecast-a", "forecast-b"].forEach((s) => {
-                    try {
-                        map.setFeatureState(
-                            { source: s, sourceLayer, id },
-                            { hover: true }
-                        )
-                    } catch (err) {
-                        /* ignore */
-                    }
-                })
+            // Set hover state
+            ;["forecast-a", "forecast-b"].forEach((s) => {
+                try {
+                    map.setFeatureState(
+                        { source: s, sourceLayer, id },
+                        { hover: true }
+                    )
+                } catch (err) {
+                    /* ignore */
+                }
+            })
 
 
             // Debounced fan chart fetch on hover (only when NOT locked, only on new feature)
@@ -1543,14 +1516,14 @@ export function ForecastMap({
             if (hoveredIdRef.current) {
                 const zoom = map.getZoom()
                 const sourceLayer = getSourceLayer(zoom)
-                    ;["forecast-a", "forecast-b"].forEach((s) => {
-                        try {
-                            map.setFeatureState(
-                                { source: s, sourceLayer, id: hoveredIdRef.current! },
-                                { hover: false }
-                            )
-                        } catch { }
-                    })
+                ;["forecast-a", "forecast-b"].forEach((s) => {
+                    try {
+                        map.setFeatureState(
+                            { source: s, sourceLayer, id: hoveredIdRef.current! },
+                            { hover: false }
+                        )
+                    } catch { }
+                })
                 hoveredIdRef.current = null
                 onFeatureHover(null)
                 // Clear comparison data when mouse leaves (locked mode)

@@ -546,7 +546,7 @@ const ZIP_OVERRIDES: Record<string, string> = {
 }
 
 // Merge: use curated Houston names where available, otherwise national
-const ZIP_NAMES: Record<string, string> = { ...ZIP_CITY_NATIONAL, ...ZIP_OVERRIDES }
+export const ZIP_NAMES: Record<string, string> = { ...ZIP_CITY_NATIONAL, ...ZIP_OVERRIDES }
 
 export interface GeoInfo {
     tractGeoid: string
