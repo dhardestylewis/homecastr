@@ -137,7 +137,7 @@ export default function AboutPage() {
                             </div>
                             <h1 className="text-5xl md:text-7xl font-bold tracking-tight leading-[1.1] mb-6">
                                 Your home&apos;s future
-                                <br className="hidden md:block" />
+                                <br className="hidden md:block" />{" "}
                                 <span className="text-primary">at your fingertips</span>
                             </h1>
                             <p className="text-xl text-muted-foreground leading-relaxed mb-10 max-w-2xl">
