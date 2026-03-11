@@ -1092,14 +1092,18 @@ export function ForecastMap({
                                 "#fbbf24",   // amber  — primary selection
                                 ["boolean", ["feature-state", "hover"], false],
                                 "#a3e635",   // lime   — comparison hover
+                                ["boolean", ["feature-state", "pinned"], false],
+                                "#f472b6",   // pink   — pinned comparison fallback
                                 "rgba(0,0,0,0)",
                             ],
                             "line-width": [
                                 "case",
                                 ["boolean", ["feature-state", "selected"], false],
-                                3,
+                                4,
                                 ["boolean", ["feature-state", "hover"], false],
-                                2,
+                                3,
+                                ["boolean", ["feature-state", "pinned"], false],
+                                3,
                                 0,
                             ],
                             "line-opacity": [
@@ -1108,8 +1112,9 @@ export function ForecastMap({
                                     "any",
                                     ["boolean", ["feature-state", "selected"], false],
                                     ["boolean", ["feature-state", "hover"], false],
+                                    ["boolean", ["feature-state", "pinned"], false],
                                 ],
-                                1,
+                                1.0,
                                 0,
                             ],
                         },
@@ -2840,6 +2845,25 @@ export function ForecastMap({
                                 const pctBase = isPresent ? null : isPast ? forecastVal : currentVal
                                 const pctTarget = isPresent ? null : isPast ? currentVal : forecastVal
                                 const pctChange = pctBase && pctTarget ? ((pctTarget - pctBase) / pctBase * 100) : null
+                                
+                                const isExtremeOutlier = pctChange !== null && (pctChange > 100 || pctChange < -50)
+                                if (isExtremeOutlier && !isPresent) {
+                                    return (
+                                        <div className="flex w-full flex-1 h-full items-center justify-center p-4 bg-destructive/5 text-center">
+                                            <div className="space-y-2">
+                                                <AlertCircle className="w-6 h-6 text-destructive/80 mx-auto" />
+                                                <div className="text-xs font-bold text-destructive">Data Anomaly Detected</div>
+                                                <div className="text-[10px] text-muted-foreground max-w-[220px] mx-auto leading-tight">
+                                                    This area shows anomalous forecasted growth ({pctChange > 0 ? '+' : ''}{pctChange.toFixed(1)}%). It may be a data artifact (e.g., an empty lot zoned for development).
+                                                </div>
+                                                <button onClick={(e) => { e.stopPropagation(); window.location.href="mailto:daniel@homecastr.com?subject=Requesting Custom Analysis" }} className="mt-2 text-[10px] font-semibold px-3 py-1.5 bg-background text-foreground border border-border rounded shadow-sm hover:bg-muted">
+                                                    Request Custom Analysis
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )
+                                }
+
                                 return (
                                     <div className="flex w-full flex-1 h-full">
                                         {/* Chart — takes remaining space */}
@@ -2912,6 +2936,25 @@ export function ForecastMap({
                                     const pctBase = isPresent ? null : isPast ? forecastVal : currentVal
                                     const pctTarget = isPresent ? null : isPast ? currentVal : forecastVal
                                     const pctChange = pctBase && pctTarget ? ((pctTarget - pctBase) / pctBase * 100) : null
+                                    
+                                    const isExtremeOutlier = pctChange !== null && (pctChange > 100 || pctChange < -50)
+                                    if (isExtremeOutlier && !isPresent) {
+                                        return (
+                                            <div className="flex w-full flex-col justify-center p-6 bg-destructive/5 text-center rounded-lg border border-destructive/20 mt-2">
+                                                <div className="space-y-3">
+                                                    <AlertCircle className="w-8 h-8 text-destructive/80 mx-auto" />
+                                                    <div className="text-sm font-bold text-destructive">Data Anomaly Detected</div>
+                                                    <div className="text-xs text-muted-foreground px-4 leading-relaxed">
+                                                        This area shows anomalous forecasted growth ({pctChange > 0 ? '+' : ''}{pctChange.toFixed(1)}%). It may be a data artifact (e.g., an empty lot zoned for development).
+                                                    </div>
+                                                    <button onClick={(e) => { e.stopPropagation(); window.location.href="mailto:daniel@homecastr.com?subject=Requesting Custom Analysis" }} className="mt-4 text-xs font-semibold px-4 py-2 bg-background text-foreground border border-border rounded-md shadow-sm hover:bg-muted transition-colors">
+                                                        Request Custom Analysis
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )
+                                    }
+
                                     return (
                                         <div className="flex items-center justify-between gap-3">
                                             <div className="text-center flex-1">

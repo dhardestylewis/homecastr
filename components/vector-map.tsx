@@ -310,15 +310,15 @@ export function VectorMap({
                     paint: {
                         "line-color": [
                             "case",
-                            ["boolean", ["feature-state", "primary"], false], "#4a5568", // Deep Taupe for Primary
-                            ["boolean", ["feature-state", "selected"], false], "#ca8a04",
-                            ["boolean", ["feature-state", "hover"], false], "#4a5568",
+                            ["boolean", ["feature-state", "primary"], false], "#fbbf24", // amber for Primary
+                            ["boolean", ["feature-state", "selected"], false], "#fcd34d", // lighter amber
+                            ["boolean", ["feature-state", "hover"], false], "#a3e635", // lime hover
                             "rgba(0,0,0,0)"
                         ],
                         "line-width": ["case", ["boolean", ["feature-state", "primary"], false], 4, 3],
                         "line-opacity": [
                             "case",
-                            ["any", ["boolean", ["feature-state", "selected"], false], ["boolean", ["feature-state", "primary"], false], ["boolean", ["feature-state", "hover"], false]], 1,
+                            ["any", ["boolean", ["feature-state", "selected"], false], ["boolean", ["feature-state", "primary"], false], ["boolean", ["feature-state", "hover"], false]], 1.0,
                             0
                         ]
                     }

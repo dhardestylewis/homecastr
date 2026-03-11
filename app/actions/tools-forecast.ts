@@ -311,6 +311,7 @@ export async function executeTopLevelForecastTool(
                             const growthPct = ((row.p50 - currentP50) / currentP50) * 100
                             return { ...row, currentP50, growthPct }
                         })
+                        .filter((row: any) => row.growthPct <= 100 && row.growthPct >= -50) // Strip out extreme anomalies (e.g. empty lots -> skyscrapers)
                         .sort((a: any, b: any) => b.growthPct - a.growthPct)
                         .slice(0, limit)
 

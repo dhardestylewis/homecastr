@@ -752,7 +752,12 @@ function DashboardContent() {
   return (
     <main className="h-dvh flex flex-col">
       {/* Full-screen Map Container */}
-      <div className="flex-1 relative h-full w-full">
+      <div 
+        className="flex-1 relative h-full w-full"
+        onClickCapture={() => {
+          if (mobileFiltersOpen) setMobileFiltersOpen(false)
+        }}
+      >
         {isUsingMockData && (
           <Alert
             variant="destructive"
