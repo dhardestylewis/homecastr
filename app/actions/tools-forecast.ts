@@ -28,14 +28,11 @@ export async function executeTopLevelForecastTool(
         // ── resolve_place: same as the H3 version ─────────────────
         case "resolve_place": {
             try {
-                const querySuffix = (args.query.toLowerCase().includes("houston") || args.query.toLowerCase().includes("tx")) ? "" : ", TX"
                 const params = new URLSearchParams({
-                    q: args.query + querySuffix,
+                    q: args.query,
                     format: "json",
                     limit: String(args.max_candidates || 3),
                     addressdetails: "1",
-                    viewbox: "-95.96,30.17,-94.90,29.50",
-                    bounded: "1",
                 })
                 const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
                     headers: { "User-Agent": "HomecastrUI/1.0" },
@@ -195,16 +192,12 @@ export async function executeTopLevelForecastTool(
                     return JSON.stringify(result)
                 }
 
-                // Standard path: geocode query, then optionally fetch metrics
                 const query = args.query || ""
-                const querySuffix = (query.toLowerCase().includes("houston") || query.toLowerCase().includes("tx")) ? "" : ", TX"
                 const params = new URLSearchParams({
-                    q: query + querySuffix,
+                    q: query,
                     format: "json",
                     limit: "1",
                     addressdetails: "1",
-                    viewbox: "-95.96,30.17,-94.90,29.50",
-                    bounded: "1",
                 })
                 const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
                     headers: { "User-Agent": "HomecastrUI/1.0" },

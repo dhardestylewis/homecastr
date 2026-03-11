@@ -40,15 +40,11 @@ export async function executeTopLevelTool(toolName: string, args: Record<string,
     switch (toolName) {
         case "resolve_place": {
             try {
-                // Biasing towards Houston metro area without forcing city limits
-                const querySuffix = (args.query.toLowerCase().includes("houston") || args.query.toLowerCase().includes("tx")) ? "" : ", TX"
                 const params = new URLSearchParams({
-                    q: args.query + querySuffix,
+                    q: args.query,
                     format: "json",
                     limit: String(args.max_candidates || 3),
                     addressdetails: "1",
-                    viewbox: "-95.96,30.17,-94.90,29.50",
-                    bounded: "1",
                 })
                 const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
                     headers: { "User-Agent": "HomecastrUI/1.0" },
@@ -395,24 +391,17 @@ export async function executeTopLevelTool(toolName: string, args: Record<string,
 }
 
 function suffixForLabel(addr: any) {
-    if (addr.city) return `, ${addr.city}, TX`
-    if (addr.town) return `, ${addr.town}, TX`
-    if (addr.village) return `, ${addr.village}, TX`
-    return ", Houston, TX"
+    if (addr.state) return `, ${addr.state}`
+    return ""
 }
 
-// Extracted logic for reusability between location_to_hex and add_location_to_selection
 async function resolveLocationToHex(args: any, actionName: string) {
     try {
-        // Better geocoding logic: don't force "Houston city" if neighborhood or other city is specified
-        const querySuffix = (args.query.toLowerCase().includes("houston") || args.query.toLowerCase().includes("tx")) ? "" : ", TX"
         const params = new URLSearchParams({
-            q: args.query + querySuffix,
+            q: args.query,
             format: "json",
             limit: "1",
             addressdetails: "1",
-            viewbox: "-95.96,30.17,-94.90,29.50", // Houston metro bounding box
-            bounded: "1",
         })
         const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
             headers: { "User-Agent": "HomecastrUI/1.0" },

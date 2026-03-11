@@ -231,6 +231,14 @@ const TOOL_DEFINITIONS: OpenAI.ChatCompletionTool[] = [
             },
         },
     },
+    {
+        type: "function",
+        function: {
+            name: "end_session",
+            description: "End the current chat session or video call. Use when the user says goodbye, thanks you and wants to leave, or explicitly asks to close the chat.",
+            parameters: { type: "object", properties: {}, required: [] }
+        }
+    }
 ]
 
 // Forecast-mode tool definitions (geography-level, matching tavus.ts)
@@ -397,6 +405,14 @@ const FORECAST_TOOL_DEFINITIONS: OpenAI.ChatCompletionTool[] = [
                 },
                 required: ["mode"]
             }
+        }
+    },
+    {
+        type: "function",
+        function: {
+            name: "end_session",
+            description: "End the current chat session or video call. Use when the user says goodbye, thanks you and wants to leave, or explicitly asks to close the chat.",
+            parameters: { type: "object", properties: {}, required: [] }
         }
     }
 ]
@@ -576,6 +592,15 @@ export async function POST(req: NextRequest) {
                         role: "tool",
                         tool_call_id: tc.id,
                         content: JSON.stringify({ status: "ok", message: `Map view switched to ${JSON.parse(toolFn.arguments).mode || "value"} mode.` }),
+                    })
+                } else if (toolFn.name === "end_session") {
+                    // UI tool — end the chat
+                    allMapActions.push({ action: "end_session" })
+                    console.log(`[Chat API] end_session`)
+                    conversationMessages.push({
+                        role: "tool",
+                        tool_call_id: tc.id,
+                        content: JSON.stringify({ status: "ok", message: "Ending session." }),
                     })
                 } else {
                     // API tool — query real data

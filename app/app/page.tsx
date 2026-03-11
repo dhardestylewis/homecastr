@@ -116,6 +116,14 @@ function DashboardContent() {
 
   // Handle map actions from chat (smooth fly-to)
   const handleChatMapAction = useCallback((action: MapAction) => {
+    // Handle end_session action
+    if ((action as any).action === 'end_session') {
+      console.log('[PAGE] end_session from chat')
+      setIsChatOpen(false)
+      toast({ title: "Chat closed", duration: 2000 })
+      return
+    }
+
     // Handle clear_selection action
     if ((action as any).action === 'clear_selection') {
       console.log('[PAGE] clear_selection from chat')
@@ -738,7 +746,10 @@ function DashboardContent() {
           <ForecastMap
             filters={filters}
             mapState={mapState}
-            onFeatureSelect={selectFeature}
+            onFeatureSelect={(id) => {
+              if (mobileFiltersOpen) setMobileFiltersOpen(false)
+              selectFeature(id)
+            }}
             onFeatureHover={(id) => {
               if (id && mobileFiltersOpen) setMobileFiltersOpen(false)
               hoverFeature(id)
@@ -758,28 +769,6 @@ function DashboardContent() {
               else if (isContactOpen) setIsContactOpen(false)
               else selectFeature(null)
             }}
-            mobileBottomBar={isMobileViewport ? (
-              <div>
-                {/* Filters sheet — accessible even when tooltip is active */}
-                {mobileFiltersOpen && (
-                  <div className="px-4 py-3 space-y-3 border-b border-border/30 animate-in slide-in-from-bottom-4 duration-200">
-                    <TimeControls
-                      minYear={2019} maxYear={2030} currentYear={currentYear}
-                      onChange={(yr) => { setHasManuallySetYear(true); setCurrentYear(yr) }}
-                      onPlayStart={() => console.log("[PAGE] Play started")}
-                      className="w-full"
-                    />
-                    <Legend
-                      className="w-full" colorMode={filters.colorMode}
-                      onColorModeChange={handleColorModeChange} year={currentYear} originYear={pageOriginYear}
-                      compareMode={compareMode}
-                      onCompareModeChange={(c) => { setCompareMode(c); if (!c) setMobileSelectionMode('replace') }}
-                      pinnedCount={pinnedCount}
-                    />
-                  </div>
-                )}
-              </div>
-            ) : undefined}
             mobileContentOverride={isMobileViewport && isChatOpen ? (
               <ChatPanel
                 ref={chatPanelRef}
@@ -810,8 +799,14 @@ function DashboardContent() {
           <VectorMap
             filters={filters}
             mapState={mapState}
-            onFeatureSelect={selectFeature}
-            onFeatureHover={hoverFeature}
+            onFeatureSelect={(id) => {
+              if (mobileFiltersOpen) setMobileFiltersOpen(false)
+              selectFeature(id)
+            }}
+            onFeatureHover={(id) => {
+              if (id && mobileFiltersOpen) setMobileFiltersOpen(false)
+              hoverFeature(id)
+            }}
             year={currentYear}
             className="absolute inset-0 z-0"
             onConsultAI={handleConsultAI}
@@ -825,8 +820,14 @@ function DashboardContent() {
           <MapView
             filters={filters}
             mapState={mapState}
-            onFeatureSelect={selectFeature}
-            onFeatureHover={hoverFeature}
+            onFeatureSelect={(id) => {
+              if (mobileFiltersOpen) setMobileFiltersOpen(false)
+              selectFeature(id)
+            }}
+            onFeatureHover={(id) => {
+              if (id && mobileFiltersOpen) setMobileFiltersOpen(false)
+              hoverFeature(id)
+            }}
             year={currentYear}
             onMockDataDetected={handleMockDataDetected}
             onYearChange={setCurrentYear}
@@ -979,10 +980,10 @@ function DashboardContent() {
 
         {/* ═══ MOBILE BOTTOM BAR — always fixed at bottom, ONE element ═══ */}
         {!searchParams.has("embedded") && isMobileViewport && (
-          <div className="fixed left-0 right-0 bottom-0 z-[60] flex flex-col">
+          <div className="fixed left-0 right-0 bottom-0 z-[10000] flex flex-col pointer-events-none">
             {/* Filters sheet — slides up above the bar */}
             {mobileFiltersOpen && (
-              <div className="glass-panel border-t border-border/50 px-4 py-3 space-y-3 animate-in slide-in-from-bottom-4 duration-200">
+              <div className="glass-panel border-t border-border/50 px-4 py-3 space-y-3 animate-in slide-in-from-bottom-4 duration-200 pointer-events-auto shadow-[0_-8px_30px_rgba(0,0,0,0.12)] bg-background/95 backdrop-blur-xl">
                 <TimeControls
                   minYear={2019} maxYear={2030} currentYear={currentYear}
                   onChange={(yr) => { setHasManuallySetYear(true); setCurrentYear(yr) }}
@@ -1000,7 +1001,7 @@ function DashboardContent() {
             )}
 
             {/* The ONE bar row — shared via mobileBottomBarRow */}
-            <div className="glass-panel border-t border-border/50">
+            <div className="glass-panel border-t border-border/50 pointer-events-auto">
               {mobileBottomBarRow}
             </div>
           </div>
