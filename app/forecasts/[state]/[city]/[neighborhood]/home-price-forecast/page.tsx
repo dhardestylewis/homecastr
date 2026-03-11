@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 
-import { resolveSlugToTract, parseTractGeoid, enrichWithNeighborhood } from "@/lib/publishing/geo-crosswalk"
+import { resolveSlugToTract, parseTractGeoid, enrichWithNeighborhood, batchEnrichTracts } from "@/lib/publishing/geo-crosswalk"
 import { fetchForecastPageData, isForecastOutlier } from "@/lib/publishing/forecast-data"
 import { fetchSeoNarrative } from "@/lib/publishing/seo-narratives"
 
@@ -11,7 +11,10 @@ import { InterpretationSection } from "@/components/publishing/InterpretationSec
 import { ComparablesTable } from "@/components/publishing/ComparablesTable"
 import { HistoryForecastChart } from "@/components/publishing/HistoryForecastChart"
 import { MethodCaveat } from "@/components/publishing/MethodCaveat"
+import { ForecastMapEmbed } from "@/components/publishing/ForecastMapEmbed"
 import { RequestAnalysisModal } from "@/components/request-analysis-modal"
+import { getCenterForCity } from "@/lib/publishing/geo-centroids"
+import { getDynamicBounds } from "@/lib/publishing/geo-bounds"
 import Link from "next/link"
 
 // ISR: revalidate every hour so pages auto-update when ACS forecasts change
@@ -41,13 +44,16 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     const h5 = data?.forecast.horizons.find(h => h.horizon_m === 60)
     const appreciation = (h5 && !isOutlier) ? `${h5.appreciation > 0 ? "+" : ""}${h5.appreciation.toFixed(1)}%` : ""
 
-    const originYear = data?.forecast.originYear ?? 2025
-    const startYear = originYear + 1
-    const endYear = originYear + 5
-    const title = `${geo.neighborhoodName} Home Price Forecast, ${startYear}–${endYear}`
+    const forecastYears = data?.forecast.horizons.map(h => h.forecastYear) ?? []
+    // Outlook = only years beyond the current baseline (2026)
+    const baselineYear = (data?.forecast.originYear ?? 2024) + 2
+    const outlookYears = forecastYears.filter(y => y > baselineYear)
+    const minForecastYear = outlookYears.length > 0 ? Math.min(...outlookYears) : 2027
+    const maxForecastYear = outlookYears.length > 0 ? Math.max(...outlookYears) : 2030
+    const title = `${geo.neighborhoodName} Home Price Forecast, ${minForecastYear}–${maxForecastYear}`
     const description = isOutlier
         ? `Detailed modeling and market outlook for ${geo.neighborhoodName} (${geo.city}, ${geo.stateAbbr}). Data access available by request.`
-        : `Homecastr forecasts ${geo.neighborhoodName} (${geo.city}, ${geo.stateAbbr}) home values ${appreciation ? `to change ${appreciation}` : ""} by ${endYear} (p50). See upside, downside, comparables, and uncertainty.`
+        : `Homecastr forecasts ${geo.neighborhoodName} (${geo.city}, ${geo.stateAbbr}) home values ${appreciation ? `to change ${appreciation}` : ""} by ${maxForecastYear} (p50). See upside, downside, comparables, and uncertainty.`
     return {
         title,
         description,
@@ -83,9 +89,12 @@ export default async function NeighborhoodForecastPage({ params, searchParams }:
     geo = await enrichWithNeighborhood(geo)
 
     // Fetch all forecast data + AI narrative in parallel
-    const [data, narrative] = await Promise.all([
+    const countyFips = tractGeoid.substring(0, 5)
+    const [data, narrative, mapCenter, tractBounds] = await Promise.all([
         fetchForecastPageData(tractGeoid, 2025, schema),
         fetchSeoNarrative(tractGeoid, "tract"),
+        Promise.resolve(getCenterForCity(countyFips, state)),
+        getDynamicBounds("tract", tractGeoid),
     ])
     console.log(`[forecast-page] data for ${tractGeoid}: exists=${!!data} tokens=${data?.uniqueDataTokens} narrative=${!!narrative}`)
     if (!data) notFound()
@@ -113,6 +122,30 @@ export default async function NeighborhoodForecastPage({ params, searchParams }:
     }
 
     const h5 = data.forecast.horizons.find(h => h.horizon_m === 60)
+
+    // Compute dynamic forecast year range from actual horizons
+    const forecastYears = data.forecast.horizons.map(h => h.forecastYear)
+    // Outlook = only years beyond the current baseline (2026)
+    const baselineYear = data.forecast.originYear + 2  // always 2026 per baselineHorizonM logic
+    const outlookYears = forecastYears.filter(y => y > baselineYear)
+    const minForecastYear = outlookYears.length > 0 ? Math.min(...outlookYears) : 2027
+    const maxForecastYear = outlookYears.length > 0 ? Math.max(...outlookYears) : 2030
+
+    // Enrich comparable tract names using crosswalks
+    const allCompIds = [
+        ...data.comparables.similar,
+        ...data.comparables.higherUpside,
+        ...data.comparables.lowerRisk,
+    ].map(c => c.tractGeoid)
+    if (allCompIds.length > 0) {
+        const enrichedCompNames = await batchEnrichTracts([...new Set(allCompIds)])
+        for (const list of [data.comparables.similar, data.comparables.higherUpside, data.comparables.lowerRisk]) {
+            for (const comp of list) {
+                const enriched = enrichedCompNames.get(comp.tractGeoid)
+                if (enriched) comp.name = enriched.name
+            }
+        }
+    }
 
     // Build JSON-LD structured data
     const jsonLd = {
@@ -152,6 +185,16 @@ export default async function NeighborhoodForecastPage({ params, searchParams }:
                     />
                 )}
 
+                {/* Map embed */}
+                <ForecastMapEmbed
+                    lat={mapCenter.lat}
+                    lng={mapCenter.lng}
+                    zoom={12}
+                    bbox={tractBounds}
+                    label={`${geo.neighborhoodName} Forecast Map`}
+                    height={350}
+                />
+
                 {/* Breadcrumbs */}
                 <nav aria-label="Breadcrumb" className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
                     <Link href="/forecasts" className="hover:text-foreground transition-colors">Forecasts</Link>
@@ -173,7 +216,7 @@ export default async function NeighborhoodForecastPage({ params, searchParams }:
                         {geo.neighborhoodName} Home Price Forecast
                     </h1>
                     <p className="text-base text-muted-foreground">
-                        {geo.city}, {geo.stateAbbr} · {data.forecast.originYear}–{data.forecast.originYear + 5} outlook · Census Tract {geo.tractGeoid}
+                        {geo.city}, {geo.stateAbbr} · {minForecastYear}–{maxForecastYear} outlook · Census Tract {geo.tractGeoid}
                     </p>
                     {/* AI market summary (when available) */}
                     {narrative?.market_summary && !isOutlier && (
@@ -243,6 +286,8 @@ export default async function NeighborhoodForecastPage({ params, searchParams }:
                 <MethodCaveat
                     schemaVersion={SCHEMA}
                     originYear={data.forecast.originYear}
+                    minForecastYear={minForecastYear}
+                    maxForecastYear={maxForecastYear}
                 />
 
                 {/* Internal linking */}

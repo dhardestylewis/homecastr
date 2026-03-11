@@ -129,7 +129,12 @@ export function HistoryForecastChart({ history, horizons, originYear, suppressCo
     // Value lookup map
     const histMap = new Map(history.map(h => [h.year, h.value]))
     const fcstMap = new Map(forecastHorizonsSorted.map(h => [h.forecastYear, h]))
-    const bridgeP50 = horizons.find(h => h.horizon_m === 12)?.p50 ?? 0
+    const bridgeHorizonData = horizons.find(h => h.horizon_m === 12)
+    const bridgeP50 = bridgeHorizonData?.p50 ?? 0
+    // Ensure bridge year is in fcstMap so P10/P90 are available
+    if (bridgeHorizonData && !fcstMap.has(bridgeYear)) {
+        fcstMap.set(bridgeYear, bridgeHorizonData)
+    }
 
     return (
         <section id="historical-trend" className="space-y-4">
@@ -223,7 +228,7 @@ export function HistoryForecastChart({ history, horizons, originYear, suppressCo
 
                                         return (
                                             <td key={yr} className={`text-right py-2 px-1.5 font-mono whitespace-nowrap ${isForecast ? 'text-primary/80' : isBridge ? 'text-primary font-semibold' : 'text-foreground/70'}`}>
-                                                {value != null ? fmtVal(value) : '—'}
+                                                {value != null ? fmtVal(value) : ''}
                                             </td>
                                         )
                                     })}
@@ -233,7 +238,7 @@ export function HistoryForecastChart({ history, horizons, originYear, suppressCo
                                 <tr className="border-t border-border/50">
                                     <td className="py-2 pr-3 text-muted-foreground whitespace-nowrap sticky left-0 bg-inherit">YoY Change</td>
                                     {uniqueYears.map((yr, i) => {
-                                        if (i === 0) return <td key={yr} className="text-right py-2 px-1.5 text-xs text-muted-foreground/40">—</td>
+                                        if (i === 0) return <td key={yr} className="text-right py-2 px-1.5 text-xs text-muted-foreground/40"></td>
 
                                         const prevYr = uniqueYears[i - 1]
                                         let currVal: number | null = null
@@ -250,7 +255,7 @@ export function HistoryForecastChart({ history, horizons, originYear, suppressCo
                                         else prevVal = histMap.get(prevYr) ?? null
 
                                         if (currVal == null || prevVal == null || prevVal === 0) {
-                                            return <td key={yr} className="text-right py-2 px-1.5 text-xs text-muted-foreground/40">—</td>
+                                            return <td key={yr} className="text-right py-2 px-1.5 text-xs text-muted-foreground/40"></td>
                                         }
 
                                         const yoy = ((currVal - prevVal) / prevVal) * 100
@@ -268,11 +273,11 @@ export function HistoryForecastChart({ history, horizons, originYear, suppressCo
                                         <tr className="border-t border-border/30">
                                             <td className="py-2 pr-3 text-muted-foreground/60 whitespace-nowrap sticky left-0 bg-inherit text-xs">Downside (P10)</td>
                                             {uniqueYears.map(yr => {
-                                                if (yr <= bridgeYear) return <td key={yr} className="text-right py-2 px-1.5" />
+                                                if (yr < bridgeYear) return <td key={yr} className="text-right py-2 px-1.5" />
                                                 const h = fcstMap.get(yr)
                                                 return (
                                                     <td key={yr} className="text-right py-2 px-1.5 font-mono text-xs text-muted-foreground/60 whitespace-nowrap">
-                                                        {h?.p10 != null ? fmtVal(h.p10) : '—'}
+                                                        {h?.p10 != null ? fmtVal(h.p10) : ''}
                                                     </td>
                                                 )
                                             })}
@@ -282,11 +287,11 @@ export function HistoryForecastChart({ history, horizons, originYear, suppressCo
                                         <tr className="border-t border-border/30">
                                             <td className="py-2 pr-3 text-muted-foreground/60 whitespace-nowrap sticky left-0 bg-inherit text-xs">Upside (P90)</td>
                                             {uniqueYears.map(yr => {
-                                                if (yr <= bridgeYear) return <td key={yr} className="text-right py-2 px-1.5" />
+                                                if (yr < bridgeYear) return <td key={yr} className="text-right py-2 px-1.5" />
                                                 const h = fcstMap.get(yr)
                                                 return (
                                                     <td key={yr} className="text-right py-2 px-1.5 font-mono text-xs text-muted-foreground/60 whitespace-nowrap">
-                                                        {h?.p90 != null ? fmtVal(h.p90) : '—'}
+                                                        {h?.p90 != null ? fmtVal(h.p90) : ''}
                                                     </td>
                                                 )
                                             })}

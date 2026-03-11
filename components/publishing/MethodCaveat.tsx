@@ -1,9 +1,11 @@
 interface Props {
     schemaVersion: string
     originYear: number
+    minForecastYear?: number
+    maxForecastYear?: number
 }
 
-export function MethodCaveat({ schemaVersion, originYear }: Props) {
+export function MethodCaveat({ schemaVersion, originYear, minForecastYear, maxForecastYear }: Props) {
     return (
         <section id="method" className="space-y-4">
             <h2 className="text-xl font-semibold text-foreground">Methodology &amp; Caveats</h2>
@@ -16,7 +18,7 @@ export function MethodCaveat({ schemaVersion, originYear }: Props) {
                     </div>
                     <div className="space-y-1">
                         <p className="text-xs uppercase tracking-wider text-muted-foreground">Forecast Horizon</p>
-                        <p className="text-foreground/70">1 to 5 years from origin year {originYear}</p>
+                        <p className="text-foreground/70">{minForecastYear && maxForecastYear ? `${minForecastYear} to ${maxForecastYear}` : `1 to 5 years from origin year ${originYear}`}</p>
                     </div>
                     <div className="space-y-1">
                         <p className="text-xs uppercase tracking-wider text-muted-foreground">Schema Version</p>
