@@ -2736,184 +2736,197 @@ def _run_one_origin(
 
 _assert_ident(TARGET_SCHEMA, "TARGET_SCHEMA")
 
-ckpt_pairs = _get_checkpoint_paths(CKPT_DIR)
-if not ckpt_pairs:
-    raise RuntimeError("No checkpoints found in CKPT_DIR")
+# ── Guard: skip module-level orchestration when called from parallel wrapper ──
+# inference_modal_parallel.py sets SKIP_MODULE_LEVEL_RUN=True before exec'ing
+# this file, then calls _run_one_origin() explicitly with shard-specific args.
+# Without this guard, the pipeline runs TWICE per shard (once at exec time,
+# once from the wrapper), doubling GPU cost.
+_SKIP_MODULE = bool(globals().get("SKIP_MODULE_LEVEL_RUN", False))
 
-ckpt_pairs = sorted([(int(o), p) for o, p in ckpt_pairs], key=lambda x: x[0])
 
-# Filter to the chosen variant checkpoint suffix
-if CKPT_VARIANT_SUFFIX:
-    _suffix_tag = f"_{CKPT_VARIANT_SUFFIX}.pt"
-    _filtered = [(o, p) for o, p in ckpt_pairs if os.path.basename(p).endswith(_suffix_tag)]
-    if not _filtered:
-        raise RuntimeError(
-            f"No checkpoints found matching suffix '{_suffix_tag}' in CKPT_DIR={CKPT_DIR!r}.\n"
-            f"Available checkpoints: {[os.path.basename(p) for _, p in ckpt_pairs]}"
-        )
-    ckpt_pairs = _filtered
-    print(f"[{_ts()}] CKPT_VARIANT_SUFFIX='{CKPT_VARIANT_SUFFIX}' — using {len(ckpt_pairs)} checkpoint(s): {[os.path.basename(p) for _, p in ckpt_pairs]}")
-else:
-    # Baseline: exclude any variant-tagged checkpoints (files with >1 underscore after 'origin_YYYY')
-    _filtered = [(o, p) for o, p in ckpt_pairs
-                 if not any(p.endswith(f"_{v}.pt") for v in ("SF200K", "SF500K", "SFstrat200K"))]
-    ckpt_pairs = _filtered or ckpt_pairs  # fallback to all if no baseline found
-    print(f"[{_ts()}] CKPT_VARIANT_SUFFIX='' (baseline) — using {len(ckpt_pairs)} checkpoint(s)")
+if not _SKIP_MODULE:
+    # ── Standalone / notebook mode: run the full orchestration ───────────────
+    def _run_module_level_pipeline():
+        global all_accts, all_accts_prod
 
-# ── SF-only filter: apply same auto-detect logic as retrain_sample_sweep.py ──
-# The SF* checkpoints were trained on state_class == "A1" (HCAD single-family) only.
-# Applying them to commercial / condo / vacant parcels produces garbage forecasts.
-# We re-filter all_accts here so the inference targets match the training distribution.
-_lf_global = globals().get("lf")
-_all_accts_input = list(all_accts)
+        ckpt_pairs = _get_checkpoint_paths(CKPT_DIR)
+        if not ckpt_pairs:
+            raise RuntimeError("No checkpoints found in CKPT_DIR")
 
-_sf_col, _sf_vals = None, None
-if _lf_global is not None:
-    try:
-        _panel_cols = set(_lf_global.collect_schema().names())
-        for _cand_col, _cand_vals in [
-            ("state_class",   ["A1"]),
-            ("property_type", ["SF", "SFR", "SINGLE"]),
-            ("prop_type_cd",  ["A1"]),
-            ("impr_tp_cd",    ["1001", "1002", "1003"]),
-            ("dwelling_type", ["SFR", "SF", "Single Family", "SINGLE", "Maison", "House", "Detached", "1"]),
-        ]:
-            if _cand_col in _panel_cols:
-                _sf_col, _sf_vals = _cand_col, _cand_vals
-                break
-    except Exception as _e:
-        print(f"[{_ts()}] ⚠️  Could not inspect lf schema for SF filter: {_e}")
+        ckpt_pairs = sorted([(int(o), p) for o, p in ckpt_pairs], key=lambda x: x[0])
 
-if _sf_col and CKPT_VARIANT_SUFFIX:
-    import polars as _pl
-    _sf_accts_set = set(
-        _lf_global
-        .filter(_pl.col(_sf_col).cast(_pl.Utf8).str.strip_chars().is_in(_sf_vals))
-        .select(_pl.col("acct").cast(_pl.Utf8).str.strip_chars())
-        .unique()
-        .collect()["acct"]
-        .to_list()
-    )
-    _filtered_accts = [a for a in _all_accts_input if str(a).strip() in _sf_accts_set]
-    print(
-        f"[{_ts()}] SF filter '{_sf_col}' in {_sf_vals}: "
-        f"{len(_filtered_accts):,} / {len(_all_accts_input):,} accounts retained"
-    )
-    all_accts = _filtered_accts
-elif CKPT_VARIANT_SUFFIX:
-    print(
-        f"[{_ts()}] ⚠️  SF filter: no recognised property-type column found in lf. "
-        f"Proceeding with all {len(_all_accts_input):,} accounts — "
-        f"non-SF forecasts may be unreliable with a SF-trained checkpoint."
-    )
-else:
-    print(f"[{_ts()}] CKPT_VARIANT_SUFFIX='' (baseline): skipping SF filter, using all accounts.")
+        # Filter to the chosen variant checkpoint suffix
+        if CKPT_VARIANT_SUFFIX:
+            _suffix_tag = f"_{CKPT_VARIANT_SUFFIX}.pt"
+            _filtered = [(o, p) for o, p in ckpt_pairs if os.path.basename(p).endswith(_suffix_tag)]
+            if not _filtered:
+                raise RuntimeError(
+                    f"No checkpoints found matching suffix '{_suffix_tag}' in CKPT_DIR={CKPT_DIR!r}.\n"
+                    f"Available checkpoints: {[os.path.basename(p) for _, p in ckpt_pairs]}"
+                )
+            ckpt_pairs = _filtered
+            print(f"[{_ts()}] CKPT_VARIANT_SUFFIX='{CKPT_VARIANT_SUFFIX}' — using {len(ckpt_pairs)} checkpoint(s): {[os.path.basename(p) for _, p in ckpt_pairs]}")
+        else:
+            # Baseline: exclude any variant-tagged checkpoints (files with >1 underscore after 'origin_YYYY')
+            _filtered = [(o, p) for o, p in ckpt_pairs
+                         if not any(p.endswith(f"_{v}.pt") for v in ("SF200K", "SF500K", "SFstrat200K"))]
+            ckpt_pairs = _filtered or ckpt_pairs  # fallback to all if no baseline found
+            print(f"[{_ts()}] CKPT_VARIANT_SUFFIX='' (baseline) — using {len(ckpt_pairs)} checkpoint(s)")
 
-# Account order (replace with geography-sorted order if you want more contiguous live map fill)
-all_accts_prod = [str(a) for a in all_accts]
-n_total = len(all_accts_prod)
+        # ── SF-only filter: apply same auto-detect logic as retrain_sample_sweep.py ──
+        _lf_global = globals().get("lf")
+        _all_accts_input = list(all_accts)
 
-suite_manifest = {
-    "suite_id": SUITE_ID,
-    "schema": TARGET_SCHEMA,
-    "model_version": MODEL_VERSION,
-    "forecast_origin_year": int(FORECAST_ORIGIN_YEAR),
-    "run_full_backtest": bool(RUN_FULL_BACKTEST),
-    "H": int(H),
-    "S": int(S),
-    "prop_batch_size_sampler_initial": int(PROP_BATCH_SIZE_SAMPLER),
-    "prop_batch_size_min": int(PROP_BATCH_SIZE_MIN),
-    "acct_batch_size_outer": int(ACCT_BATCH_SIZE_OUTER),
-    "n_accounts_total": int(n_total),
-    "parcel_forecast_has_n_col": bool(PARCEL_FORECAST_HAS_N_COL),
-    "final_exact_agg_refresh": bool(RUN_FINAL_EXACT_AGG_REFRESH),
-    "started_at_utc": datetime.utcnow().isoformat(),
-    "checkpoint_origins_available": [int(o) for o, _ in ckpt_pairs],
-}
-with open(os.path.join(OUT_ROOT, "suite_manifest.json"), "w") as f:
-    json.dump(suite_manifest, f, indent=2)
+        _sf_col, _sf_vals = None, None
+        if _lf_global is not None:
+            try:
+                _panel_cols = set(_lf_global.collect_schema().names())
+                for _cand_col, _cand_vals in [
+                    ("state_class",   ["A1"]),
+                    ("property_type", ["SF", "SFR", "SINGLE"]),
+                    ("prop_type_cd",  ["A1"]),
+                    ("impr_tp_cd",    ["1001", "1002", "1003"]),
+                    ("dwelling_type", ["SFR", "SF", "Single Family", "SINGLE", "Maison", "House", "Detached", "1"]),
+                ]:
+                    if _cand_col in _panel_cols:
+                        _sf_col, _sf_vals = _cand_col, _cand_vals
+                        break
+            except Exception as _e:
+                print(f"[{_ts()}] ⚠️  Could not inspect lf schema for SF filter: {_e}")
 
-print(f"[{_ts()}] SUITE_ID={SUITE_ID}")
-print(f"[{_ts()}] TARGET_SCHEMA={TARGET_SCHEMA}")
-print(f"[{_ts()}] Accounts={n_total}")
-print(f"[{_ts()}] Checkpoint origins={suite_manifest['checkpoint_origins_available']}")
-
-results = []
-
-try:
-    # -------------------------------------------------------------------------
-    # A) PRODUCTION RUN
-    # -------------------------------------------------------------------------
-    prod_ckpt_origin, prod_ckpt_path = _pick_ckpt_for_origin(ckpt_pairs, FORECAST_ORIGIN_YEAR)
-
-    res_prod = _run_one_origin(
-        schema=TARGET_SCHEMA,
-        all_accts_prod=all_accts_prod,
-        origin_year=int(FORECAST_ORIGIN_YEAR),
-        mode="forecast",
-        ckpt_origin=int(prod_ckpt_origin),
-        ckpt_path=prod_ckpt_path,
-        out_dir=OUT_PROD_DIR,
-        variant_id="__forecast__",
-        backtest_id=None,
-        write_history_series=True,
-        resume_run_id=RESUME_PROD_RUN_ID if RESUME_MODE else None,
-    )
-    results.append(res_prod)
-
-    # -------------------------------------------------------------------------
-    # B) FULL BACKTEST SUITE
-    # -------------------------------------------------------------------------
-    if RUN_FULL_BACKTEST:
-        if BACKTEST_ORIGINS is None:
-            backtest_origins = sorted(
-                (int(o) for o, _ in ckpt_pairs if int(o) < int(FORECAST_ORIGIN_YEAR)),
-                reverse=True,   # most recent backtest first → live map fills with recent history first
+        if _sf_col and CKPT_VARIANT_SUFFIX:
+            import polars as _pl
+            _sf_accts_set = set(
+                _lf_global
+                .filter(_pl.col(_sf_col).cast(_pl.Utf8).str.strip_chars().is_in(_sf_vals))
+                .select(_pl.col("acct").cast(_pl.Utf8).str.strip_chars())
+                .unique()
+                .collect()["acct"]
+                .to_list()
+            )
+            _filtered_accts = [a for a in _all_accts_input if str(a).strip() in _sf_accts_set]
+            print(
+                f"[{_ts()}] SF filter '{_sf_col}' in {_sf_vals}: "
+                f"{len(_filtered_accts):,} / {len(_all_accts_input):,} accounts retained"
+            )
+            all_accts = _filtered_accts
+        elif CKPT_VARIANT_SUFFIX:
+            print(
+                f"[{_ts()}] ⚠️  SF filter: no recognised property-type column found in lf. "
+                f"Proceeding with all {len(_all_accts_input):,} accounts — "
+                f"non-SF forecasts may be unreliable with a SF-trained checkpoint."
             )
         else:
-            backtest_origins = sorted(set(int(x) for x in BACKTEST_ORIGINS), reverse=True)
+            print(f"[{_ts()}] CKPT_VARIANT_SUFFIX='' (baseline): skipping SF filter, using all accounts.")
 
-        bt_suite_short = uuid.uuid4().hex
-        print(f"[{_ts()}] Backtest origins -> {backtest_origins}")
+        # Account order
+        all_accts_prod = [str(a) for a in all_accts]
+        n_total = len(all_accts_prod)
 
-        for bt_origin in backtest_origins:
-            bt_ckpt_origin, bt_ckpt_path = _pick_ckpt_for_origin(ckpt_pairs, bt_origin)
+        suite_manifest = {
+            "suite_id": SUITE_ID,
+            "schema": TARGET_SCHEMA,
+            "model_version": MODEL_VERSION,
+            "forecast_origin_year": int(FORECAST_ORIGIN_YEAR),
+            "run_full_backtest": bool(RUN_FULL_BACKTEST),
+            "H": int(H),
+            "S": int(S),
+            "prop_batch_size_sampler_initial": int(PROP_BATCH_SIZE_SAMPLER),
+            "prop_batch_size_min": int(PROP_BATCH_SIZE_MIN),
+            "acct_batch_size_outer": int(ACCT_BATCH_SIZE_OUTER),
+            "n_accounts_total": int(n_total),
+            "parcel_forecast_has_n_col": bool(PARCEL_FORECAST_HAS_N_COL),
+            "final_exact_agg_refresh": bool(RUN_FINAL_EXACT_AGG_REFRESH),
+            "started_at_utc": datetime.utcnow().isoformat(),
+            "checkpoint_origins_available": [int(o) for o, _ in ckpt_pairs],
+        }
+        with open(os.path.join(OUT_ROOT, "suite_manifest.json"), "w") as f:
+            json.dump(suite_manifest, f, indent=2)
 
-            # Check if we are resuming a specific backtest origin
-            bt_resume_run_id = None
-            if RESUME_MODE and RESUME_BACKTEST_RUNS and bt_origin in RESUME_BACKTEST_RUNS:
-                bt_resume_run_id, bt_variant_id, bt_backtest_id = RESUME_BACKTEST_RUNS[bt_origin]
-            else:
-                bt_variant_id = f"bt_{bt_origin}_{bt_suite_short}"
-                bt_backtest_id = bt_variant_id
+        print(f"[{_ts()}] SUITE_ID={SUITE_ID}")
+        print(f"[{_ts()}] TARGET_SCHEMA={TARGET_SCHEMA}")
+        print(f"[{_ts()}] Accounts={n_total}")
+        print(f"[{_ts()}] Checkpoint origins={suite_manifest['checkpoint_origins_available']}")
 
-            res_bt = _run_one_origin(
+        results = []
+
+        try:
+            # -----------------------------------------------------------------
+            # A) PRODUCTION RUN
+            # -----------------------------------------------------------------
+            prod_ckpt_origin, prod_ckpt_path = _pick_ckpt_for_origin(ckpt_pairs, FORECAST_ORIGIN_YEAR)
+
+            res_prod = _run_one_origin(
                 schema=TARGET_SCHEMA,
                 all_accts_prod=all_accts_prod,
-                origin_year=int(bt_origin),
-                mode="backtest",
-                ckpt_origin=int(bt_ckpt_origin),
-                ckpt_path=bt_ckpt_path,
-                out_dir=OUT_BT_DIR,
-                variant_id=bt_variant_id,
-                backtest_id=bt_backtest_id,
-                write_history_series=False,
-                resume_run_id=bt_resume_run_id,
+                origin_year=int(FORECAST_ORIGIN_YEAR),
+                mode="forecast",
+                ckpt_origin=int(prod_ckpt_origin),
+                ckpt_path=prod_ckpt_path,
+                out_dir=OUT_PROD_DIR,
+                variant_id="__forecast__",
+                backtest_id=None,
+                write_history_series=True,
+                resume_run_id=RESUME_PROD_RUN_ID if RESUME_MODE else None,
             )
-            results.append(res_bt)
+            results.append(res_prod)
 
-    suite_manifest["finished_at_utc"] = datetime.utcnow().isoformat()
-    suite_manifest["results"] = results
-    with open(os.path.join(OUT_ROOT, "suite_manifest.json"), "w") as f:
-        json.dump(suite_manifest, f, indent=2)
+            # -----------------------------------------------------------------
+            # B) FULL BACKTEST SUITE
+            # -----------------------------------------------------------------
+            if RUN_FULL_BACKTEST:
+                if BACKTEST_ORIGINS is None:
+                    backtest_origins = sorted(
+                        (int(o) for o, _ in ckpt_pairs if int(o) < int(FORECAST_ORIGIN_YEAR)),
+                        reverse=True,
+                    )
+                else:
+                    backtest_origins = sorted(set(int(x) for x in BACKTEST_ORIGINS), reverse=True)
 
-    print("")
-    print(f"[{_ts()}] ALL RUNS COMPLETE")
-    print(f"  Suite root: {OUT_ROOT}")
-    print(f"  Results count: {len(results)}")
-    for r in results:
-        print(f"   - {r['mode']} origin={r['origin_year']} run_id={r['run_id']}")
+                bt_suite_short = uuid.uuid4().hex
+                print(f"[{_ts()}] Backtest origins -> {backtest_origins}")
 
-except Exception as e:
-    print(f"[{_ts()}] ERROR: {e}")
-    raise
+                for bt_origin in backtest_origins:
+                    bt_ckpt_origin, bt_ckpt_path = _pick_ckpt_for_origin(ckpt_pairs, bt_origin)
+
+                    bt_resume_run_id = None
+                    if RESUME_MODE and RESUME_BACKTEST_RUNS and bt_origin in RESUME_BACKTEST_RUNS:
+                        bt_resume_run_id, bt_variant_id, bt_backtest_id = RESUME_BACKTEST_RUNS[bt_origin]
+                    else:
+                        bt_variant_id = f"bt_{bt_origin}_{bt_suite_short}"
+                        bt_backtest_id = bt_variant_id
+
+                    res_bt = _run_one_origin(
+                        schema=TARGET_SCHEMA,
+                        all_accts_prod=all_accts_prod,
+                        origin_year=int(bt_origin),
+                        mode="backtest",
+                        ckpt_origin=int(bt_ckpt_origin),
+                        ckpt_path=bt_ckpt_path,
+                        out_dir=OUT_BT_DIR,
+                        variant_id=bt_variant_id,
+                        backtest_id=bt_backtest_id,
+                        write_history_series=False,
+                        resume_run_id=bt_resume_run_id,
+                    )
+                    results.append(res_bt)
+
+            suite_manifest["finished_at_utc"] = datetime.utcnow().isoformat()
+            suite_manifest["results"] = results
+            with open(os.path.join(OUT_ROOT, "suite_manifest.json"), "w") as f:
+                json.dump(suite_manifest, f, indent=2)
+
+            print("")
+            print(f"[{_ts()}] ALL RUNS COMPLETE")
+            print(f"  Suite root: {OUT_ROOT}")
+            print(f"  Results count: {len(results)}")
+            for r in results:
+                print(f"   - {r['mode']} origin={r['origin_year']} run_id={r['run_id']}")
+
+        except Exception as e:
+            print(f"[{_ts()}] ERROR: {e}")
+            raise
+
+    _run_module_level_pipeline()
+else:
+    print(f"[{_ts()}] SKIP_MODULE_LEVEL_RUN=True — skipping module-level orchestration (parallel wrapper mode)")

@@ -126,15 +126,9 @@ export function HistoryForecastChart({ history, horizons, originYear, suppressCo
     // Deduplicate and sort
     const uniqueYears = [...new Set(allYears)].sort((a, b) => a - b)
 
-    // Value lookup map
     const histMap = new Map(history.map(h => [h.year, h.value]))
     const fcstMap = new Map(forecastHorizonsSorted.map(h => [h.forecastYear, h]))
-    const bridgeHorizonData = horizons.find(h => h.horizon_m === 12)
-    const bridgeP50 = bridgeHorizonData?.p50 ?? 0
-    // Ensure bridge year is in fcstMap so P10/P90 are available
-    if (bridgeHorizonData && !fcstMap.has(bridgeYear)) {
-        fcstMap.set(bridgeYear, bridgeHorizonData)
-    }
+    const bridgeP50 = horizons.find(h => h.horizon_m === 12)?.p50 ?? 0
 
     return (
         <section id="historical-trend" className="space-y-4">
@@ -273,7 +267,7 @@ export function HistoryForecastChart({ history, horizons, originYear, suppressCo
                                         <tr className="border-t border-border/30">
                                             <td className="py-2 pr-3 text-muted-foreground/60 whitespace-nowrap sticky left-0 bg-inherit text-xs">Downside (P10)</td>
                                             {uniqueYears.map(yr => {
-                                                if (yr < bridgeYear) return <td key={yr} className="text-right py-2 px-1.5" />
+                                                if (yr <= bridgeYear) return <td key={yr} className="text-right py-2 px-1.5" />
                                                 const h = fcstMap.get(yr)
                                                 return (
                                                     <td key={yr} className="text-right py-2 px-1.5 font-mono text-xs text-muted-foreground/60 whitespace-nowrap">
@@ -287,7 +281,7 @@ export function HistoryForecastChart({ history, horizons, originYear, suppressCo
                                         <tr className="border-t border-border/30">
                                             <td className="py-2 pr-3 text-muted-foreground/60 whitespace-nowrap sticky left-0 bg-inherit text-xs">Upside (P90)</td>
                                             {uniqueYears.map(yr => {
-                                                if (yr < bridgeYear) return <td key={yr} className="text-right py-2 px-1.5" />
+                                                if (yr <= bridgeYear) return <td key={yr} className="text-right py-2 px-1.5" />
                                                 const h = fcstMap.get(yr)
                                                 return (
                                                     <td key={yr} className="text-right py-2 px-1.5 font-mono text-xs text-muted-foreground/60 whitespace-nowrap">

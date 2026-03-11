@@ -1,5 +1,5 @@
 {
-    "name": "@homecastr/mcp-server",
+    "name": "homecastr-mcp-server",
     "version": "1.0.0",
     "description": "MCP server for Homecastr home price forecasts — use with Claude, ChatGPT, Cursor, and other AI agents",
     "main": "dist/index.js",

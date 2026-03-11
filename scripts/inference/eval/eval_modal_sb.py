@@ -1513,6 +1513,7 @@ def main(
     scenarios: int = 128,
     origins: str = "2019",
     version_tag: str = "v12_sb",
+    nocalibrators: bool = False,
 ):
     origin_list = [int(o.strip()) for o in origins.split(",")]
     print(f"\U0001f680 Launching parallel {version_tag} evaluation on Modal across {len(origin_list)} origins")
@@ -1521,7 +1522,7 @@ def main(
     print(f"   Version tag: {version_tag}")
     
     # Map across multiple origins concurrently — pass version_tag to each
-    params = [(jurisdiction, bucket_name, o, sample_size, scenarios, version_tag) for o in origin_list]
+    params = [(jurisdiction, bucket_name, o, sample_size, scenarios, version_tag, nocalibrators) for o in origin_list]
     
     results = list(evaluate_checkpoints.starmap(params))
 

@@ -1,8 +1,0 @@
-
-=== Testing synthetic tract: 0611570025R ===
-History length: 0
-No history found.
-
-=== Testing standard tract: 06085510801 ===
-History length: 10
-First history point: {"year":2015,"value":1327300}

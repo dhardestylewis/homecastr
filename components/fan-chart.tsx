@@ -476,7 +476,7 @@ export function FanChart({
           x={xScale(BASELINE_YEAR)}
           y={padding.top - 5}
           textAnchor="middle"
-          className="text-[8px] fill-muted-foreground"
+          className="text-[10px] fill-muted-foreground"
         >
           Now
         </text>
@@ -650,7 +650,7 @@ export function FanChart({
             x={xScale(yr)}
             y={height - padding.bottom + 15}
             textAnchor="middle"
-            className="text-[9px] fill-muted-foreground font-mono"
+            className="text-[11px] fill-muted-foreground font-mono"
             style={{ pointerEvents: 'none' }}
           >
             {'\'' + yr.toString().slice(2)}
@@ -664,7 +664,7 @@ export function FanChart({
             x={padding.left - 5}
             y={yScale(tick) + 3}
             textAnchor="end"
-            className="text-[10px] fill-muted-foreground font-mono"
+            className="text-[11px] fill-muted-foreground font-mono"
             style={{ pointerEvents: 'none' }}
           >
             {formatYAxisValue(tick)}

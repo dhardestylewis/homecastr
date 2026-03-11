@@ -391,6 +391,10 @@ def run_inference_shard(
         # failed (but whose parquet landed) are not re-inferred.
         "GCS_SKIP_BUCKET": "properlytic-raw-data",
         "GCS_SKIP_SUITE_ID": suite_id,  # same suite_id used for resume
+        # ── Parallel wrapper guard ───────────────────────────────────────────────
+        # Tells inference_pipeline.py to skip its module-level orchestration block.
+        # The wrapper calls _run_one_origin() explicitly with shard-specific args.
+        "SKIP_MODULE_LEVEL_RUN": True,
     })
 
     # Patch DB URL to raise statement_timeout from Supabase's default (~30s)

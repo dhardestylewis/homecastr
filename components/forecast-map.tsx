@@ -327,6 +327,8 @@ export function ForecastMap({
     const [mobileMinimized, setMobileMinimized] = useState(false)
     const [swipeTouchStart, setSwipeTouchStart] = useState<number | null>(null)
     const [swipeDragOffset, setSwipeDragOffset] = useState(0)
+    // Mobile bottom sheet view toggle: 'chart' (default) or 'streetview'
+    const [mobileBottomView, setMobileBottomView] = useState<'chart' | 'streetview'>('chart')
 
     // Desktop drag-to-reposition state (locked tooltip)
     const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null)
@@ -2727,40 +2729,46 @@ export function ForecastMap({
                         </>
                     )}
 
-                    {/* Street View Carousel — hidden when keyboard is open on mobile */}
+                    {/* Mobile: Full-width chart or StreetView (toggled) / Desktop: StreetView above chart */}
                     {isMobile && !(isKeyboardOpen) ? (
-                        /* Mobile: Side-by-side — StreetView left, Chart right */
-                        <div className="flex flex-row flex-1 min-h-0 overflow-hidden">
-                            {/* StreetView — left half (always visible, shows loading placeholder) */}
-                            <div className="w-1/2 h-full overflow-hidden">
-                                {process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY && (selectedId ? selectedCoords : (hoverDwell ? tooltipCoords : null)) ? (
-                                    <StreetViewCarousel
-                                        h3Ids={[]}
-                                        apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY}
-                                        coordinates={(selectedId ? selectedCoords : tooltipCoords)!}
-                                    />
-                                ) : (
-                                    /* Loading placeholder while dwell timer is active */
-                                    <div className="w-full h-full bg-zinc-900/80 flex flex-col items-center justify-center gap-2">
-                                        <div className="w-6 h-6 border-2 border-white/20 border-t-white/60 rounded-full animate-spin" />
-                                        <span className="text-[10px] text-white/40 uppercase tracking-wider">Street View</span>
-                                    </div>
-                                )}
-                            </div>
+                        /* Mobile: Full-width view with toggle between Chart and StreetView */
+                        <div className="flex-1 min-h-0 overflow-hidden flex flex-col relative">
+                            {/* Toggle button */}
+                            <button
+                                onClick={() => setMobileBottomView(prev => prev === 'chart' ? 'streetview' : 'chart')}
+                                className="absolute top-1 right-1 z-10 px-2 py-0.5 rounded-full bg-background/80 backdrop-blur-sm border border-border/40 text-[9px] font-semibold text-muted-foreground active:scale-95 transition-transform"
+                                style={{ touchAction: 'manipulation' }}
+                            >
+                                {mobileBottomView === 'chart' ? '📷 Street View' : '📊 Chart'}
+                            </button>
 
-                            {/* Chart — right half */}
-                            <div className="w-1/2 h-full overflow-hidden flex flex-col">
-                                {(() => {
-                                    // Use the fan chart's 2026 p50 as "Now" for consistency with the chart
+                            {mobileBottomView === 'streetview' ? (
+                                /* StreetView full-width */
+                                <div className="w-full h-full overflow-hidden">
+                                    {process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY && (selectedId ? selectedCoords : (hoverDwell ? tooltipCoords : null)) ? (
+                                        <StreetViewCarousel
+                                            h3Ids={[]}
+                                            apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY}
+                                            coordinates={(selectedId ? selectedCoords : tooltipCoords)!}
+                                        />
+                                    ) : (
+                                        <div className="w-full h-full bg-zinc-900/80 flex flex-col items-center justify-center gap-2">
+                                            <div className="w-6 h-6 border-2 border-white/20 border-t-white/60 rounded-full animate-spin" />
+                                            <span className="text-[10px] text-white/40 uppercase tracking-wider">Loading Street View</span>
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                /* Chart full-width (default) */
+                                (() => {
                                     const currentVal = fanChartData?.p50?.[0] ?? historicalValues?.[historicalValues.length - 1] ?? null
-                                    // Look up value for the selected year: fan chart (2026+), historicalValues (2019-2025), or tile props
                                     const yearIdx = fanChartData?.years?.indexOf(year) ?? -1
                                     const histIdx = year >= 2019 && year <= 2025 ? year - 2019 : -1
                                     const forecastVal = (yearIdx >= 0 ? fanChartData?.p50?.[yearIdx] : null)
                                         ?? (histIdx >= 0 ? historicalValues?.[histIdx] : null)
                                         ?? displayProps.p50 ?? displayProps.value ?? null
                                     const isPast = year < originYear + 2
-                                    const isPresent = year === originYear + 2 // 2026 = "now"
+                                    const isPresent = year === originYear + 2
                                     const leftLabel = isPresent ? "Now" : isPast ? String(year) : "Now"
                                     const leftVal = isPresent ? currentVal : isPast ? forecastVal : currentVal
                                     const rightLabel = isPresent ? String(year) : isPast ? "Now" : String(year)
@@ -2770,7 +2778,6 @@ export function ForecastMap({
                                     const pctChange = pctBase && pctTarget ? ((pctTarget - pctBase) / pctBase * 100) : null
                                     return (
                                         <div className="relative w-full flex-1 h-full">
-                                            {/* Full-width chart */}
                                             <div className="w-full h-full">
                                                 {fanChartData ? (
                                                     <FanChart data={fanChartData} currentYear={year} height={200} historicalValues={historicalValues} childLines={debugBuildings ? studentChildLines : undefined} comparisonData={comparisonData} comparisonHistoricalValues={comparisonHistoricalValues} pinnedComparisons={pinnedComparisons.map(pc => ({ data: pc.data, historicalValues: pc.historicalValues, label: pc.label }))} yDomain={effectiveYDomain} />
@@ -2779,17 +2786,17 @@ export function ForecastMap({
                                                         <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
                                                     </div>
                                                 ) : null}
-                                                {/* Overlaid stat badges */}
-                                                <div className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-background/80 backdrop-blur-sm border border-border/30">
-                                                    <div className="text-[7px] uppercase tracking-wider text-muted-foreground font-semibold">{leftLabel}</div>
-                                                    <div className="text-[10px] font-bold text-foreground">{formatValue(leftVal)}</div>
+                                                {/* Overlaid stat badges — larger for mobile readability */}
+                                                <div className="absolute top-1.5 left-2 px-2 py-1 rounded bg-background/80 backdrop-blur-sm border border-border/30">
+                                                    <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold">{leftLabel}</div>
+                                                    <div className="text-[13px] font-bold text-foreground">{formatValue(leftVal)}</div>
                                                 </div>
                                                 {!isPresent && (
-                                                    <div className="absolute top-1 right-1 px-1.5 py-0.5 rounded bg-background/80 backdrop-blur-sm border border-border/30 text-right">
-                                                        <div className="text-[7px] uppercase tracking-wider text-muted-foreground font-semibold">{rightLabel}</div>
-                                                        <div className="text-[10px] font-bold text-foreground">{formatValue(rightVal)}</div>
+                                                    <div className="absolute top-1.5 right-12 px-2 py-1 rounded bg-background/80 backdrop-blur-sm border border-border/30 text-right">
+                                                        <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold">{rightLabel}</div>
+                                                        <div className="text-[13px] font-bold text-foreground">{formatValue(rightVal)}</div>
                                                         {pctChange != null && (
-                                                            <div className={`text-[8px] font-bold ${pctChange >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                                                            <div className={`text-[10px] font-bold ${pctChange >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
                                                                 {pctChange >= 0 ? '▲' : '▼'} {Math.abs(pctChange).toFixed(1)}%
                                                             </div>
                                                         )}
@@ -2798,8 +2805,8 @@ export function ForecastMap({
                                             </div>
                                         </div>
                                     )
-                                })()}
-                            </div>
+                                })()
+                            )}
                         </div>
                     ) : (
                         <>

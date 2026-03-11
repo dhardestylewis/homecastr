@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useCallback, Suspense, useEffect, useRef } from "react"
+import React, { useState, useCallback, Suspense, useEffect, useRef, useMemo } from "react"
 import { MapView } from "@/components/map-view"
 import { VectorMap } from "@/components/vector-map"
 import { ForecastMap } from "@/components/forecast-map"
@@ -15,7 +15,7 @@ import { useToast } from "@/hooks/use-toast"
 import type { PropertyForecast } from "@/app/actions/property-forecast"
 import { TimeControls } from "@/components/time-controls"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { AlertCircle, Plus, Minus, RotateCcw, ArrowLeftRight, Copy, Terminal, Activity, MessageSquare, Mic, CalendarDays, Link2, FileDown, Check } from "lucide-react"
+import { AlertCircle, Plus, Minus, RotateCcw, ArrowLeftRight, Copy, Terminal, Activity, MessageSquare, Mic, CalendarDays, Link2, FileDown, Check, Search, ChevronUp, ChevronDown } from "lucide-react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { geocodeAddress, reverseGeocode } from "@/app/actions/geocode"
 
@@ -53,6 +53,16 @@ function DashboardContent() {
   const [isUsingMockData, setIsUsingMockData] = useState(false)
   const [searchBarValue, setSearchBarValue] = useState<string>("")
   const [mobileSelectionMode, setMobileSelectionMode] = useState<'replace' | 'add' | 'range'>('replace')
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
+  const [isMobileViewport, setIsMobileViewport] = useState(false)
+
+  // Track mobile viewport
+  useEffect(() => {
+    const checkMobile = () => setIsMobileViewport(window.innerWidth < 768)
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
   const [compareMode, setCompareMode] = useState(false)
   const [pinnedCount, setPinnedCount] = useState(0)
   const [isChatOpen, setIsChatOpen] = useState(false)
@@ -720,9 +730,9 @@ function DashboardContent() {
           onContact={() => setIsContactOpen(true)}
         />
 
-        {/* Unified Sidebar Container - Top Left (Hidden if embedded) */}
-        {!searchParams.has("embedded") && (
-          <div className={`absolute top-4 left-4 z-[60] flex flex-col gap-1.5 w-full max-w-[calc(100vw-32px)] md:w-fit md:min-w-[320px] transition-all duration-300`}>
+        {/* Desktop Sidebar Container - Top Left (Hidden on mobile + embedded) */}
+        {!searchParams.has("embedded") && !isMobileViewport && (
+          <div className={`absolute top-4 left-4 z-[60] flex flex-col gap-1.5 w-fit min-w-[320px] transition-all duration-300`}>
             {/* Search Row */}
             <div className="flex items-center gap-2 w-full">
               <SearchBox
@@ -744,10 +754,9 @@ function DashboardContent() {
                 }}
                 className="flex-1"
               />
-              {/* <ExplainerPopup /> */}  {/* Deactivated — replaced by OnboardingIntro */}
             </div>
 
-            {/* 3. Legend & (Selection Buttons + Vertical Zoom Controls) Row */}
+            {/* Legend & Selection Buttons + Zoom Controls Row */}
             <div className="flex flex-row gap-1.5 items-stretch">
               {/* Legend - Takes up available space */}
               <Legend
@@ -761,22 +770,22 @@ function DashboardContent() {
               {/* Controls: 2x2 Grid */}
               <div className="grid grid-cols-2 grid-rows-2 gap-1 shrink-0 self-stretch w-[4.5rem]">
 
-                {/* Single Select */}
+                {/* Single Select — labelled */}
                 <button
                   onClick={() => { setCompareMode(false); setMobileSelectionMode('replace') }}
                   className={`aspect-square rounded-md flex items-center justify-center transition-colors shadow-sm font-bold text-[10px] ${!compareMode ? "bg-primary text-primary-foreground" : "glass-panel text-foreground"}`}
                   title="Single Select"
                 >
-                  1
+                  Single
                 </button>
 
-                {/* Compare Mode */}
+                {/* Compare Mode — labelled */}
                 <button
                   onClick={() => setCompareMode(!compareMode)}
-                  className={`aspect-square rounded-md flex items-center justify-center transition-colors shadow-sm relative ${compareMode ? "bg-lime-500 text-black" : "glass-panel text-foreground"}`}
+                  className={`aspect-square rounded-md flex items-center justify-center transition-colors shadow-sm relative font-bold text-[9px] ${compareMode ? "bg-lime-500 text-black" : "glass-panel text-foreground"}`}
                   title={compareMode ? "Compare Mode ON — click areas to pin" : "Compare Mode — pin areas to compare"}
                 >
-                  <ArrowLeftRight className="h-3.5 w-3.5" />
+                  Comp.
                   {pinnedCount > 0 && (
                     <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-lime-400 text-black text-[8px] font-bold rounded-full flex items-center justify-center">
                       {pinnedCount}
@@ -848,13 +857,150 @@ function DashboardContent() {
           </div>
         )}
 
-        {/* Floating action buttons — 2-column layout */}
-        {!searchParams.has("embedded") && (
+        {/* ═══ MOBILE BOTTOM BAR — Apple Maps style ═══ */}
+        {!searchParams.has("embedded") && isMobileViewport && (
+          <div
+            className={cn(
+              "fixed left-0 right-0 z-[60] flex flex-col transition-all duration-300",
+              (mapState.selectedId || mapState.hoveredId) && filters.useForecastMap
+                ? "bottom-[25vh]" : "bottom-0"
+            )}
+          >
+            {/* Pull-up filters sheet */}
+            {mobileFiltersOpen && (
+              <div className="glass-panel border-t border-border/50 px-4 py-3 space-y-3 animate-in slide-in-from-bottom-4 duration-200">
+                {/* Time Controls */}
+                <TimeControls
+                  minYear={2019}
+                  maxYear={2030}
+                  currentYear={currentYear}
+                  onChange={(yr) => { setHasManuallySetYear(true); setCurrentYear(yr) }}
+                  onPlayStart={() => console.log("[PAGE] Play started")}
+                  className="w-full"
+                />
+                {/* Legend */}
+                <Legend
+                  className="w-full"
+                  colorMode={filters.colorMode}
+                  onColorModeChange={handleColorModeChange}
+                  year={currentYear}
+                  originYear={pageOriginYear}
+                />
+                {/* Selection mode buttons — labelled */}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { setCompareMode(false); setMobileSelectionMode('replace') }}
+                    className={cn(
+                      "flex-1 py-2 rounded-lg text-xs font-bold transition-colors",
+                      !compareMode ? "bg-primary text-primary-foreground" : "glass-panel text-foreground border border-border/50"
+                    )}
+                  >
+                    Single
+                  </button>
+                  <button
+                    onClick={() => setCompareMode(!compareMode)}
+                    className={cn(
+                      "flex-1 py-2 rounded-lg text-xs font-bold transition-colors relative",
+                      compareMode ? "bg-lime-500 text-black" : "glass-panel text-foreground border border-border/50"
+                    )}
+                  >
+                    Compare
+                    {pinnedCount > 0 && (
+                      <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-lime-400 text-black text-[9px] font-bold rounded-full flex items-center justify-center">
+                        {pinnedCount}
+                      </span>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Main bottom bar */}
+            <div className="glass-panel border-t border-border/50 px-3 py-2 flex items-center gap-2">
+              {/* Search pill — Apple Maps style */}
+              <div className="flex-1 min-w-0">
+                <SearchBox
+                  onSearch={handleSearch}
+                  placeholder="Search address..."
+                  value={searchBarValue}
+                />
+              </div>
+
+              {/* Action icons — compact row */}
+              {!isChatOpen && (
+                <button
+                  onClick={() => setIsChatOpen(true)}
+                  className="shrink-0 w-9 h-9 rounded-xl glass-panel flex items-center justify-center text-foreground shadow-lg active:scale-90 transition-transform"
+                  aria-label="Chat"
+                >
+                  <MessageSquare size={16} />
+                </button>
+              )}
+              {!tavusConversationUrl && !isTavusLoading && (
+                <button
+                  onClick={handleFloatingConsultAI}
+                  className="shrink-0 w-9 h-9 rounded-xl glass-panel flex items-center justify-center text-foreground shadow-lg active:scale-90 transition-transform"
+                  aria-label="Talk to agent"
+                >
+                  <Mic size={16} />
+                </button>
+              )}
+              <button
+                onClick={async () => {
+                  try {
+                    toast({ title: "Generating PDF…", duration: 2000 })
+                    const captureMap = (window as any).__captureMapImage
+                    const mapImageDataUrl: string | undefined = captureMap ? await captureMap() : undefined
+                    const selectedId = mapState.selectedId
+                    let historicalValues: (number | null)[] = []
+                    let p50: number[] = [], p10: number[] = [], p90: number[] = [], years: number[] = []
+                    if (selectedId) {
+                      const level = selectedId.length === 3 ? "zip3" : selectedId.length === 5 ? "zcta" : selectedId.length === 11 ? "tract" : selectedId.length === 15 ? "tabblock" : "parcel"
+                      const res = await fetch(`/api/forecast-detail?level=${level}&id=${encodeURIComponent(selectedId)}&originYear=${pageOriginYear}`)
+                      if (res.ok) { const json = await res.json(); historicalValues = json.historicalValues || []; p50 = json.p50 || []; p10 = json.p10 || []; p90 = json.p90 || []; years = json.years || [] }
+                    }
+                    const shareUrl = new URL(window.location.href)
+                    if (currentYear !== 2027) shareUrl.searchParams.set("yr", currentYear.toString())
+                    const pdfPinnedIds = (window as any).__getPinnedIds?.() as string[] | undefined
+                    if (pdfPinnedIds?.length) shareUrl.searchParams.set("compare", pdfPinnedIds.join(","))
+                    await generateForecastPDF({
+                      locationName: searchBarValue && !searchBarValue.includes("Loading") ? searchBarValue : selectedId ? selectedId : "Map Overview",
+                      locationId: selectedId || "—", currentYear, historicalValues, p50, p10, p90, years, mapImageDataUrl,
+                      shareUrl: shareUrl.toString(), pinnedComparisons: (window as any).__getPinnedComparisons?.() || undefined,
+                    })
+                  } catch (err) { console.error("PDF generation failed:", err); toast({ title: "PDF failed", description: "Could not generate report", variant: "destructive" }) }
+                }}
+                className="shrink-0 w-9 h-9 rounded-xl glass-panel flex items-center justify-center text-foreground shadow-lg active:scale-90 transition-transform"
+                aria-label="Download PDF"
+              >
+                <FileDown size={16} />
+              </button>
+              <button
+                onClick={() => setIsContactOpen(true)}
+                className="shrink-0 w-9 h-9 rounded-xl glass-panel flex items-center justify-center text-foreground shadow-lg active:scale-90 transition-transform border border-[hsl(var(--primary))]/30"
+                aria-label="Request Analysis"
+              >
+                <CalendarDays size={16} className="text-[hsl(45,80%,45%)]" />
+              </button>
+
+              {/* Filters toggle */}
+              <button
+                onClick={() => setMobileFiltersOpen(!mobileFiltersOpen)}
+                className="shrink-0 w-9 h-9 rounded-xl glass-panel flex items-center justify-center text-foreground shadow-lg active:scale-90 transition-transform"
+                aria-label={mobileFiltersOpen ? "Hide filters" : "Show filters"}
+              >
+                {mobileFiltersOpen ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Desktop floating action buttons — 2-column layout (hidden on mobile) */}
+        {!searchParams.has("embedded") && !isMobileViewport && (
           <div className={cn(
             "fixed z-[9999] flex items-stretch gap-2 transition-all duration-300 max-w-[calc(100vw-24px)]",
-            // Shift right of whichever panel is open (both are ~340px wide at left-5 → right edge ~365px)
             tavusConversationUrl || isChatOpen ? "left-[365px]" : "left-5",
-            (mapState.selectedId || mapState.hoveredId) && filters.useForecastMap ? "bottom-[calc(25vh+12px)] md:bottom-5" : "bottom-5"
+            (mapState.selectedId || mapState.hoveredId) && filters.useForecastMap ? "bottom-5" : "bottom-5"
           )}>
             {/* Left column — Agent buttons stacked vertically */}
             <div className="flex flex-col gap-1.5">
@@ -893,9 +1039,7 @@ function DashboardContent() {
               <button
                 onClick={() => {
                   const url = new URL(window.location.href)
-                  // Ensure year is in the URL
                   if (currentYear !== 2027) url.searchParams.set("yr", currentYear.toString())
-                  // Include pinned comparison IDs
                   const pinnedIds = (window as any).__getPinnedIds?.() as string[] | undefined
                   if (pinnedIds?.length) {
                     url.searchParams.set("compare", pinnedIds.join(","))
@@ -919,75 +1063,28 @@ function DashboardContent() {
                 onClick={async () => {
                   try {
                     toast({ title: "Generating PDF…", duration: 2000 })
-
-                    // Capture map canvas via global helper exposed by ForecastMap
                     const captureMap = (window as any).__captureMapImage
                     const mapImageDataUrl: string | undefined = captureMap ? await captureMap() : undefined
-
-                    // Fetch forecast data
                     const selectedId = mapState.selectedId
                     let historicalValues: (number | null)[] = []
-                    let p50: number[] = []
-                    let p10: number[] = []
-                    let p90: number[] = []
-                    let years: number[] = []
-
+                    let p50: number[] = [], p10: number[] = [], p90: number[] = [], years: number[] = []
                     if (selectedId) {
-                      // Auto-detect geo level from ID format
-                      const level = selectedId.length === 3 ? "zip3"
-                        : selectedId.length === 5 ? "zcta"
-                          : selectedId.length === 11 ? "tract"
-                            : selectedId.length === 15 ? "tabblock"
-                              : "parcel"
+                      const level = selectedId.length === 3 ? "zip3" : selectedId.length === 5 ? "zcta" : selectedId.length === 11 ? "tract" : selectedId.length === 15 ? "tabblock" : "parcel"
                       const res = await fetch(`/api/forecast-detail?level=${level}&id=${encodeURIComponent(selectedId)}&originYear=${pageOriginYear}`)
-                      if (res.ok) {
-                        const json = await res.json()
-                        historicalValues = json.historicalValues || []
-                        p50 = json.p50 || []
-                        p10 = json.p10 || []
-                        p90 = json.p90 || []
-                        years = json.years || []
-                      }
+                      if (res.ok) { const json = await res.json(); historicalValues = json.historicalValues || []; p50 = json.p50 || []; p10 = json.p10 || []; p90 = json.p90 || []; years = json.years || [] }
                     }
-
                     const shareUrl = new URL(window.location.href)
                     if (currentYear !== 2027) shareUrl.searchParams.set("yr", currentYear.toString())
-                    // Include pinned comparison IDs in PDF share URL
                     const pdfPinnedIds = (window as any).__getPinnedIds?.() as string[] | undefined
                     if (pdfPinnedIds?.length) shareUrl.searchParams.set("compare", pdfPinnedIds.join(","))
-
                     await generateForecastPDF({
-                      locationName: searchBarValue && !searchBarValue.includes("Loading")
-                        ? searchBarValue
-                        : selectedId
-                          ? selectedId
-                          : (() => {
-                            const params = new URLSearchParams(window.location.search)
-                            const lat = parseFloat(params.get("lat") || "0")
-                            const lng = parseFloat(params.get("lng") || "0")
-                            return lat ? `Map View — ${Math.abs(lat).toFixed(2)}°${lat >= 0 ? "N" : "S"}, ${Math.abs(lng).toFixed(2)}°${lng >= 0 ? "E" : "W"}` : "Map Overview"
-                          })(),
-                      locationId: selectedId || "—",
-                      currentYear,
-                      historicalValues,
-                      p50,
-                      p10,
-                      p90,
-                      years,
-                      mapImageDataUrl,
+                      locationName: searchBarValue && !searchBarValue.includes("Loading") ? searchBarValue : selectedId ? selectedId : (() => { const params = new URLSearchParams(window.location.search); const lat = parseFloat(params.get("lat") || "0"); const lng = parseFloat(params.get("lng") || "0"); return lat ? `Map View — ${Math.abs(lat).toFixed(2)}°${lat >= 0 ? "N" : "S"}, ${Math.abs(lng).toFixed(2)}°${lng >= 0 ? "E" : "W"}` : "Map Overview" })(),
+                      locationId: selectedId || "—", currentYear, historicalValues, p50, p10, p90, years, mapImageDataUrl,
                       shareUrl: shareUrl.toString(),
-                      coords: (() => {
-                        const params = new URLSearchParams(window.location.search)
-                        const lat = parseFloat(params.get("lat") || "0")
-                        const lng = parseFloat(params.get("lng") || "0")
-                        return lat ? [lat, lng] as [number, number] : undefined
-                      })(),
+                      coords: (() => { const params = new URLSearchParams(window.location.search); const lat = parseFloat(params.get("lat") || "0"); const lng = parseFloat(params.get("lng") || "0"); return lat ? [lat, lng] as [number, number] : undefined })(),
                       pinnedComparisons: (window as any).__getPinnedComparisons?.() || undefined,
                     })
-                  } catch (err) {
-                    console.error("PDF generation failed:", err)
-                    toast({ title: "PDF failed", description: "Could not generate report", variant: "destructive" })
-                  }
+                  } catch (err) { console.error("PDF generation failed:", err); toast({ title: "PDF failed", description: "Could not generate report", variant: "destructive" }) }
                 }}
                 className="flex-1 flex items-center gap-2 px-4 py-2 rounded-2xl glass-panel hover:bg-accent/50 text-foreground shadow-2xl transition-all duration-300 hover:scale-105 active:scale-95 min-w-0"
               >

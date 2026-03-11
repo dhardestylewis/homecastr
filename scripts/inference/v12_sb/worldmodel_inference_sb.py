@@ -624,7 +624,7 @@ class SF2MNetwork(nn.Module):
                         for j, emb in enumerate(self.cat_embs)]
             cat_vec = torch.cat(cat_vecs, dim=1)
         else:
-            cat_vec = torch.zeros((hist_y.shape[0], 1), device=hist_y.device, dtype=hist_y.dtype)
+            cat_vec = torch.zeros((hist_y.shape[0], self.cat_emb_dim), device=hist_y.device, dtype=hist_y.dtype)
         h_cat = self.cat_enc(cat_vec)
         h_region = self.region_enc(self.region_emb(region_id.clamp(0, GEO_BUCKETS-1).long()))
         h_token = self.token_cond_enc(u_i)

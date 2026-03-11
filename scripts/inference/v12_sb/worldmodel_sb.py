@@ -11,7 +11,7 @@ import os, sys, time, math
 # ─── Load all shared code from inference module ───
 _sb_dir = os.path.dirname(os.path.abspath(__file__))
 _inf_path = os.path.join(_sb_dir, "worldmodel_inference_sb.py")
-with open(_inf_path, "r") as _f:
+with open(_inf_path, "r", encoding="utf-8") as _f:
     exec(_f.read(), globals())
 
 # At this point, all classes (SF2MNetwork, BridgeSchedule, OTCoupler,
