@@ -1083,10 +1083,7 @@ export function ForecastMap({
             setIsLoaded(true)
 
             // Add a transparent 1x1 image as fallback for fill-pattern (MapLibre requires resolvedImage, not null)
-            const transparentCanvas = document.createElement('canvas');
-            transparentCanvas.width = 1;
-            transparentCanvas.height = 1;
-            map.addImage('transparent-pattern', transparentCanvas);
+            map.addImage('transparent-pattern', { width: 1, height: 1, data: new Uint8Array([0, 0, 0, 0]) });
 
             // Add a crosshatch pattern image for selected/pinned features
             const addCrosshatchPattern = () => {
