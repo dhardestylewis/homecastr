@@ -652,27 +652,48 @@ function DashboardContent() {
             compareMode={compareMode}
             onPinnedCountChange={setPinnedCount}
             mobileBottomBar={isMobileViewport ? (
-              <div className="px-3 py-2 flex items-center gap-2">
-                <div className="flex-1 min-w-0">
-                  <SearchBox onSearch={handleSearch} placeholder="Search address..." value={searchBarValue} />
-                </div>
-                <div className="relative shrink-0">
-                  {mobileActionsOpen && (
-                    <div className="absolute bottom-12 right-0 flex flex-col gap-2 animate-in fade-in slide-in-from-bottom-2 duration-150 z-[70]">
-                      {!isChatOpen && (
-                        <button onClick={() => { setIsChatOpen(true); setMobileActionsOpen(false) }} className="h-10 px-3 rounded-full glass-panel flex items-center gap-2 text-foreground shadow-xl active:scale-95 transition-transform"><MessageSquare size={16} /><span className="text-xs font-medium">Chat</span></button>
-                      )}
-                      {!tavusConversationUrl && !isTavusLoading && (
-                        <button onClick={() => { handleFloatingConsultAI(); setMobileActionsOpen(false) }} className="h-10 px-3 rounded-full glass-panel flex items-center gap-2 text-foreground shadow-xl active:scale-95 transition-transform"><Mic size={16} /><span className="text-xs font-medium">Talk</span></button>
-                      )}
-                      <button onClick={() => { setIsContactOpen(true); setMobileActionsOpen(false) }} className="h-10 px-3 rounded-full glass-panel flex items-center gap-2 text-foreground shadow-xl active:scale-95 transition-transform border border-[hsl(var(--primary))]/30"><CalendarDays size={16} className="text-[hsl(45,80%,45%)]" /><span className="text-xs font-medium">Analysis</span></button>
-                    </div>
-                  )}
-                  <button onClick={() => setMobileActionsOpen(!mobileActionsOpen)} className={cn("w-9 h-9 rounded-xl glass-panel flex items-center justify-center text-foreground shadow-lg active:scale-90 transition-all duration-200", mobileActionsOpen && "rotate-45 bg-primary text-primary-foreground")}><Plus size={18} /></button>
-                </div>
-                <div className="shrink-0 flex flex-col items-center justify-center w-9 h-9 cursor-pointer active:scale-95 transition-transform" onClick={() => setMobileFiltersOpen(!mobileFiltersOpen)}>
-                  <div className="w-6 h-1 rounded-full bg-muted-foreground/40 mb-0.5" />
-                  <div className="w-4 h-1 rounded-full bg-muted-foreground/25" />
+              <div>
+                {/* Filters sheet — accessible even when tooltip is active */}
+                {mobileFiltersOpen && (
+                  <div className="px-4 py-3 space-y-3 border-b border-border/30 animate-in slide-in-from-bottom-4 duration-200">
+                    <TimeControls
+                      minYear={2019} maxYear={2030} currentYear={currentYear}
+                      onChange={(yr) => { setHasManuallySetYear(true); setCurrentYear(yr) }}
+                      onPlayStart={() => console.log("[PAGE] Play started")}
+                      className="w-full"
+                    />
+                    <Legend
+                      className="w-full" colorMode={filters.colorMode}
+                      onColorModeChange={handleColorModeChange} year={currentYear} originYear={pageOriginYear}
+                      compareMode={compareMode}
+                      onCompareModeChange={(c) => { setCompareMode(c); if (!c) setMobileSelectionMode('replace') }}
+                      pinnedCount={pinnedCount}
+                    />
+                  </div>
+                )}
+                {/* Bottom bar row */}
+                <div className="px-3 py-2 flex items-center gap-2">
+                  <div className="flex-1 min-w-0">
+                    <SearchBox onSearch={handleSearch} placeholder="Search address..." value={searchBarValue} />
+                  </div>
+                  <div className="relative shrink-0">
+                    {mobileActionsOpen && (
+                      <div className="absolute bottom-12 right-0 flex flex-col gap-2 animate-in fade-in slide-in-from-bottom-2 duration-150 z-[70]">
+                        {!isChatOpen && (
+                          <button onClick={() => { setIsChatOpen(true); setMobileActionsOpen(false) }} className="h-10 px-3 rounded-full glass-panel flex items-center gap-2 text-foreground shadow-xl active:scale-95 transition-transform"><MessageSquare size={16} /><span className="text-xs font-medium">Chat</span></button>
+                        )}
+                        {!tavusConversationUrl && !isTavusLoading && (
+                          <button onClick={() => { handleFloatingConsultAI(); setMobileActionsOpen(false) }} className="h-10 px-3 rounded-full glass-panel flex items-center gap-2 text-foreground shadow-xl active:scale-95 transition-transform"><Mic size={16} /><span className="text-xs font-medium">Talk</span></button>
+                        )}
+                        <button onClick={() => { setIsContactOpen(true); setMobileActionsOpen(false) }} className="h-10 px-3 rounded-full glass-panel flex items-center gap-2 text-foreground shadow-xl active:scale-95 transition-transform border border-[hsl(var(--primary))]/30"><CalendarDays size={16} className="text-[hsl(45,80%,45%)]" /><span className="text-xs font-medium">Analysis</span></button>
+                      </div>
+                    )}
+                    <button onClick={() => setMobileActionsOpen(!mobileActionsOpen)} className={cn("w-9 h-9 rounded-xl glass-panel flex items-center justify-center text-foreground shadow-lg active:scale-90 transition-all duration-200", mobileActionsOpen && "rotate-45 bg-primary text-primary-foreground")}><Plus size={18} /></button>
+                  </div>
+                  <div className="shrink-0 flex flex-col items-center justify-center w-9 h-9 cursor-pointer active:scale-95 transition-transform" onClick={() => setMobileFiltersOpen(!mobileFiltersOpen)}>
+                    <div className="w-6 h-1 rounded-full bg-muted-foreground/40 mb-0.5" />
+                    <div className="w-4 h-1 rounded-full bg-muted-foreground/25" />
+                  </div>
                 </div>
               </div>
             ) : undefined}

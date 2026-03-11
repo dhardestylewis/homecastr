@@ -85,14 +85,16 @@ export function TimeControls({
                         aria-label="Forecast year"
                     />
                     <div className="relative w-full h-3 px-0.5">
-                        <span className="absolute left-0 text-[9px] text-muted-foreground font-mono">{minYear}</span>
-                        <span
-                            className="absolute text-[9px] text-primary font-mono font-bold tabular-nums -translate-x-1/2"
-                            style={{ left: `${((currentYear - minYear) / (maxYear - minYear)) * 100}%` }}
-                        >
-                            {currentYear}
-                        </span>
-                        <span className="absolute right-0 text-[9px] text-muted-foreground font-mono">{maxYear}</span>
+                        <span className={`absolute left-0 text-[9px] font-mono tabular-nums ${currentYear === minYear ? 'text-primary font-bold' : 'text-muted-foreground'}`}>{minYear}</span>
+                        {currentYear !== minYear && currentYear !== maxYear && (
+                            <span
+                                className="absolute text-[9px] text-primary font-mono font-bold tabular-nums"
+                                style={{ left: `calc(${((currentYear - minYear) / (maxYear - minYear)) * 100}% - 0.5em)` }}
+                            >
+                                {currentYear}
+                            </span>
+                        )}
+                        <span className={`absolute right-0 text-[9px] font-mono tabular-nums ${currentYear === maxYear ? 'text-primary font-bold' : 'text-muted-foreground'}`}>{maxYear}</span>
                     </div>
                 </div>
         </div>
