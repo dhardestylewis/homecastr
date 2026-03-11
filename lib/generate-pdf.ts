@@ -623,16 +623,7 @@ export async function generateForecastPDF(data: ForecastPDFData): Promise<void> 
 
         y += cardH + 7
     } else {
-        doc.setFillColor(...bgCard)
-        doc.roundedRect(margin, y, contentW, 18, 3, 3, "F")
-        doc.setFont("helvetica", "bold")
-        doc.setFontSize(9)
-        doc.setTextColor(...dark)
-        doc.text("How to use this report", margin + 8, y + 7)
-        doc.setFont("helvetica", "normal")
-        doc.setFontSize(7.5)
-        doc.setTextColor(...muted)
-        doc.text("Click any area on the map, then download the PDF to see forecast metrics and charts.", margin + 8, y + 13)
+        // For Map Overview, just skip the headline cards and add some whitespace before the footer
         y += 24
     }
 

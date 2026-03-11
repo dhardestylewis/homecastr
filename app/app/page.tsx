@@ -732,7 +732,10 @@ function DashboardContent() {
             filters={filters}
             mapState={mapState}
             onFeatureSelect={selectFeature}
-            onFeatureHover={hoverFeature}
+            onFeatureHover={(id) => {
+              if (id && mobileFiltersOpen) setMobileFiltersOpen(false)
+              hoverFeature(id)
+            }}
             onCoordsChange={setClickCoords}
             onGeocodedName={(name) => setSearchBarValue(name || "")}
             year={currentYear}
