@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 import Link from "next/link"
-import { getTractsForCity, batchEnrichTracts, getStatesWithData, getCitiesForState } from "@/lib/publishing/geo-crosswalk"
+import { getTractsForCity, batchEnrichTracts, getStatesWithData, getCitiesForState, ZIP_NAMES } from "@/lib/publishing/geo-crosswalk"
 import { isOutlierTract, logFlaggedOutliers, createOutlierTag, type OutlierTag } from "@/lib/publishing/forecast-outlier-filter"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
 import { SortableNeighborhoodTable } from "@/components/publishing/SortableNeighborhoodTable"
@@ -208,23 +208,55 @@ export default async function CityHubPage({ params, searchParams }: PageProps) {
                 return { ...t, neighborhoodName: baseName, neighborhoodSlug: baseSlug }
             }
 
-            // Duplicate name: disambiguate with ZIP code
+            // Duplicate name: disambiguate with ZIP code or its resolved name
             const zip = t.zcta5 || ''
             const group = nameGroups.get(baseName) || []
             const zipFreq = group.filter(g => g.zcta5 === zip).length
 
             if (zip && zipFreq === 1) {
                 // ZIP alone is unique within this name group
-                const displayName = `${baseName} · ${zip}`
-                const neighborhoodSlug = `${baseSlug}-${zip}`
+                let qualifier = zip
+                if (ZIP_NAMES[zip]) {
+                    const resolvedName = ZIP_NAMES[zip]
+                    if (resolvedName.toLowerCase() !== baseName.toLowerCase()) {
+                        qualifier = resolvedName
+                    }
+                }
+                const displayName = `${baseName} · ${qualifier}`
+                const neighborhoodSlug = `${baseSlug}-${slugify(qualifier)}`
                 return { ...t, neighborhoodName: displayName, neighborhoodSlug }
             }
 
             // ZIP is shared too — add tract suffix for full uniqueness
             const tractSuffix = t.tractGeoid.substring(5)
-            const displayName = zip
-                ? `${baseName} · ${zip} · Tr.${tractSuffix}`
+            
+            // Try to resolve ZIP to a human name using the national ZIP dictionary (if imported),
+            let qualifier = zip ? zip : `Tr.${tractSuffix}`
+            if (zip && ZIP_NAMES[zip]) {
+                const resolvedName = ZIP_NAMES[zip]
+                // Only use the resolved name if it adds new information (isn't identical to the base Name)
+                if (resolvedName.toLowerCase() !== baseName.toLowerCase()) {
+                    qualifier = resolvedName
+                }
+            }
+            
+            // Check if the qualifier (ZIP or resolved name) is unique within this baseName group
+            const zipOrNameFreq = group.filter(
+                g => g.zcta5 === zip || (g.zcta5 && ZIP_NAMES[g.zcta5] === qualifier)
+            ).length
+
+            if (qualifier && zipOrNameFreq === 1) {
+                // The qualifier (e.g. "Lakehead") is unique enough to distinguish it
+                const displayName = `${baseName} · ${qualifier}`
+                const neighborhoodSlug = `${baseSlug}-${slugify(qualifier)}`
+                return { ...t, neighborhoodName: displayName, neighborhoodSlug }
+            }
+
+            // The qualifier is shared too (e.g. two tracts in "Lakehead") — must add tract suffix
+            const displayName = qualifier !== `Tr.${tractSuffix}`
+                ? `${baseName} · ${qualifier} · Tr.${tractSuffix}`
                 : `${baseName} · Tr.${tractSuffix}`
+                
             const neighborhoodSlug = `${baseSlug}-tr-${tractSuffix}`
             return { ...t, neighborhoodName: displayName, neighborhoodSlug }
         })
