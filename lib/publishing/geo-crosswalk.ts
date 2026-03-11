@@ -601,10 +601,10 @@ import tractNameCacheRaw from "./tract-name-cache.json"
 const TRACT_NAME_CACHE: Record<string, string> = tractNameCacheRaw as any
 
 // Spatial tract labels (populated by build_tract_labels.py — TIGER Places, Cousubs, GNIS)
+// Compact format: s=label_short, t=anchor_type, c=confidence first char (h/m/l)
 import tractLabelsRaw from "./tract_labels.json"
 const TRACT_LABELS: Record<string, {
-    anchor_name: string; anchor_type: string; anchor_overlap_share: number;
-    confidence: string; label_short: string; label_medium: string; label_long: string;
+    s: string; t: string; c: string;
 }> = tractLabelsRaw as any
 
 /**
@@ -625,11 +625,11 @@ export async function batchEnrichTracts(
     // Still carry ZCTA from crosswalk for downstream disambiguation
     for (const tractId of tractGeoids) {
         const label = TRACT_LABELS[tractId]
-        if (label && label.label_short) {
+        if (label && label.s) {
             const zcta = TRACT_ZCTA[tractId] || ""
             result.set(tractId, {
-                name: label.label_short,
-                slug: slugify(label.label_short),
+                name: label.s,
+                slug: slugify(label.s),
                 zcta5: zcta,
             })
         }

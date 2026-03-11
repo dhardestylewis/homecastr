@@ -2578,9 +2578,9 @@ export function ForecastMap({
                         }
                     } : undefined}
                     onTouchStart={isMobile ? (e) => {
-                        // Skip swipe tracking if touch is on the header bar
+                        // Only allow swipe-to-dismiss from the handle area
                         const target = e.target as HTMLElement
-                        if (target.closest('[data-tooltip-header]')) return
+                        if (!target.closest('[data-tooltip-header]')) return
                         setSwipeTouchStart(e.touches[0].clientY)
                     } : undefined}
                     onTouchMove={isMobile ? (e) => {
@@ -2754,8 +2754,9 @@ export function ForecastMap({
                                 const pctTarget = isPresent ? null : isPast ? currentVal : forecastVal
                                 const pctChange = pctBase && pctTarget ? ((pctTarget - pctBase) / pctBase * 100) : null
                                 return (
-                                    <div className="relative w-full flex-1 h-full">
-                                        <div className="w-full h-full">
+                                    <div className="flex w-full flex-1 h-full">
+                                        {/* Chart — takes remaining space */}
+                                        <div className="flex-1 min-w-0 h-full">
                                             {fanChartData ? (
                                                 <FanChart data={fanChartData} currentYear={year} height={200} historicalValues={historicalValues} childLines={debugBuildings ? studentChildLines : undefined} comparisonData={comparisonData} comparisonHistoricalValues={comparisonHistoricalValues} pinnedComparisons={pinnedComparisons.map(pc => ({ data: pc.data, historicalValues: pc.historicalValues, label: pc.label }))} yDomain={effectiveYDomain} />
                                             ) : isLoadingDetail ? (
@@ -2763,15 +2764,17 @@ export function ForecastMap({
                                                     <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
                                                 </div>
                                             ) : null}
-                                            {/* Overlaid stat badges */}
-                                            <div className="absolute top-1.5 left-2 px-2 py-1 rounded bg-background/80 backdrop-blur-sm border border-border/30">
+                                        </div>
+                                        {/* Stats column — to the right of the chart */}
+                                        <div className="shrink-0 w-[90px] flex flex-col justify-center gap-2 px-2 border-l border-border/20">
+                                            <div>
                                                 <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold">{leftLabel}</div>
-                                                <div className="text-[13px] font-bold text-foreground">{formatValue(leftVal)}</div>
+                                                <div className="text-[12px] font-bold text-foreground leading-tight">{formatValue(leftVal)}</div>
                                             </div>
                                             {!isPresent && (
-                                                <div className="absolute top-1.5 right-2 px-2 py-1 rounded bg-background/80 backdrop-blur-sm border border-border/30 text-right">
+                                                <div>
                                                     <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold">{rightLabel}</div>
-                                                    <div className="text-[13px] font-bold text-foreground">{formatValue(rightVal)}</div>
+                                                    <div className="text-[12px] font-bold text-foreground leading-tight">{formatValue(rightVal)}</div>
                                                     {pctChange != null && (
                                                         <div className={`text-[10px] font-bold ${pctChange >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
                                                             {pctChange >= 0 ? '▲' : '▼'} {Math.abs(pctChange).toFixed(1)}%
