@@ -26,15 +26,14 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Data caches (local only)
 data/hcad/
 data/tiger_cache/
 
 # Secrets
+.secrets/
 *.gcs-key.json
-.gcs-key.json
-scripts/.gcs-key.json
-gcs-creds.json
-properlytic-data-creds.json
 
 # Python
 __pycache__/
@@ -48,6 +47,7 @@ logs/gcs_investigation/
 
 # Scratch work
 _scratch/
+local_scratch/
 .env*.local
 
 mcp-server/node_modules

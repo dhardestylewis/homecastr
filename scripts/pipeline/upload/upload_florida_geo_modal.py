@@ -1,48 +1,52 @@
 """
-Upload Florida DOR parcel point-geometries to Supabase (local, no Modal).
-=========================================================================
-Downloads the latest NAL ZIP from GCS, extracts PARCEL_ID + CO_NO + LAT_DD + LON_DD,
+Upload Florida DOR parcel point-geometries to Supabase via Modal.
+================================================================
+Reads the latest NAL ZIP from GCS, extracts PARCEL_ID + CO_NO + LAT_DD + LON_DD,
 buffers points into small squares, and inserts into public.geo_parcel_poly.
 
 Usage:
-  python scripts/pipeline/upload/upload_florida_geometries.py
+  python -m modal run scripts/pipeline/upload/upload_florida_geo_modal.py
 """
-import os, sys, tempfile, zipfile, io
-import psycopg2, psycopg2.extras
-from dotenv import load_dotenv
-from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
+
+import modal
+import os
+
+app = modal.App("florida-geo-upload")
+
+image = (
+    modal.Image.debian_slim(python_version="3.11")
+    .pip_install("google-cloud-storage", "polars", "psycopg2-binary")
+)
+
+gcs_secret = modal.Secret.from_name("gcs-creds", required_keys=["GOOGLE_APPLICATION_CREDENTIALS_JSON"])
+sb_secret = modal.Secret.from_name("supabase-db", required_keys=["POSTGRES_URL_NON_POOLING"])
 
 GCS_BUCKET = "properlytic-raw-data"
 DOR_PREFIX = "florida_dor"
-BUFFER_DEG = 0.00015  # ~15m radius → small square for each parcel point
-BATCH_SIZE = 5000
+BUFFER_DEG = 0.00015  # ~15m radius
 
 
-def get_db_connection():
-    load_dotenv(".env.local")
-    for key in ["SUPABASE_DB_URL", "POSTGRES_URL_NON_POOLING", "POSTGRES_URL"]:
-        raw = os.environ.get(key, "").strip()
-        if raw:
-            parts = urlsplit(raw)
-            q = dict(parse_qsl(parts.query, keep_blank_values=True))
-            allowed = {"sslmode": q.get("sslmode")} if "sslmode" in q else {}
-            db_url = urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(allowed), parts.fragment)).strip()
-            conn = psycopg2.connect(db_url)
-            conn.autocommit = True
-            with conn.cursor() as cur:
-                cur.execute("SET statement_timeout = '60min';")
-            return conn
-    raise RuntimeError("No DB URL found")
-
-
-def main():
+@app.function(
+    image=image,
+    secrets=[gcs_secret, sb_secret],
+    timeout=3600,
+    memory=8192,
+)
+def extract_and_upload():
+    import json
+    import zipfile
+    import tempfile
     import polars as pl
+    import psycopg2
+    import psycopg2.extras
     from google.cloud import storage
 
-    client = storage.Client()
+    # ── GCS client ──
+    creds = json.loads(os.environ["GOOGLE_APPLICATION_CREDENTIALS_JSON"])
+    client = storage.Client.from_service_account_info(creds)
     bucket = client.bucket(GCS_BUCKET)
 
-    # ── Find latest NAL ZIP (prefer S > P > F, newest year first) ──
+    # ── Find latest NAL ZIP (prefer S > P > F for 2025, then 2024, ...) ──
     nal_blob_name = None
     for year in range(2025, 2001, -1):
         for sfx in ["S", "P", "F"]:
@@ -54,26 +58,19 @@ def main():
             break
 
     if not nal_blob_name:
-        print("ERROR: No NAL ZIP found on GCS")
-        sys.exit(1)
+        return {"status": "error", "reason": "No NAL ZIP found"}
 
     print(f"Using NAL file: {nal_blob_name}")
 
-    # ── Download ZIP to temp ──
-    tmp_path = os.path.join(tempfile.gettempdir(), "florida_nal.zip")
-    if os.path.exists(tmp_path) and os.path.getsize(tmp_path) > 1_000_000:
-        print(f"Using cached {tmp_path} ({os.path.getsize(tmp_path)/1e6:.0f} MB)")
-    else:
-        blob = bucket.blob(nal_blob_name)
-        blob.reload()
-        print(f"Downloading {blob.size/1e6:.0f} MB ...")
-        blob.download_to_filename(tmp_path)
-        print(f"Downloaded to {tmp_path}")
+    # ── Download ZIP ──
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
+    bucket.blob(nal_blob_name).download_to_filename(tmp.name)
+    print(f"Downloaded {os.path.getsize(tmp.name)/1e6:.1f} MB")
 
-    # ── Extract lat/lon from every county CSV inside the ZIP ──
+    # ── Extract all county CSVs and collect lat/lon ──
     all_rows = []
-    with zipfile.ZipFile(tmp_path) as zf:
-        csv_names = sorted([n for n in zf.namelist() if n.lower().endswith(".csv")])
+    with zipfile.ZipFile(tmp.name) as zf:
+        csv_names = sorted([n for n in zf.namelist() if n.endswith('.csv')])
         print(f"Found {len(csv_names)} CSVs in ZIP")
 
         for csv_name in csv_names:
@@ -81,16 +78,18 @@ def main():
                 with zf.open(csv_name) as f:
                     df = pl.read_csv(f.read(), infer_schema_length=0)
 
+                # Check if lat/lon columns exist
                 has_lat = "LAT_DD" in df.columns
                 has_lon = "LON_DD" in df.columns
                 has_parcel = "PARCEL_ID" in df.columns
                 has_county = "CO_NO" in df.columns
 
                 if not (has_parcel and has_county):
-                    print(f"  {csv_name}: missing PARCEL_ID or CO_NO, skip")
+                    print(f"  {csv_name}: missing PARCEL_ID or CO_NO, skipping")
                     continue
+
                 if not (has_lat and has_lon):
-                    print(f"  {csv_name}: NO LAT_DD/LON_DD — schema: {df.columns}")
+                    print(f"  {csv_name}: missing LAT_DD/LON_DD, skipping")
                     continue
 
                 sub = df.select(["CO_NO", "PARCEL_ID", "LAT_DD", "LON_DD"])
@@ -108,42 +107,54 @@ def main():
                 sub = sub.unique(subset=["acct"])
                 print(f"  {csv_name}: {len(sub):,} valid parcels with coords")
                 all_rows.append(sub.select(["acct", "lat", "lon"]))
+
             except Exception as e:
                 print(f"  {csv_name}: error: {e}")
 
+    os.unlink(tmp.name)
+
     if not all_rows:
-        print("ERROR: No lat/lon data found in any CSV. The NAL files may not contain LAT_DD/LON_DD.")
-        sys.exit(1)
+        return {"status": "error", "reason": "No lat/lon data found in any CSV"}
 
     combined = pl.concat(all_rows).unique(subset=["acct"])
-    total = len(combined)
-    print(f"\nTotal unique parcels with coords: {total:,}")
+    print(f"\nTotal unique parcels with coords: {len(combined):,}")
 
     # ── Upload to Supabase ──
-    conn = get_db_connection()
-    print("Connected to Supabase.")
+    db_url = os.environ["POSTGRES_URL_NON_POOLING"]
+    conn = psycopg2.connect(db_url)
+    conn.autocommit = True
+
+    with conn.cursor() as cur:
+        cur.execute("SET statement_timeout = '30min';")
 
     inserted = 0
     batch = []
+    batch_size = 5000
 
     with conn.cursor() as cur:
         for row in combined.iter_rows(named=True):
             acct = str(row["acct"])
             lat = row["lat"]
             lon = row["lon"]
-            batch.append((acct, lon - BUFFER_DEG, lat - BUFFER_DEG, lon + BUFFER_DEG, lat + BUFFER_DEG))
+            batch.append((
+                acct,
+                lon - BUFFER_DEG,
+                lat - BUFFER_DEG,
+                lon + BUFFER_DEG,
+                lat + BUFFER_DEG,
+            ))
 
-            if len(batch) >= BATCH_SIZE:
+            if len(batch) >= batch_size:
                 psycopg2.extras.execute_values(
                     cur,
                     "INSERT INTO public.geo_parcel_poly (acct, geom) VALUES %s ON CONFLICT (acct) DO NOTHING",
                     batch,
                     template="(%s, ST_Multi(ST_MakeEnvelope(%s, %s, %s, %s, 4326)))",
-                    page_size=BATCH_SIZE,
+                    page_size=batch_size,
                 )
                 inserted += len(batch)
-                if inserted % 100_000 == 0:
-                    print(f"  Inserted: {inserted:,} / {total:,}")
+                if inserted % 100000 == 0:
+                    print(f"Inserted: {inserted:,} / {len(combined):,}")
                 batch = []
 
         if batch:
@@ -152,13 +163,16 @@ def main():
                 "INSERT INTO public.geo_parcel_poly (acct, geom) VALUES %s ON CONFLICT (acct) DO NOTHING",
                 batch,
                 template="(%s, ST_Multi(ST_MakeEnvelope(%s, %s, %s, %s, 4326)))",
-                page_size=BATCH_SIZE,
+                page_size=batch_size,
             )
             inserted += len(batch)
 
     conn.close()
-    print(f"\n✅ Done. Sent {inserted:,} Florida parcel geometries to Supabase.")
+    print(f"\n✅ Done. Sent {inserted:,} parcel geometries to Supabase.")
+    return {"status": "ok", "total": inserted}
 
 
-if __name__ == "__main__":
-    main()
+@app.local_entrypoint()
+def main():
+    result = extract_and_upload.remote()
+    print(result)

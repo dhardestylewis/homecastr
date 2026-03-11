@@ -878,39 +878,41 @@ function DashboardContent() {
                   onPlayStart={() => console.log("[PAGE] Play started")}
                   className="w-full"
                 />
-                {/* Legend */}
-                <Legend
-                  className="w-full"
-                  colorMode={filters.colorMode}
-                  onColorModeChange={handleColorModeChange}
-                  year={currentYear}
-                  originYear={pageOriginYear}
-                />
-                {/* Selection mode buttons — labelled */}
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => { setCompareMode(false); setMobileSelectionMode('replace') }}
-                    className={cn(
-                      "flex-1 py-2 rounded-lg text-xs font-bold transition-colors",
-                      !compareMode ? "bg-primary text-primary-foreground" : "glass-panel text-foreground border border-border/50"
-                    )}
-                  >
-                    Single
-                  </button>
-                  <button
-                    onClick={() => setCompareMode(!compareMode)}
-                    className={cn(
-                      "flex-1 py-2 rounded-lg text-xs font-bold transition-colors relative",
-                      compareMode ? "bg-lime-500 text-black" : "glass-panel text-foreground border border-border/50"
-                    )}
-                  >
-                    Compare
-                    {pinnedCount > 0 && (
-                      <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-lime-400 text-black text-[9px] font-bold rounded-full flex items-center justify-center">
-                        {pinnedCount}
-                      </span>
-                    )}
-                  </button>
+                {/* Legend + Selection mode inline */}
+                <div className="flex items-stretch gap-2">
+                  <Legend
+                    className="flex-1"
+                    colorMode={filters.colorMode}
+                    onColorModeChange={handleColorModeChange}
+                    year={currentYear}
+                    originYear={pageOriginYear}
+                  />
+                  {/* Single/Compare toggle — inline with legend */}
+                  <div className="flex flex-col gap-1 shrink-0">
+                    <button
+                      onClick={() => { setCompareMode(false); setMobileSelectionMode('replace') }}
+                      className={cn(
+                        "px-3 py-1.5 rounded-md text-[10px] font-bold transition-colors",
+                        !compareMode ? "bg-primary text-primary-foreground" : "glass-panel text-foreground border border-border/50"
+                      )}
+                    >
+                      Single
+                    </button>
+                    <button
+                      onClick={() => setCompareMode(!compareMode)}
+                      className={cn(
+                        "px-3 py-1.5 rounded-md text-[10px] font-bold transition-colors relative",
+                        compareMode ? "bg-lime-500 text-black" : "glass-panel text-foreground border border-border/50"
+                      )}
+                    >
+                      Compare
+                      {pinnedCount > 0 && (
+                        <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-lime-400 text-black text-[8px] font-bold rounded-full flex items-center justify-center">
+                          {pinnedCount}
+                        </span>
+                      )}
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -925,15 +927,6 @@ function DashboardContent() {
                   value={searchBarValue}
                 />
               </div>
-
-              {/* Year badge — always visible so user knows which year the map shows */}
-              <button
-                onClick={() => setMobileFiltersOpen(!mobileFiltersOpen)}
-                className="shrink-0 px-2 py-1 rounded-lg bg-primary/15 border border-primary/30 text-primary text-[11px] font-bold tabular-nums active:scale-95 transition-transform"
-                aria-label="Change year"
-              >
-                {currentYear}
-              </button>
 
               {/* Action icons — compact row */}
               {!isChatOpen && (

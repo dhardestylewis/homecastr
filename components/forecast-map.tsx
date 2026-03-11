@@ -2600,16 +2600,15 @@ export function ForecastMap({
                         setSwipeTouchStart(null)
                     } : undefined}
                 >
-                    {/* Mobile Header — compact, at top of tooltip */}
+                    {/* Mobile: minimal swipe handle + close (no separate header bar) */}
                     {isMobile && (
                         <div
-                            className="w-full flex items-center justify-between px-2 pt-1 h-8 bg-muted/40 backdrop-blur-md border-b border-border/50 shrink-0"
+                            className="w-full flex items-center justify-center pt-1.5 pb-0.5 shrink-0"
                             data-tooltip-header="true"
                         >
-                            <div className="flex items-center gap-1.5">
-                                <HomecastrLogo variant="horizontal" size={14} />
-                                <span className="px-1 py-0.5 bg-violet-500/20 text-violet-400 text-[7px] font-semibold uppercase tracking-wider rounded">Forecast</span>
-                            </div>
+                            {/* Swipe handle */}
+                            <div className="w-8 h-1 rounded-full bg-muted-foreground/30" />
+                            {/* Close button — absolute right */}
                             <button
                                 onClick={(e) => {
                                     e.stopPropagation();
@@ -2622,8 +2621,8 @@ export function ForecastMap({
                                     setSelectedCoords(null);
                                     onFeatureSelect(null);
                                 }}
-                                className="w-6 h-6 flex items-center justify-center rounded-full active:bg-muted/60 text-muted-foreground"
-                                aria-label="Close tooltip"
+                                className="absolute right-2 top-1.5 w-6 h-6 flex items-center justify-center rounded-full active:bg-muted/60 text-muted-foreground"
+                                aria-label="Close"
                                 style={{ touchAction: 'manipulation' }}
                             >
                                 <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ pointerEvents: 'none' }}>
