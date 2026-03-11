@@ -9,7 +9,7 @@ const ZIP_CITY_NATIONAL_RAW: Record<string, string> = zipCityRaw as any
 // ---------------------------------------------------------------------------
 
 // US State FIPS → { name, abbr }
-const STATE_FIPS: Record<string, { name: string; abbr: string }> = {
+export const STATE_FIPS: Record<string, { name: string; abbr: string }> = {
     "01": { name: "Alabama", abbr: "AL" },
     "02": { name: "Alaska", abbr: "AK" },
     "04": { name: "Arizona", abbr: "AZ" },
@@ -65,7 +65,7 @@ const STATE_FIPS: Record<string, { name: string; abbr: string }> = {
 }
 
 // Major county FIPS → city name  (top metros first; extend as needed)
-const COUNTY_CITY: Record<string, string> = {
+export const COUNTY_CITY: Record<string, string> = {
     // Texas
     "48201": "Houston", "48113": "Dallas", "48029": "San Antonio",
     "48141": "El Paso", "48439": "Tarrant", "48085": "Collin",

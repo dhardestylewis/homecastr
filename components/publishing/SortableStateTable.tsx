@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react"
 import Link from "next/link"
 import { ChevronUp, ChevronDown, ChevronsUpDown, Search } from "lucide-react"
+import { GeographySearch } from "./GeographySearch"
 
 export interface StateRow {
     stateName: string
@@ -36,14 +37,8 @@ const fmtPctCapped = (v: number) => {
 export function SortableStateTable({ rows }: { rows: StateRow[] }) {
     const [sortKey, setSortKey] = useState<SortKey>("outlook")
     const [sortDir, setSortDir] = useState<SortDir>("desc")
-    const [searchQuery, setSearchQuery] = useState("")
 
     const sorted = useMemo(() => {
-        const filtered = rows.filter(r => 
-            r.stateName.toLowerCase().includes(searchQuery.toLowerCase()) || 
-            r.stateAbbr.toLowerCase().includes(searchQuery.toLowerCase())
-        )
-
         const nullLast = (a: number | null, b: number | null) => {
             if (a === null && b === null) return 0
             if (a === null) return 1
@@ -61,8 +56,8 @@ export function SortableStateTable({ rows }: { rows: StateRow[] }) {
         }
         const cmp = comparators[sortKey]
         const dir = sortDir === "asc" ? 1 : -1
-        return filtered.sort((a, b) => cmp(a, b) * dir)
-    }, [rows, sortKey, sortDir, searchQuery])
+        return [...rows].sort((a, b) => cmp(a, b) * dir)
+    }, [rows, sortKey, sortDir])
 
     const toggleSort = (key: SortKey) => {
         if (sortKey === key) {
@@ -86,16 +81,7 @@ export function SortableStateTable({ rows }: { rows: StateRow[] }) {
         <div className="space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <h2 className="text-xl font-semibold text-foreground">Browse Markets</h2>
-                <div className="relative w-full sm:w-72">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <input 
-                        type="text" 
-                        placeholder="Search states..." 
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full bg-background border border-border rounded-lg pl-9 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 text-foreground placeholder:text-muted-foreground"
-                    />
-                </div>
+                <GeographySearch />
             </div>
             <div className="glass-panel rounded-xl overflow-hidden">
                 <div className="overflow-x-auto">
@@ -175,7 +161,7 @@ export function SortableStateTable({ rows }: { rows: StateRow[] }) {
                 </table>
                 {sorted.length === 0 && (
                     <div className="p-8 text-center text-muted-foreground text-sm">
-                        No markets found matching "{searchQuery}"
+                        No markets found
                     </div>
                 )}
                 </div>
