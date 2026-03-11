@@ -621,17 +621,28 @@ export async function batchEnrichTracts(
     const result = new Map<string, { name: string; slug: string; zcta5: string }>()
     if (tractGeoids.length === 0) return result
 
-    // Phase 0: Spatial tract labels (best quality — place/cousub/GNIS inference)
-    // Still carry ZCTA from crosswalk for downstream disambiguation
+    // Phase 0: Spatial tract labels (place/cousub/GNIS inference)
+    // Cousub labels (e.g. "Northwest Harris") are very broad — if a curated
+    // ZIP_OVERRIDES name exists for the tract's ZCTA, prefer that instead.
     for (const tractId of tractGeoids) {
         const label = TRACT_LABELS[tractId]
         if (label && label.s) {
             const zcta = TRACT_ZCTA[tractId] || ""
-            result.set(tractId, {
-                name: label.s,
-                slug: slugify(label.s),
-                zcta5: zcta,
-            })
+            // Check if a more specific curated ZIP name should override a cousub label
+            if (label.t === "cousub" && zcta && ZIP_OVERRIDES[zcta]) {
+                const curatedName = ZIP_OVERRIDES[zcta]
+                result.set(tractId, {
+                    name: curatedName,
+                    slug: slugify(curatedName),
+                    zcta5: zcta,
+                })
+            } else {
+                result.set(tractId, {
+                    name: label.s,
+                    slug: slugify(label.s),
+                    zcta5: zcta,
+                })
+            }
         }
     }
 
@@ -765,10 +776,35 @@ export async function batchEnrichTracts(
 }
 
 /**
- * Enrich single GeoInfo with neighborhood name from parcel_ladder_v1.
- * Tries neighborhood_name first, then ZCTA5 → ZIP_NAMES lookup.
+ * Enrich single GeoInfo with neighborhood name.
+ * Uses the same priority chain as batchEnrichTracts for consistency:
+ *   1. TRACT_LABELS (with cousub downgrade to curated ZIP names)
+ *   2. parcel_ladder_v1 neighborhood_name
+ *   3. ZCTA5 → ZIP_NAMES lookup
  */
 export async function enrichWithNeighborhood(geo: GeoInfo): Promise<GeoInfo> {
+    // Try 0: Spatial tract labels (same logic as batchEnrichTracts Phase 0)
+    const label = TRACT_LABELS[geo.tractGeoid]
+    if (label && label.s) {
+        const zcta = TRACT_ZCTA[geo.tractGeoid] || geo.zcta5 || null
+        // Cousub labels are too broad — prefer curated ZIP name if available
+        if (label.t === "cousub" && zcta && ZIP_OVERRIDES[zcta]) {
+            const curatedName = ZIP_OVERRIDES[zcta]
+            return {
+                ...geo,
+                neighborhoodName: curatedName,
+                neighborhoodSlug: slugify(curatedName),
+                zcta5: zcta,
+            }
+        }
+        return {
+            ...geo,
+            neighborhoodName: label.s,
+            neighborhoodSlug: slugify(label.s),
+            zcta5: zcta,
+        }
+    }
+
     // Try 1: parcel_ladder_v1 neighborhood_name (HCAD jurisdictions)
     try {
         const supabase = getSupabaseAdmin()
@@ -778,7 +814,7 @@ export async function enrichWithNeighborhood(geo: GeoInfo): Promise<GeoInfo> {
             .eq("tract_geoid20", geo.tractGeoid)
             .not("neighborhood_name", "is", null)
             .limit(1)
-            .single()
+            .maybeSingle()
 
         if (data?.neighborhood_name) {
             return {
@@ -799,7 +835,7 @@ export async function enrichWithNeighborhood(geo: GeoInfo): Promise<GeoInfo> {
             .eq("tract_geoid20", geo.tractGeoid)
             .not("zcta5", "is", null)
             .limit(1)
-            .single()
+            .maybeSingle()
 
         if (data?.zcta5) {
             const placeName = ZIP_NAMES[data.zcta5]

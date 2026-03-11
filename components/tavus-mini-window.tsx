@@ -11,9 +11,10 @@ interface TavusMiniWindowProps {
   onClose: () => void
   chatOpen?: boolean
   forecastMode?: boolean
+  embedded?: boolean
 }
 
-export function TavusMiniWindow({ conversationUrl, onClose, chatOpen = false, forecastMode = false }: TavusMiniWindowProps) {
+export function TavusMiniWindow({ conversationUrl, onClose, chatOpen = false, forecastMode = false, embedded = false }: TavusMiniWindowProps) {
   const [isMinimized, setIsMinimized] = useState(false)
   const [isMicOn, setIsMicOn] = useState(true)
   const [isCamOn, setIsCamOn] = useState(true)
@@ -274,17 +275,17 @@ export function TavusMiniWindow({ conversationUrl, onClose, chatOpen = false, fo
 
   return (
     <div
-      className={cn(
-        "fixed z-[10001] transition-all duration-300 ease-in-out",
-        // Mobile: right half, matching chat panel position
-        "bottom-0 left-0 right-0 w-full h-[25vh] rounded-t-xl overflow-hidden",
-        // Desktop: shift right when chat open
-        "md:bottom-5 md:w-auto md:h-auto md:rounded-2xl",
-        chatOpen ? "md:left-[420px]" : "md:left-5",
-        isMinimized
-          ? "md:w-[280px] md:h-[56px]"
-          : "md:w-[340px] md:h-[520px]"
-      )}
+      className={embedded
+        ? "h-full w-full overflow-hidden"
+        : cn(
+          "fixed z-[10001] transition-all duration-300 ease-in-out",
+          "bottom-0 left-0 right-0 w-full h-[25vh] rounded-t-xl overflow-hidden",
+          "md:bottom-5 md:w-auto md:h-auto md:rounded-2xl",
+          chatOpen ? "md:left-[420px]" : "md:left-5",
+          isMinimized
+            ? "md:w-[280px] md:h-[56px]"
+            : "md:w-[340px] md:h-[520px]"
+        )}
     >
       <div className="relative w-full h-full rounded-2xl overflow-hidden shadow-2xl border border-white/10 bg-[#0f0f14] flex flex-col">
         {/* Header */}

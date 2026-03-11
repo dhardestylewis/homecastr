@@ -2578,7 +2578,7 @@ export function ForecastMap({
                 </>
             )}
             {/* Forecast Tooltip — portal-based, responsive for mobile + desktop */}
-            {isLoaded && displayPos && displayProps && createPortal(
+            {isLoaded && ((displayPos && displayProps) || (isMobile && mobileContentOverride)) && createPortal(
                 <div
                     className={cn(
                         "z-[9999] glass-panel shadow-2xl overflow-hidden flex flex-col",
@@ -2592,7 +2592,7 @@ export function ForecastMap({
                         transition: swipeTouchStart === null ? 'transform 0.3s ease-out' : 'none',
                         height: '30vh',
                         maxHeight: '30vh',
-                        bottom: (isChatOpen || isTavusOpen) ? '25vh' : '0px',
+                        bottom: '0px',
                         overflowY: 'hidden',
                     } : {
                         left: displayPos.globalX,
