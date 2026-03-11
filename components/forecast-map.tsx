@@ -410,7 +410,7 @@ export function ForecastMap({
         }
         setGeocodedName(null) // Show loading
         const [lat, lng] = selectedCoords
-        const url = `/api/geocode?lat=${lat}&lng=${lng}&level=${geoLevel}`
+        const url = `/api/geocode?lat=${lat}&lng=${lng}&level=${geoLevel}&geoid=${selectedId || ''}`
         console.log('[GEOCODE] Fetching primary:', url)
         // Proxy through our API route to avoid CORS issues with Nominatim
         fetch(url)
@@ -421,15 +421,19 @@ export function ForecastMap({
                 const addr = data.address || {}
                 let name: string | null = null
                 if (geoLevel === "tract") {
-                    // Tracts often get too-broad names like "Bronx" from reverse geocoding.
-                    // We parse the human-readable tract number directly from the 11-digit GEOID at the end.
-                    const tractNum = selectedId ? selectedId.slice(-6) : ""
-                    if (tractNum && tractNum.length === 6) {
-                        const main = parseInt(tractNum.slice(0, 4), 10)
-                        const suffix = tractNum.slice(4)
-                        name = suffix === "00" ? `Tract ${main}` : `Tract ${main}.${suffix}`
+                    // Try to use the address name directly from our enriched backend
+                    if (addr.suburb || addr.neighbourhood) {
+                        name = addr.suburb || addr.neighbourhood
                     } else {
-                        name = addr.suburb || addr.neighbourhood || null
+                        // Fallback numeric parsing if no name found
+                        const tractNum = selectedId ? selectedId.slice(-6) : ""
+                        if (tractNum && tractNum.length === 6) {
+                            const main = parseInt(tractNum.slice(0, 4), 10)
+                            const suffix = tractNum.slice(4)
+                            name = suffix === "00" ? `Tract ${main}` : `Tract ${main}.${suffix}`
+                        } else {
+                            name = null
+                        }
                     }
                 } else if (geoLevel === "parcel") {
                     // Parcel: show full address (e.g. "1747 West 25th Street")
@@ -1039,6 +1043,23 @@ export function ForecastMap({
             // @ts-expect-error MapOptions Typescript definition doesn't include preserveDrawingBuffer but mapbox-gl and maplibre-gl both use it.
             preserveDrawingBuffer: true, // Required for canvas.toDataURL() in PDF export
         })
+
+        // MONKEY-PATCH MapLibre Events to trace the crash
+        const originalOn = map.on;
+        map.on = function(type: any, layerIdsOrListener: any, listener?: any) {
+            if (listener !== undefined && typeof layerIdsOrListener === 'object' && !Array.isArray(layerIdsOrListener) && layerIdsOrListener !== null) {
+                console.error("[MAP DEBUG] BAD MAP.ON!!!", type, layerIdsOrListener, listener);
+            }
+            return originalOn.call(this, type, layerIdsOrListener, listener);
+        };
+
+        const originalOnce = map.once;
+        map.once = function(type: any, layerIdsOrListener?: any, listener?: any) {
+            if (listener !== undefined && typeof layerIdsOrListener === 'object' && !Array.isArray(layerIdsOrListener) && layerIdsOrListener !== null) {
+                console.error("[MAP DEBUG] BAD MAP.ONCE!!!", type, layerIdsOrListener, listener);
+            }
+            return originalOnce.call(this, type, layerIdsOrListener, listener);
+        };
 
         // @ts-expect-error map.on 2-arg signature exists but TS gets confused with maplibregl's complex overloads
         map.on("load", () => {

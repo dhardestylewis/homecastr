@@ -286,6 +286,7 @@ export interface FanChartData {
   p50: number[]
   p90: number[]
   y_med?: number[]
+  forecastVariants?: Record<number, any>
 }
 
 // ============================================================================

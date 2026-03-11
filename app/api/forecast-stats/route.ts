@@ -97,11 +97,11 @@ export async function GET(request: Request) {
                     // Build lookup maps
                     const horizonMap = new Map<string, number>()
                     for (const row of (horizonRes.data || [])) {
-                        horizonMap.set((row as any)[level.key], row.p50)
+                        horizonMap.set((row as any)[level.key], (row as any).p50)
                     }
                     const baselineMap = new Map<string, number>()
                     for (const row of (baselineRes.data || [])) {
-                        baselineMap.set((row as any)[level.key], row.p50)
+                        baselineMap.set((row as any)[level.key], (row as any).p50)
                     }
 
                     // Compute growth_pct for each feature

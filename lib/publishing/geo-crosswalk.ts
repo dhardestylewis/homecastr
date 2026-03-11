@@ -625,24 +625,29 @@ export async function batchEnrichTracts(
     // Cousub labels (e.g. "Northwest Harris") are very broad — if a curated
     // ZIP_OVERRIDES name exists for the tract's ZCTA, prefer that instead.
     for (const tractId of tractGeoids) {
-        const label = TRACT_LABELS[tractId]
         if (label && label.s) {
             const zcta = TRACT_ZCTA[tractId] || ""
+            let name = label.s
             // Check if a more specific curated ZIP name should override a cousub label
             if (label.t === "cousub" && zcta && ZIP_OVERRIDES[zcta]) {
-                const curatedName = ZIP_OVERRIDES[zcta]
-                result.set(tractId, {
-                    name: curatedName,
-                    slug: slugify(curatedName),
-                    zcta5: zcta,
-                })
-            } else {
-                result.set(tractId, {
-                    name: label.s,
-                    slug: slugify(label.s),
-                    zcta5: zcta,
-                })
+                name = ZIP_OVERRIDES[zcta]
             }
+            
+            // Build the GeoInfo-like structure to feed into buildDisplayNameForTract
+            const mockGeoInfo = {
+                tractGeoid: tractId,
+                neighborhoodName: name,
+                neighborhoodSlug: slugify(name), // Note: batchEnrichTracts doesn't have the URL slug here, we just use the name slug
+                zcta5: zcta
+            } as GeoInfo
+            
+            const displayName = buildDisplayNameForTract(mockGeoInfo)
+
+            result.set(tractId, {
+                name: displayName,
+                slug: slugify(displayName),
+                zcta5: zcta,
+            })
         }
     }
 
@@ -664,9 +669,17 @@ export async function batchEnrichTracts(
                 if (data) {
                     for (const row of data as any[]) {
                         if (!result.has(row.tract_geoid20) && row.neighborhood_name) {
+                            const mockGeoInfo = {
+                                tractGeoid: row.tract_geoid20,
+                                neighborhoodName: row.neighborhood_name,
+                                neighborhoodSlug: slugify(row.neighborhood_name),
+                                zcta5: row.zcta5 || ""
+                            } as GeoInfo
+                            const displayName = buildDisplayNameForTract(mockGeoInfo)
+                            
                             result.set(row.tract_geoid20, {
-                                name: row.neighborhood_name,
-                                slug: slugify(row.neighborhood_name),
+                                name: displayName,
+                                slug: slugify(displayName),
                                 zcta5: row.zcta5 || "",
                             })
                         }
@@ -684,7 +697,16 @@ export async function batchEnrichTracts(
         if (zcta) {
             const placeName = ZIP_NAMES[zcta]
             const name = placeName || `ZIP ${zcta}`
-            result.set(tractId, { name, slug: slugify(name), zcta5: zcta })
+            
+            const mockGeoInfo = {
+                tractGeoid: tractId,
+                neighborhoodName: name,
+                neighborhoodSlug: slugify(name),
+                zcta5: zcta
+            } as GeoInfo
+            const displayName = buildDisplayNameForTract(mockGeoInfo)
+            
+            result.set(tractId, { name: displayName, slug: slugify(displayName), zcta5: zcta })
         } else {
             missing.push(tractId)
         }
@@ -709,7 +731,16 @@ export async function batchEnrichTracts(
                         if (!result.has(row.tract_geoid20) && row.zcta5) {
                             const placeName = ZIP_NAMES[row.zcta5]
                             const name = placeName || `ZIP ${row.zcta5}`
-                            result.set(row.tract_geoid20, { name, slug: slugify(name), zcta5: row.zcta5 })
+                            
+                            const mockGeoInfo = {
+                                tractGeoid: row.tract_geoid20,
+                                neighborhoodName: name,
+                                neighborhoodSlug: slugify(name),
+                                zcta5: row.zcta5
+                            } as GeoInfo
+                            const displayName = buildDisplayNameForTract(mockGeoInfo)
+                            
+                            result.set(row.tract_geoid20, { name: displayName, slug: slugify(displayName), zcta5: row.zcta5 })
                         }
                     }
                 }
@@ -725,7 +756,14 @@ export async function batchEnrichTracts(
         if (result.has(tractId)) continue
         const cached = TRACT_NAME_CACHE[tractId]
         if (cached) {
-            result.set(tractId, { name: cached, slug: slugify(cached), zcta5: "" })
+            const mockGeoInfo = {
+                tractGeoid: tractId,
+                neighborhoodName: cached,
+                neighborhoodSlug: slugify(cached),
+                zcta5: ""
+            } as GeoInfo
+            const displayName = buildDisplayNameForTract(mockGeoInfo)
+            result.set(tractId, { name: displayName, slug: slugify(displayName), zcta5: "" })
         } else {
             stillMissing.push(tractId)
         }
@@ -746,9 +784,17 @@ export async function batchEnrichTracts(
                 if (data) {
                     for (const row of data as any[]) {
                         if (!result.has(row.tract_geoid20) && row.display_name) {
+                            const mockGeoInfo = {
+                                tractGeoid: row.tract_geoid20,
+                                neighborhoodName: row.display_name,
+                                neighborhoodSlug: slugify(row.display_name),
+                                zcta5: ""
+                            } as GeoInfo
+                            const displayName = buildDisplayNameForTract(mockGeoInfo)
+                            
                             result.set(row.tract_geoid20, {
-                                name: row.display_name,
-                                slug: slugify(row.display_name),
+                                name: displayName,
+                                slug: slugify(displayName),
                                 zcta5: "",
                             })
                         }
@@ -767,7 +813,14 @@ export async function batchEnrichTracts(
         const countyFips = tractId.substring(0, 5) // e.g. "01073"
         const countyName = COUNTY_NAMES[countyFips] || COUNTY_CITY[countyFips]
         if (countyName) {
-            result.set(tractId, { name: countyName, slug: slugify(countyName), zcta5: "" })
+            const mockGeoInfo = {
+                tractGeoid: tractId,
+                neighborhoodName: countyName,
+                neighborhoodSlug: slugify(countyName),
+                zcta5: ""
+            } as GeoInfo
+            const displayName = buildDisplayNameForTract(mockGeoInfo)
+            result.set(tractId, { name: displayName, slug: slugify(displayName), zcta5: "" })
         }
     }
 
@@ -790,19 +843,27 @@ export async function enrichWithNeighborhood(geo: GeoInfo): Promise<GeoInfo> {
         // Cousub labels are too broad — prefer curated ZIP name if available
         if (label.t === "cousub" && zcta && ZIP_OVERRIDES[zcta]) {
             const curatedName = ZIP_OVERRIDES[zcta]
-            return {
+            
+            const mappedGeo = {
                 ...geo,
                 neighborhoodName: curatedName,
                 neighborhoodSlug: slugify(curatedName),
                 zcta5: zcta,
             }
+            mappedGeo.neighborhoodName = buildDisplayNameForTract(mappedGeo)
+            mappedGeo.neighborhoodSlug = slugify(mappedGeo.neighborhoodName)
+            return mappedGeo
         }
-        return {
+        
+        const mappedGeo = {
             ...geo,
             neighborhoodName: label.s,
             neighborhoodSlug: slugify(label.s),
             zcta5: zcta,
         }
+        mappedGeo.neighborhoodName = buildDisplayNameForTract(mappedGeo)
+        mappedGeo.neighborhoodSlug = slugify(mappedGeo.neighborhoodName)
+        return mappedGeo
     }
 
     // Try 1: parcel_ladder_v1 neighborhood_name (HCAD jurisdictions)
@@ -817,12 +878,15 @@ export async function enrichWithNeighborhood(geo: GeoInfo): Promise<GeoInfo> {
             .maybeSingle()
 
         if (data?.neighborhood_name) {
-            return {
+            const mappedGeo = {
                 ...geo,
                 neighborhoodName: data.neighborhood_name,
                 neighborhoodSlug: slugify(data.neighborhood_name),
                 zcta5: data.zcta5 || geo.zcta5,
             }
+            mappedGeo.neighborhoodName = buildDisplayNameForTract(mappedGeo)
+            mappedGeo.neighborhoodSlug = slugify(mappedGeo.neighborhoodName)
+            return mappedGeo
         }
     } catch { /* non-fatal */ }
 
@@ -840,19 +904,25 @@ export async function enrichWithNeighborhood(geo: GeoInfo): Promise<GeoInfo> {
         if (data?.zcta5) {
             const placeName = ZIP_NAMES[data.zcta5]
             if (placeName) {
-                return {
+                const mappedGeo = {
                     ...geo,
                     neighborhoodName: placeName,
                     neighborhoodSlug: slugify(placeName),
                     zcta5: data.zcta5,
                 }
+                mappedGeo.neighborhoodName = buildDisplayNameForTract(mappedGeo)
+                mappedGeo.neighborhoodSlug = slugify(mappedGeo.neighborhoodName)
+                return mappedGeo
             } else {
-                return {
+                const mappedGeo = {
                     ...geo,
                     neighborhoodName: `ZIP ${data.zcta5}`,
                     neighborhoodSlug: `zip-${data.zcta5}`,
                     zcta5: data.zcta5,
                 }
+                mappedGeo.neighborhoodName = buildDisplayNameForTract(mappedGeo)
+                mappedGeo.neighborhoodSlug = slugify(mappedGeo.neighborhoodName)
+                return mappedGeo
             }
         }
     } catch { /* non-fatal */ }
@@ -862,12 +932,15 @@ export async function enrichWithNeighborhood(geo: GeoInfo): Promise<GeoInfo> {
     if (staticZcta) {
         const placeName = ZIP_NAMES[staticZcta]
         if (placeName) {
-            return {
+            const mappedGeo = {
                 ...geo,
                 neighborhoodName: placeName,
                 neighborhoodSlug: slugify(placeName),
                 zcta5: staticZcta,
             }
+            mappedGeo.neighborhoodName = buildDisplayNameForTract(mappedGeo)
+            mappedGeo.neighborhoodSlug = slugify(mappedGeo.neighborhoodName)
+            return mappedGeo
         }
     }
 
@@ -875,11 +948,14 @@ export async function enrichWithNeighborhood(geo: GeoInfo): Promise<GeoInfo> {
     const countyFips = geo.tractGeoid.substring(0, 5)
     const countyName = COUNTY_NAMES[countyFips] || COUNTY_CITY[countyFips]
     if (countyName) {
-        return {
+        const mappedGeo = {
             ...geo,
             neighborhoodName: countyName,
             neighborhoodSlug: slugify(countyName),
         }
+        mappedGeo.neighborhoodName = buildDisplayNameForTract(mappedGeo)
+        mappedGeo.neighborhoodSlug = slugify(mappedGeo.neighborhoodName)
+        return mappedGeo
     }
 
     return geo
@@ -1328,9 +1404,50 @@ export async function getLatestOriginYear(
 // Helpers
 // ---------------------------------------------------------------------------
 
-function slugify(str: string): string {
+export function slugify(str: string): string {
     return str
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-+|-+$/g, "")
+}
+
+/**
+ * Reconstructs the disambiguated UI display name for a tract, matching the city
+ * hub's slug generation logic. Ensures tracts with duplicate base names (like "McCall")
+ * get their unique suffix (ZIP or Tract ID) appended.
+ */
+export function buildDisplayNameForTract(geo: GeoInfo): string {
+    const baseSlug = slugify(geo.neighborhoodName)
+    let displayName = geo.neighborhoodName
+    
+    if (geo.neighborhoodSlug !== baseSlug && geo.neighborhoodSlug.startsWith(baseSlug + "-")) {
+        const remainder = geo.neighborhoodSlug.substring(baseSlug.length + 1) // e.g. "lakehead", "tr-970200"
+        const tractSuffix = geo.tractGeoid.substring(5)
+        
+        if (remainder === `tr-${tractSuffix}`) {
+            // It fell back to Tr.XXXXX. Append the ZIP/ZIP_NAME if available.
+            let qualifier = geo.zcta5 || ""
+            if (qualifier && ZIP_NAMES[qualifier]) {
+                const resolvedName = ZIP_NAMES[qualifier]
+                if (resolvedName.toLowerCase() !== geo.neighborhoodName.toLowerCase()) {
+                    qualifier = resolvedName
+                }
+            }
+            displayName = qualifier 
+                ? `${geo.neighborhoodName} · ${qualifier} · Tr.${tractSuffix}`
+                : `${geo.neighborhoodName} · Tr.${tractSuffix}`
+        } else {
+            // It's a unique ZIP or ZIP_NAME (e.g. "lakehead" or "83638")
+            const qualifierSlug = remainder
+            let qualifierStr = qualifierSlug
+            if (geo.zcta5 && slugify(geo.zcta5) === qualifierSlug) qualifierStr = geo.zcta5
+            if (geo.zcta5 && ZIP_NAMES[geo.zcta5] && slugify(ZIP_NAMES[geo.zcta5]) === qualifierSlug) qualifierStr = ZIP_NAMES[geo.zcta5]
+            
+            // Prevent stuttering like "McCall · McCall"
+            if (qualifierStr.toLowerCase() !== geo.neighborhoodName.toLowerCase()) {
+                displayName = `${geo.neighborhoodName} · ${qualifierStr}`
+            }
+        }
+    }
+    return displayName
 }

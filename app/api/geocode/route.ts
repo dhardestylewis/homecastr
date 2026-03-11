@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { enrichWithNeighborhood } from "@/lib/publishing/geo-crosswalk"
 
 // ── Throttle for Nominatim (free, 1 req/sec) ──
 let lastNominatimTime = 0
@@ -101,6 +102,7 @@ export async function GET(req: NextRequest) {
     const lat = req.nextUrl.searchParams.get("lat")
     const lng = req.nextUrl.searchParams.get("lng")
     const level = req.nextUrl.searchParams.get("level") || "tract"
+    const geoid = req.nextUrl.searchParams.get("geoid")
 
     if (!lat || !lng) {
         return NextResponse.json({ error: "lat and lng required" }, { status: 400 })
@@ -110,7 +112,27 @@ export async function GET(req: NextRequest) {
 
     try {
         // ═══════════════════════════════════════════════════
-        // TRACT / ZCTA: BigDataCloud (neighbourhood only)
+        // TRACT: Internal Crosswalk (geo-crosswalk.ts)
+        // ═══════════════════════════════════════════════════
+        if (level === "tract" && geoid) {
+            try {
+                const geo = await enrichWithNeighborhood({ tractGeoid: geoid } as any)
+                if (geo?.neighborhoodName) {
+                    return NextResponse.json({
+                        address: {
+                            suburb: geo.neighborhoodName,
+                            neighbourhood: geo.neighborhoodName
+                        },
+                        display_name: geo.neighborhoodName
+                    }, { headers: cacheHeaders })
+                }
+            } catch (err) {
+                console.error("[GEOCODE PROXY] enrichWithNeighborhood failed:", err)
+            }
+        }
+
+        // ═══════════════════════════════════════════════════
+        // ZCTA / FALLBACK: BigDataCloud
         //   → fallback: Nominatim → empty
         // ═══════════════════════════════════════════════════
         if (level === "tract" || level === "zcta") {
