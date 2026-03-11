@@ -2583,7 +2583,7 @@ export function ForecastMap({
             {isLoaded && ((displayPos && displayProps) || (isMobile && mobileContentOverride)) && createPortal(
                 <div
                     className={cn(
-                        "z-[9999] glass-panel shadow-2xl overflow-hidden flex flex-col",
+                        "z-[9999] glass-panel md:shadow-2xl overflow-hidden flex flex-col",
                         isMobile
                             ? `fixed left-0 right-0 w-full rounded-t-xl rounded-b-none border-t border-x-0 border-b-0 pointer-events-auto`
                             : "fixed rounded-xl w-[320px]",
