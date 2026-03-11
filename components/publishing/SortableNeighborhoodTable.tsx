@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react"
 import Link from "next/link"
-import { ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react"
+import { ChevronUp, ChevronDown, ChevronsUpDown, Search } from "lucide-react"
 
 interface TractRow {
     tractGeoid: string
@@ -34,8 +34,13 @@ const fmtPct = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`
 export function SortableNeighborhoodTable({ rows, state, city, avgAppreciation }: Props) {
     const [sortKey, setSortKey] = useState<SortKey>("outlook")
     const [sortDir, setSortDir] = useState<SortDir>("desc")
+    const [searchQuery, setSearchQuery] = useState("")
 
     const sorted = useMemo(() => {
+        const filtered = rows.filter(r => 
+            r.neighborhoodName.toLowerCase().includes(searchQuery.toLowerCase())
+        )
+
         const comparators: Record<SortKey, (a: TractRow, b: TractRow) => number> = {
             name: (a, b) => a.neighborhoodName.localeCompare(b.neighborhoodName),
             value: (a, b) => a.p50_current - b.p50_current,
@@ -44,8 +49,8 @@ export function SortableNeighborhoodTable({ rows, state, city, avgAppreciation }
         }
         const cmp = comparators[sortKey]
         const dir = sortDir === "asc" ? 1 : -1
-        return [...rows].sort((a, b) => cmp(a, b) * dir)
-    }, [rows, sortKey, sortDir])
+        return filtered.sort((a, b) => cmp(a, b) * dir)
+    }, [rows, sortKey, sortDir, searchQuery])
 
     const toggleSort = (key: SortKey) => {
         if (sortKey === key) {
@@ -64,9 +69,23 @@ export function SortableNeighborhoodTable({ rows, state, city, avgAppreciation }
     }
 
     return (
-        <div className="glass-panel rounded-xl overflow-hidden">
-            <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+        <div className="space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <h2 className="text-xl font-semibold text-foreground">Browse Markets</h2>
+                <div className="relative w-full sm:w-72">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <input 
+                        type="text" 
+                        placeholder="Search neighborhoods..." 
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full bg-background border border-border rounded-lg pl-9 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 text-foreground placeholder:text-muted-foreground"
+                    />
+                </div>
+            </div>
+            <div className="glass-panel rounded-xl overflow-hidden">
+                <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
                     <thead>
                         <tr className="text-xs text-muted-foreground uppercase tracking-wider border-b border-border bg-secondary/30">
                             <th className="text-left py-3 px-4 w-10">#</th>
@@ -135,6 +154,11 @@ export function SortableNeighborhoodTable({ rows, state, city, avgAppreciation }
                         })}
                     </tbody>
                 </table>
+                {sorted.length === 0 && (
+                    <div className="p-8 text-center text-muted-foreground text-sm">
+                        No markets found matching "{searchQuery}"
+                    </div>
+                )}
             </div>
         </div>
     )
