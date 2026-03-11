@@ -1082,29 +1082,22 @@ export function ForecastMap({
         map.on("load", () => {
             setIsLoaded(true)
 
-            // Add a transparent 1x1 image as fallback for fill-pattern (MapLibre requires resolvedImage, not null)
-            const transparentCanvas = document.createElement('canvas');
-            transparentCanvas.width = 1;
-            transparentCanvas.height = 1;
-            map.addImage('transparent-pattern', transparentCanvas);
-
-            // Add a crosshatch pattern image for selected/pinned features
-            const addCrosshatchPattern = () => {
-                const svg = `
-                    <svg width="20" height="20" xmlns="http://www.w3.org/2000/svg">
-                        <rect width="20" height="20" fill="transparent" />
-                        <path d="M-5,25 L25,-5 M-5,-5 L25,25" stroke="rgba(255, 255, 255, 0.4)" stroke-width="2" />
-                    </svg>
-                `.trim();
-                const img = new Image(20, 20);
-                img.onload = () => {
-                    if (!map.hasImage('crosshatch-pattern')) {
-                        map.addImage('crosshatch-pattern', img);
-                    }
-                };
-                img.src = 'data:image/svg+xml;base64,' + btoa(svg);
-            };
-            addCrosshatchPattern();
+            // Add a crosshatch pattern image synchronously using canvas
+            const patternCanvas = document.createElement('canvas');
+            patternCanvas.width = 20;
+            patternCanvas.height = 20;
+            const ctx = patternCanvas.getContext('2d');
+            if (ctx) {
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(-5, 25);
+                ctx.lineTo(25, -5);
+                ctx.moveTo(-5, -5);
+                ctx.lineTo(25, 25);
+                ctx.stroke();
+            }
+            map.addImage('crosshatch-pattern', patternCanvas);
 
             const fillColor = buildFillColor()
 
@@ -1139,14 +1132,28 @@ export function ForecastMap({
                             "fill-color": fillColor,
                             "fill-opacity": 0.35,
                             "fill-outline-color": "rgba(255,255,255,0.2)",
-                            "fill-pattern": [
+                        },
+                    })
+
+                    // Crosshatch pattern overlay layer (only visible for selected/pinned features)
+                    map.addLayer({
+                        id: `forecast-pattern-${lvl.name}-${suffix}`,
+                        type: "fill",
+                        source: sourceId,
+                        "source-layer": lvl.name,
+                        minzoom: lvl.minzoom,
+                        maxzoom: lvl.maxzoom + 0.01,
+                        layout: { visibility: visible ? "visible" : "none" },
+                        paint: {
+                            "fill-pattern": "crosshatch-pattern",
+                            "fill-opacity": [
                                 "case",
                                 ["boolean", ["feature-state", "selected"], false],
-                                "crosshatch-pattern",
+                                1,
                                 ["boolean", ["feature-state", "pinned"], false],
-                                "crosshatch-pattern",
-                                "transparent-pattern"
-                            ]
+                                1,
+                                0,
+                            ],
                         },
                     })
 
@@ -2424,13 +2431,17 @@ export function ForecastMap({
             for (const lvl of GEO_LEVELS) {
                 const fillNext = `forecast-fill-${lvl.name}-${nextSuffix}`
                 const outlineNext = `forecast-outline-${lvl.name}-${nextSuffix}`
+                const patternNext = `forecast-pattern-${lvl.name}-${nextSuffix}`
                 const fillCur = `forecast-fill-${lvl.name}-${currentSuffix}`
                 const outlineCur = `forecast-outline-${lvl.name}-${currentSuffix}`
+                const patternCur = `forecast-pattern-${lvl.name}-${currentSuffix}`
 
                 if (map.getLayer(fillNext)) map.setLayoutProperty(fillNext, "visibility", "visible")
                 if (map.getLayer(outlineNext)) map.setLayoutProperty(outlineNext, "visibility", "visible")
+                if (map.getLayer(patternNext)) map.setLayoutProperty(patternNext, "visibility", "visible")
                 if (map.getLayer(fillCur)) map.setLayoutProperty(fillCur, "visibility", "none")
                 if (map.getLayer(outlineCur)) map.setLayoutProperty(outlineCur, "visibility", "none")
+                if (map.getLayer(patternCur)) map.setLayoutProperty(patternCur, "visibility", "none")
             }
 
             ; (map as any)._activeSuffix = nextSuffix
