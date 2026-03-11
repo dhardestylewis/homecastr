@@ -857,6 +857,31 @@ export async function enrichWithNeighborhood(geo: GeoInfo): Promise<GeoInfo> {
         }
     } catch { /* non-fatal */ }
 
+    // Try 2.5: Static TRACT_ZCTA crosswalk (instant, no DB hit)
+    const staticZcta = TRACT_ZCTA[geo.tractGeoid]
+    if (staticZcta) {
+        const placeName = ZIP_NAMES[staticZcta]
+        if (placeName) {
+            return {
+                ...geo,
+                neighborhoodName: placeName,
+                neighborhoodSlug: slugify(placeName),
+                zcta5: staticZcta,
+            }
+        }
+    }
+
+    // Try 3: County name fallback (matches batchEnrichTracts Phase 5)
+    const countyFips = geo.tractGeoid.substring(0, 5)
+    const countyName = COUNTY_NAMES[countyFips] || COUNTY_CITY[countyFips]
+    if (countyName) {
+        return {
+            ...geo,
+            neighborhoodName: countyName,
+            neighborhoodSlug: slugify(countyName),
+        }
+    }
+
     return geo
 }
 

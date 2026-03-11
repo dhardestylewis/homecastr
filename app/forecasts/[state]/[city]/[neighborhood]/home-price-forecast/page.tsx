@@ -44,12 +44,9 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     const h5 = data?.forecast.horizons.find(h => h.horizon_m === 60)
     const appreciation = (h5 && !isOutlier) ? `${h5.appreciation > 0 ? "+" : ""}${h5.appreciation.toFixed(1)}%` : ""
 
-    const forecastYears = data?.forecast.horizons.map(h => h.forecastYear) ?? []
-    // Outlook = only years beyond the current baseline (2026)
-    const baselineYear = (data?.forecast.originYear ?? 2024) + 2
-    const outlookYears = forecastYears.filter(y => y > baselineYear)
-    const minForecastYear = outlookYears.length > 0 ? Math.min(...outlookYears) : 2027
-    const maxForecastYear = outlookYears.length > 0 ? Math.max(...outlookYears) : 2030
+    // Outlook = consistent 2027–2030 range regardless of origin vintage
+    const minForecastYear = 2027
+    const maxForecastYear = 2030
     const title = `${geo.neighborhoodName} Home Price Forecast, ${minForecastYear}–${maxForecastYear}`
     const description = isOutlier
         ? `Detailed modeling and market outlook for ${geo.neighborhoodName} (${geo.city}, ${geo.stateAbbr}). Data access available by request.`
@@ -123,13 +120,9 @@ export default async function NeighborhoodForecastPage({ params, searchParams }:
 
     const h5 = data.forecast.horizons.find(h => h.horizon_m === 60)
 
-    // Compute dynamic forecast year range from actual horizons
-    const forecastYears = data.forecast.horizons.map(h => h.forecastYear)
-    // Outlook = only years beyond the current baseline (2026)
-    const baselineYear = data.forecast.originYear + 2  // always 2026 per baselineHorizonM logic
-    const outlookYears = forecastYears.filter(y => y > baselineYear)
-    const minForecastYear = outlookYears.length > 0 ? Math.min(...outlookYears) : 2027
-    const maxForecastYear = outlookYears.length > 0 ? Math.max(...outlookYears) : 2030
+    // Outlook = consistent 2027–2030 range regardless of origin vintage
+    const minForecastYear = 2027
+    const maxForecastYear = 2030
 
     // Enrich comparable tract names using crosswalks
     const allCompIds = [
