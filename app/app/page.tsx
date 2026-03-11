@@ -742,6 +742,12 @@ function DashboardContent() {
             isTavusOpen={!!tavusConversationUrl && !isTavusLoading}
             compareMode={compareMode}
             onPinnedCountChange={setPinnedCount}
+            onMobileClose={() => {
+              if (isChatOpen) setIsChatOpen(false)
+              else if (tavusConversationUrl) { setTavusConversationUrl(null); setIsTavusLoading(false) }
+              else if (isContactOpen) setIsContactOpen(false)
+              else selectFeature(null)
+            }}
             mobileBottomBar={isMobileViewport ? (
               <div>
                 {/* Filters sheet — accessible even when tooltip is active */}

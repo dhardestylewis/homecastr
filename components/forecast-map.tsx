@@ -149,6 +149,7 @@ interface ForecastMapProps {
     onPinnedCountChange?: (count: number) => void
     mobileBottomBar?: React.ReactNode
     mobileContentOverride?: React.ReactNode
+    onMobileClose?: () => void
 }
 
 interface PinnedEntry {
@@ -176,6 +177,7 @@ export function ForecastMap({
     onPinnedCountChange,
     mobileBottomBar,
     mobileContentOverride,
+    onMobileClose,
 }: ForecastMapProps) {
     const mapContainerRef = useRef<HTMLDivElement>(null)
     const mapRef = useRef<maplibregl.Map | null>(null)
@@ -2592,7 +2594,7 @@ export function ForecastMap({
                         transition: swipeTouchStart === null ? 'transform 0.3s ease-out' : 'none',
                         height: '30vh',
                         maxHeight: '30vh',
-                        bottom: '0px',
+                        bottom: '56px',
                         overflowY: 'hidden',
                     } : {
                         left: displayPos.globalX,
@@ -2628,7 +2630,11 @@ export function ForecastMap({
                         } else {
                             if (swipeDragOffset > 150) {
                                 // Dismiss completely
-                                onFeatureSelect(null)
+                                if (onMobileClose) {
+                                    onMobileClose()
+                                } else {
+                                    onFeatureSelect(null)
+                                }
                             } else if (swipeDragOffset > 50) {
                                 setMobileMinimized(true)
                             }
@@ -2650,13 +2656,17 @@ export function ForecastMap({
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     e.preventDefault();
-                                    selectedIdRef.current = null;
-                                    setSelectedId(null);
-                                    hoveredIdRef.current = null;
-                                    setTooltipData(null);
-                                    setFixedTooltipPos(null);
-                                    setSelectedCoords(null);
-                                    onFeatureSelect(null);
+                                    if (onMobileClose) {
+                                        onMobileClose();
+                                    } else {
+                                        selectedIdRef.current = null;
+                                        setSelectedId(null);
+                                        hoveredIdRef.current = null;
+                                        setTooltipData(null);
+                                        setFixedTooltipPos(null);
+                                        setSelectedCoords(null);
+                                        onFeatureSelect(null);
+                                    }
                                 }}
                                 className="absolute right-2 top-1 w-8 h-8 flex items-center justify-center rounded-full active:bg-muted/60 text-muted-foreground"
                                 aria-label="Close"
