@@ -148,6 +148,7 @@ interface ForecastMapProps {
     compareMode?: boolean
     onPinnedCountChange?: (count: number) => void
     mobileBottomBar?: React.ReactNode
+    mobileContentOverride?: React.ReactNode
 }
 
 interface PinnedEntry {
@@ -174,6 +175,7 @@ export function ForecastMap({
     compareMode = false,
     onPinnedCountChange,
     mobileBottomBar,
+    mobileContentOverride,
 }: ForecastMapProps) {
     const mapContainerRef = useRef<HTMLDivElement>(null)
     const mapRef = useRef<maplibregl.Map | null>(null)
@@ -2544,6 +2546,37 @@ export function ForecastMap({
                 </div>
             )}
 
+            {/* Mobile: Floating StreetView button + overlay */}
+            {isMobile && process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY && (selectedId ? selectedCoords : (hoverDwell ? tooltipCoords : null)) && (
+                <>
+                    {/* Floating button — bottom-left of map */}
+                    <button
+                        onClick={() => setMobileStreetViewOpen(!mobileStreetViewOpen)}
+                        className="absolute bottom-[32vh] left-3 z-50 w-10 h-10 rounded-full glass-panel shadow-xl flex items-center justify-center active:scale-90 transition-transform border border-border/40"
+                        aria-label={mobileStreetViewOpen ? "Close Street View" : "Open Street View"}
+                        style={{ touchAction: 'manipulation' }}
+                    >
+                        <span className="text-base">{mobileStreetViewOpen ? '✕' : '📷'}</span>
+                    </button>
+
+                    {/* Overlay — fills top half when open */}
+                    {mobileStreetViewOpen && (
+                        <div className="absolute top-0 left-0 right-0 h-[50vh] z-40 bg-black/90 animate-in fade-in slide-in-from-top-4 duration-200">
+                            <StreetViewCarousel
+                                h3Ids={[]}
+                                apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY}
+                                coordinates={(selectedId ? selectedCoords : tooltipCoords)!}
+                            />
+                            <button
+                                onClick={() => setMobileStreetViewOpen(false)}
+                                className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/60 text-white flex items-center justify-center z-50"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                    )}
+                </>
+            )}
             {/* Forecast Tooltip — portal-based, responsive for mobile + desktop */}
             {isLoaded && displayPos && displayProps && createPortal(
                 <div
@@ -2737,7 +2770,10 @@ export function ForecastMap({
                         /* Mobile: Full-width chart + embedded bottom bar */
                         <>
                         <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-                            {(() => {
+                            {mobileContentOverride ? (
+                                /* Chat/Tavus/etc override fills the content area */
+                                mobileContentOverride
+                            ) : (() => {
                                 const currentVal = fanChartData?.p50?.[0] ?? historicalValues?.[historicalValues.length - 1] ?? null
                                 const yearIdx = fanChartData?.years?.indexOf(year) ?? -1
                                 const histIdx = year >= 2019 && year <= 2025 ? year - 2019 : -1

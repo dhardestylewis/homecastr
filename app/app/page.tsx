@@ -676,6 +676,17 @@ function DashboardContent() {
                 </div>
               </div>
             ) : undefined}
+            mobileContentOverride={isMobileViewport && isChatOpen ? (
+              <ChatPanel
+                isOpen={true}
+                embedded={true}
+                onClose={() => setIsChatOpen(false)}
+                onMapAction={handleChatMapAction}
+                forecastMode={filters.useForecastMap ?? false}
+                tooltipVisible={!!(mapState.selectedId || mapState.hoveredId)}
+                mapViewport={{ center: mapState.center, zoom: mapState.zoom, selectedId: mapState.selectedId }}
+              />
+            ) : undefined}
           />
         ) : filters.useVectorMap ? (
           <VectorMap
@@ -708,53 +719,18 @@ function DashboardContent() {
           />
         )}
 
-        {/* Chat Panel Overlay */}
-        <ChatPanel
-          isOpen={isChatOpen}
-          onClose={() => setIsChatOpen(false)}
-          onMapAction={handleChatMapAction}
-          forecastMode={filters.useForecastMap ?? false}
-          onTavusRequest={handleFloatingConsultAI}
-          tooltipVisible={!!(mapState.selectedId || mapState.hoveredId)}
-          mapViewport={{ center: mapState.center, zoom: mapState.zoom, selectedId: mapState.selectedId }}
-          onShare={() => {
-            const url = new URL(window.location.href)
-            if (currentYear !== 2027) url.searchParams.set("yr", currentYear.toString())
-            const pinnedIds = (window as any).__getPinnedIds?.() as string[] | undefined
-            if (pinnedIds?.length) url.searchParams.set("compare", pinnedIds.join(","))
-            else url.searchParams.delete("compare")
-            navigator.clipboard.writeText(url.toString()).then(() => {
-              setLinkCopied(true)
-              toast({ title: "Link copied", description: pinnedIds?.length ? `Shared with ${pinnedIds.length} comparison(s)` : "Share this URL to show the same view", duration: 2500 })
-              setTimeout(() => setLinkCopied(false), 2500)
-            })
-          }}
-          onPDF={async () => {
-            try {
-              toast({ title: "Generating PDF…", duration: 2000 })
-              const captureMap = (window as any).__captureMapImage
-              const mapImageDataUrl: string | undefined = captureMap ? await captureMap() : undefined
-              const selectedId = mapState.selectedId
-              let historicalValues: (number | null)[] = []
-              let p50: number[] = [], p10: number[] = [], p90: number[] = [], years: number[] = []
-              if (selectedId) {
-                const level = selectedId.length === 3 ? "zip3" : selectedId.length === 5 ? "zcta" : selectedId.length === 11 ? "tract" : selectedId.length === 15 ? "tabblock" : "parcel"
-                const res = await fetch(`/api/forecast-detail?level=${level}&id=${encodeURIComponent(selectedId)}&originYear=${pageOriginYear}`)
-                if (res.ok) { const json = await res.json(); historicalValues = json.historicalValues || []; p50 = json.p50 || []; p10 = json.p10 || []; p90 = json.p90 || []; years = json.years || [] }
-              }
-              const shareUrl = new URL(window.location.href)
-              if (currentYear !== 2027) shareUrl.searchParams.set("yr", currentYear.toString())
-              const pdfPinnedIds = (window as any).__getPinnedIds?.() as string[] | undefined
-              if (pdfPinnedIds?.length) shareUrl.searchParams.set("compare", pdfPinnedIds.join(","))
-              await generateForecastPDF({
-                locationName: searchBarValue && !searchBarValue.includes("Loading") ? searchBarValue : selectedId ? selectedId : "Map Overview",
-                locationId: selectedId || "—", currentYear, historicalValues, p50, p10, p90, years, mapImageDataUrl,
-                shareUrl: shareUrl.toString(), pinnedComparisons: (window as any).__getPinnedComparisons?.() || undefined,
-              })
-            } catch (err) { console.error("PDF generation failed:", err); toast({ title: "PDF failed", description: "Could not generate report", variant: "destructive" }) }
-          }}
-          onContact={() => setIsContactOpen(true)}
-        />
+        {/* Chat Panel Overlay — desktop only (on mobile, chat is embedded in unified bottom sheet) */}
+        {!isMobileViewport && (
+          <ChatPanel
+            isOpen={isChatOpen}
+            onClose={() => setIsChatOpen(false)}
+            onMapAction={handleChatMapAction}
+            forecastMode={filters.useForecastMap ?? false}
+            onTavusRequest={handleFloatingConsultAI}
+            tooltipVisible={!!(mapState.selectedId || mapState.hoveredId)}
+            mapViewport={{ center: mapState.center, zoom: mapState.zoom, selectedId: mapState.selectedId }}
+          />
+        )}
 
         {/* Desktop Sidebar Container - Top Left (Hidden on mobile + embedded) */}
         {!searchParams.has("embedded") && !isMobileViewport && (

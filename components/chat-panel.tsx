@@ -34,9 +34,10 @@ interface ChatPanelProps {
     onShare?: () => void
     onPDF?: () => void
     onContact?: () => void
+    embedded?: boolean
 }
 
-export function ChatPanel({ isOpen, onClose, onMapAction, forecastMode, onTavusRequest, tooltipVisible = false, mapViewport, onShare, onPDF, onContact }: ChatPanelProps) {
+export function ChatPanel({ isOpen, onClose, onMapAction, forecastMode, onTavusRequest, tooltipVisible = false, mapViewport, onShare, onPDF, onContact, embedded = false }: ChatPanelProps) {
     const [messages, setMessages] = useState<ChatMessage[]>([])
     const [input, setInput] = useState("")
     const [isLoading, setIsLoading] = useState(false)
@@ -181,9 +182,11 @@ export function ChatPanel({ isOpen, onClose, onMapAction, forecastMode, onTavusR
 
     return (
         <div
-            {...(!isOpen ? { inert: true } : {})}
-            aria-hidden={!isOpen}
-            className={`
+            {...(!isOpen && !embedded ? { inert: true } : {})}
+            aria-hidden={!isOpen && !embedded}
+            className={embedded
+                ? "h-full w-full overflow-hidden"
+                : `
         fixed z-[10000]
         transition-all duration-300 ease-in-out
         ${isOpen
@@ -193,7 +196,7 @@ export function ChatPanel({ isOpen, onClose, onMapAction, forecastMode, onTavusR
         bottom-0 left-0 right-0 w-full rounded-t-xl overflow-hidden
         md:bottom-5 md:left-5 md:right-auto md:w-[340px] md:h-[520px] md:max-h-[min(520px,calc(100vh-160px))] md:rounded-2xl
       `}
-            style={isKeyboardOpen ? {
+            style={embedded ? {} : isKeyboardOpen ? {
                 height: `${kbPanelHeight}px`,
                 maxHeight: `${kbPanelHeight}px`,
                 width: '100%',
@@ -205,8 +208,8 @@ export function ChatPanel({ isOpen, onClose, onMapAction, forecastMode, onTavusR
                 maxHeight: '25vh',
             } : {}}
         >
-            <div className="h-full flex flex-col glass-panel border border-white/10 rounded-t-xl md:rounded-2xl shadow-2xl">
-                {/* Header */}
+            <div className={embedded ? "h-full flex flex-col" : "h-full flex flex-col glass-panel border border-white/10 rounded-t-xl md:rounded-2xl shadow-2xl"}>
+                {/* Header — minimal in embedded mode */}
                 {!isKeyboardOpen && (
                     <div className="flex items-center justify-between px-3 h-9 border-b border-border bg-background/80 shrink-0">
                         <div className="flex items-center gap-2">
@@ -216,38 +219,6 @@ export function ChatPanel({ isOpen, onClose, onMapAction, forecastMode, onTavusR
                             </span>
                         </div>
                         <div className="flex items-center gap-1">
-                            {/* Utility icons — mobile only, when chat covers the floating buttons */}
-                            {isMobile && onShare && (
-                                <button
-                                    onClick={onShare}
-                                    className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-muted active:bg-muted/60 transition-colors"
-                                    aria-label="Share link"
-                                    style={{ touchAction: 'manipulation' }}
-                                >
-                                    <Link2 className="w-3.5 h-3.5" />
-                                </button>
-                            )}
-                            {isMobile && onPDF && (
-                                <button
-                                    onClick={onPDF}
-                                    className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-muted active:bg-muted/60 transition-colors"
-                                    aria-label="Download PDF"
-                                    style={{ touchAction: 'manipulation' }}
-                                >
-                                    <FileDown className="w-3.5 h-3.5" />
-                                </button>
-                            )}
-                            {isMobile && onContact && (
-                                <button
-                                    onClick={onContact}
-                                    className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-muted active:bg-muted/60 transition-colors text-[hsl(45,80%,45%)]"
-                                    aria-label="Request analysis"
-                                    style={{ touchAction: 'manipulation' }}
-                                >
-                                    <CalendarDays className="w-3.5 h-3.5" />
-                                </button>
-                            )}
-
                             <button
                                 onClick={onClose}
                                 className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-muted active:bg-muted/60 transition-colors"
@@ -352,7 +323,6 @@ export function ChatPanel({ isOpen, onClose, onMapAction, forecastMode, onTavusR
 
                     <div ref={messagesEndRef} />
                 </div>
-
                 {/* Input */}
                 <div className="px-3 pb-3 pt-2 border-t border-border">
                     <div className="flex items-center gap-2 bg-muted/30 rounded-xl px-3 py-1.5 border border-border/50 focus-within:border-primary/50 transition-colors">
@@ -368,18 +338,6 @@ export function ChatPanel({ isOpen, onClose, onMapAction, forecastMode, onTavusR
                             autoComplete="off"
                             disabled={isLoading}
                         />
-                        {onTavusRequest && (
-                            <button
-                                onClick={onTavusRequest}
-                                className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-muted/50 transition-colors shrink-0"
-                                title="Talk to live agent"
-                            >
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <polygon points="23 7 16 12 23 17 23 7" />
-                                    <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
-                                </svg>
-                            </button>
-                        )}
                         <button
                             onClick={sendMessage}
                             disabled={!input.trim() || isLoading}
