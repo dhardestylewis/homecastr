@@ -635,6 +635,36 @@ export async function batchEnrichTracts(
         }
     }
 
+    // Phase 0.5: parcel_ladder_v1 neighborhood_name (HCAD jurisdictions, etc.)
+    // This mirrors enrichWithNeighborhood() for single tracts — batch version
+    const phase05Missing = tractGeoids.filter(id => !result.has(id))
+    if (phase05Missing.length > 0) {
+        try {
+            const supabase = getSupabaseAdmin()
+            const CHUNK = 50
+            for (let i = 0; i < phase05Missing.length; i += CHUNK) {
+                const chunk = phase05Missing.slice(i, i + CHUNK)
+                const { data } = await supabase
+                    .from("parcel_ladder_v1")
+                    .select("tract_geoid20, neighborhood_name, zcta5")
+                    .in("tract_geoid20", chunk)
+                    .not("neighborhood_name", "is", null)
+
+                if (data) {
+                    for (const row of data as any[]) {
+                        if (!result.has(row.tract_geoid20) && row.neighborhood_name) {
+                            result.set(row.tract_geoid20, {
+                                name: row.neighborhood_name,
+                                slug: slugify(row.neighborhood_name),
+                                zcta5: row.zcta5 || "",
+                            })
+                        }
+                    }
+                }
+            }
+        } catch { /* non-fatal */ }
+    }
+
     // Phase 1: Census crosswalk (instant, covers ~85K tracts) — fills gaps
     const missing: string[] = []
     for (const tractId of tractGeoids) {
