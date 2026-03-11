@@ -74,12 +74,7 @@ export function TimeControls({
                 {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 ml-0.5" />}
             </Button>
 
-            <div className="flex items-center gap-3 flex-1 min-w-0">
-                <span className="text-base font-mono font-bold text-primary tabular-nums">
-                    {currentYear}
-                </span>
-
-                <div className="flex-1 flex flex-col justify-center gap-0.5 relative top-0.5">
+            <div className="flex-1 flex flex-col justify-center gap-0.5 relative top-0.5 min-w-0">
                     <Slider
                         value={[currentYear]}
                         min={minYear}
@@ -89,12 +84,17 @@ export function TimeControls({
                         className="cursor-pointer"
                         aria-label="Forecast year"
                     />
-                    <div className="flex justify-between text-[9px] text-muted-foreground font-mono w-full px-0.5">
-                        <span>{minYear}</span>
-                        <span>{maxYear}</span>
+                    <div className="relative w-full h-3 px-0.5">
+                        <span className="absolute left-0 text-[9px] text-muted-foreground font-mono">{minYear}</span>
+                        <span
+                            className="absolute text-[9px] text-primary font-mono font-bold tabular-nums -translate-x-1/2"
+                            style={{ left: `${((currentYear - minYear) / (maxYear - minYear)) * 100}%` }}
+                        >
+                            {currentYear}
+                        </span>
+                        <span className="absolute right-0 text-[9px] text-muted-foreground font-mono">{maxYear}</span>
                     </div>
                 </div>
-            </div>
         </div>
     )
 }
