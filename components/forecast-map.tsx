@@ -1046,16 +1046,20 @@ export function ForecastMap({
                     args.length > 3
 
                 if (suspicious) {
-                    console.error("[MAP DEBUG] BAD Map.prototype.on", {
-                        type,
-                        args,
-                        secondType: typeof second,
-                        thirdType: typeof third,
-                        second,
-                        third,
-                    })
+                    console.error(
+                        "[MAP DEBUG] BAD Map.prototype.on",
+                        "event:", type,
+                        "args.length:", args.length,
+                        "secondType:", typeof second,
+                        "thirdType:", typeof third,
+                        "second:", second,
+                        "third:", third,
+                    )
                     console.trace("[MAP DEBUG TRACE] Map.prototype.on")
-                    throw new Error(`[MAP DEBUG] Invalid map.on registration for event "${String(type)}"`)
+                    // Strip the bad arg and forward as 2-arg to prevent r.filter crash
+                    if (args.length === 3 && typeof third === "function") {
+                        return originalOn.apply(this, [type, third])
+                    }
                 }
 
                 return originalOn.apply(this, args)
@@ -1070,16 +1074,19 @@ export function ForecastMap({
                     args.length > 3
 
                 if (suspicious) {
-                    console.error("[MAP DEBUG] BAD Map.prototype.once", {
-                        type,
-                        args,
-                        secondType: typeof second,
-                        thirdType: typeof third,
-                        second,
-                        third,
-                    })
+                    console.error(
+                        "[MAP DEBUG] BAD Map.prototype.once",
+                        "event:", type,
+                        "args.length:", args.length,
+                        "secondType:", typeof second,
+                        "thirdType:", typeof third,
+                        "second:", second,
+                        "third:", third,
+                    )
                     console.trace("[MAP DEBUG TRACE] Map.prototype.once")
-                    throw new Error(`[MAP DEBUG] Invalid map.once registration for event "${String(type)}"`)
+                    if (args.length === 3 && typeof third === "function") {
+                        return originalOnce.apply(this, [type, third])
+                    }
                 }
 
                 return originalOnce.apply(this, args)
@@ -1115,7 +1122,6 @@ export function ForecastMap({
             // @ts-expect-error MapOptions Typescript definition doesn't include preserveDrawingBuffer but mapbox-gl and maplibre-gl both use it.
             preserveDrawingBuffer: true, // Required for canvas.toDataURL() in PDF export
         })
-
 
         // @ts-expect-error map.on 2-arg signature exists but TS gets confused with maplibregl's complex overloads
         map.on("load", () => {
