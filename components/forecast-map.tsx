@@ -2812,7 +2812,7 @@ export function ForecastMap({
                                             ) : null}
                                         </div>
                                         {/* Stats column — to the right of the chart */}
-                                        <div className="shrink-0 w-[90px] flex flex-col justify-center gap-2 px-2 border-l border-border/20">
+                                        <div className="shrink-0 w-[90px] flex flex-col justify-center gap-2 p-2 border-l border-border/20">
                                             <div>
                                                 <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold">{leftLabel}</div>
                                                 <div className="text-[12px] font-bold text-foreground leading-tight">{formatValue(leftVal)}</div>
