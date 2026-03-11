@@ -173,6 +173,7 @@ export function SortableStateTable({ rows }: { rows: StateRow[] }) {
                         ))}
                     </tbody>
                 </table>
+                </div>
                 {sorted.length === 0 && (
                     <div className="p-8 text-center text-muted-foreground text-sm">
                         No markets found matching "{searchQuery}"
