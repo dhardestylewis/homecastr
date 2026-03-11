@@ -90,6 +90,12 @@ export function GeographySearch() {
                     onFocus={() => {
                         if (query.length >= 2 && results.length > 0) setIsOpen(true)
                     }}
+                    onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                            e.preventDefault()
+                            inputRef.current?.blur()
+                        }
+                    }}
                     className="w-full bg-background border border-border rounded-lg pl-9 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 text-foreground placeholder:text-muted-foreground transition-all"
                 />
                 

@@ -659,6 +659,7 @@ function DashboardContent() {
                   setTimeout(() => chatPanelRef.current?.sendExternalMessage(text), isChatOpen ? 0 : 100)
                 }
                 setChatInput('')
+                e.currentTarget.blur()
               }
               if (e.key === 'Escape' && isChatOpen) {
                 setIsChatOpen(false)
