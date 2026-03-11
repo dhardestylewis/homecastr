@@ -58,13 +58,36 @@ function DashboardContent() {
   const [isMobileViewport, setIsMobileViewport] = useState(false)
   const chatPanelRef = useRef<ChatPanelHandle>(null)
   const [chatInput, setChatInput] = useState("")
+  const [keyboardHeight, setKeyboardHeight] = useState(0)
 
-  // Track mobile viewport
+  // Track mobile viewport and keyboard height
   useEffect(() => {
     const checkMobile = () => setIsMobileViewport(window.innerWidth < 768)
     checkMobile()
     window.addEventListener('resize', checkMobile)
-    return () => window.removeEventListener('resize', checkMobile)
+
+    const handleViewportChange = () => {
+      if (window.visualViewport) {
+        // Calculate difference between window height and visual viewport height
+        // This gives us the approximate height of the software keyboard
+        const offset = window.innerHeight - window.visualViewport.height
+        // Only set keyboard height if it's significant (>100px) to ignore small toolbars
+        setKeyboardHeight(offset > 100 ? offset : 0)
+      }
+    }
+
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', handleViewportChange)
+      window.visualViewport.addEventListener('scroll', handleViewportChange)
+    }
+
+    return () => {
+      window.removeEventListener('resize', checkMobile)
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', handleViewportChange)
+        window.visualViewport.removeEventListener('scroll', handleViewportChange)
+      }
+    }
   }, [])
   const [compareMode, setCompareMode] = useState(false)
   const [pinnedCount, setPinnedCount] = useState(0)
@@ -628,6 +651,10 @@ function DashboardContent() {
   // ═══ Shared bottom bar row — used in BOTH tooltip and standalone contexts ═══
   const mobileBottomBarRow = isMobileViewport ? (
     <div className="px-3 py-2 flex items-center gap-2">
+      {/* Branding */}
+      <div className="flex items-center gap-2 text-primary shrink-0 border-r border-border/50 pr-2">
+        <HomecastrLogo variant="horizontal" size={16} />
+      </div>
       <div className="flex-1 min-w-0">
         <div className={cn("flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 border transition-colors", isChatOpen ? "bg-muted/30 border-primary/30" : "bg-muted/20 border-border/50")}>
           {isChatOpen && <MessageSquare size={14} className="text-primary shrink-0" />}
@@ -980,7 +1007,10 @@ function DashboardContent() {
 
         {/* ═══ MOBILE BOTTOM BAR — always fixed at bottom, ONE element ═══ */}
         {!searchParams.has("embedded") && isMobileViewport && (
-          <div className="fixed left-0 right-0 bottom-0 z-[10000] flex flex-col pointer-events-none">
+          <div 
+            className="fixed left-0 right-0 z-[10000] flex flex-col pointer-events-none transition-all duration-150 ease-out"
+            style={{ bottom: `${keyboardHeight}px` }}
+          >
             {/* Filters sheet — slides up above the bar */}
             {mobileFiltersOpen && (
               <div className="glass-panel border-t border-border/50 px-4 py-3 space-y-3 animate-in slide-in-from-bottom-4 duration-200 pointer-events-auto shadow-[0_-8px_30px_rgba(0,0,0,0.12)] bg-background/95 backdrop-blur-xl">
