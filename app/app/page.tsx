@@ -54,6 +54,7 @@ function DashboardContent() {
   const [searchBarValue, setSearchBarValue] = useState<string>("")
   const [mobileSelectionMode, setMobileSelectionMode] = useState<'replace' | 'add' | 'range'>('replace')
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
+  const [mobileActionsOpen, setMobileActionsOpen] = useState(false)
   const [isMobileViewport, setIsMobileViewport] = useState(false)
 
   // Track mobile viewport
@@ -928,62 +929,81 @@ function DashboardContent() {
                 />
               </div>
 
-              {/* Action icons — compact row */}
-              {!isChatOpen && (
+              {/* FAB speed dial — single button that fans out actions */}
+              <div className="relative shrink-0">
+                {/* Expanded action menu — floats above the FAB */}
+                {mobileActionsOpen && (
+                  <div className="absolute bottom-12 right-0 flex flex-col gap-2 animate-in fade-in slide-in-from-bottom-2 duration-150">
+                    {!isChatOpen && (
+                      <button
+                        onClick={() => { setIsChatOpen(true); setMobileActionsOpen(false) }}
+                        className="w-10 h-10 rounded-full glass-panel flex items-center justify-center text-foreground shadow-xl active:scale-90 transition-transform"
+                        aria-label="Chat"
+                      >
+                        <MessageSquare size={18} />
+                      </button>
+                    )}
+                    {!tavusConversationUrl && !isTavusLoading && (
+                      <button
+                        onClick={() => { handleFloatingConsultAI(); setMobileActionsOpen(false) }}
+                        className="w-10 h-10 rounded-full glass-panel flex items-center justify-center text-foreground shadow-xl active:scale-90 transition-transform"
+                        aria-label="Talk to agent"
+                      >
+                        <Mic size={18} />
+                      </button>
+                    )}
+                    <button
+                      onClick={async () => {
+                        setMobileActionsOpen(false)
+                        try {
+                          toast({ title: "Generating PDF…", duration: 2000 })
+                          const captureMap = (window as any).__captureMapImage
+                          const mapImageDataUrl: string | undefined = captureMap ? await captureMap() : undefined
+                          const selectedId = mapState.selectedId
+                          let historicalValues: (number | null)[] = []
+                          let p50: number[] = [], p10: number[] = [], p90: number[] = [], years: number[] = []
+                          if (selectedId) {
+                            const level = selectedId.length === 3 ? "zip3" : selectedId.length === 5 ? "zcta" : selectedId.length === 11 ? "tract" : selectedId.length === 15 ? "tabblock" : "parcel"
+                            const res = await fetch(`/api/forecast-detail?level=${level}&id=${encodeURIComponent(selectedId)}&originYear=${pageOriginYear}`)
+                            if (res.ok) { const json = await res.json(); historicalValues = json.historicalValues || []; p50 = json.p50 || []; p10 = json.p10 || []; p90 = json.p90 || []; years = json.years || [] }
+                          }
+                          const shareUrl = new URL(window.location.href)
+                          if (currentYear !== 2027) shareUrl.searchParams.set("yr", currentYear.toString())
+                          const pdfPinnedIds = (window as any).__getPinnedIds?.() as string[] | undefined
+                          if (pdfPinnedIds?.length) shareUrl.searchParams.set("compare", pdfPinnedIds.join(","))
+                          await generateForecastPDF({
+                            locationName: searchBarValue && !searchBarValue.includes("Loading") ? searchBarValue : selectedId ? selectedId : "Map Overview",
+                            locationId: selectedId || "—", currentYear, historicalValues, p50, p10, p90, years, mapImageDataUrl,
+                            shareUrl: shareUrl.toString(), pinnedComparisons: (window as any).__getPinnedComparisons?.() || undefined,
+                          })
+                        } catch (err) { console.error("PDF generation failed:", err); toast({ title: "PDF failed", description: "Could not generate report", variant: "destructive" }) }
+                      }}
+                      className="w-10 h-10 rounded-full glass-panel flex items-center justify-center text-foreground shadow-xl active:scale-90 transition-transform"
+                      aria-label="Download PDF"
+                    >
+                      <FileDown size={18} />
+                    </button>
+                    <button
+                      onClick={() => { setIsContactOpen(true); setMobileActionsOpen(false) }}
+                      className="w-10 h-10 rounded-full glass-panel flex items-center justify-center text-foreground shadow-xl active:scale-90 transition-transform border border-[hsl(var(--primary))]/30"
+                      aria-label="Request Analysis"
+                    >
+                      <CalendarDays size={18} className="text-[hsl(45,80%,45%)]" />
+                    </button>
+                  </div>
+                )}
+                {/* Main FAB trigger */}
                 <button
-                  onClick={() => setIsChatOpen(true)}
-                  className="shrink-0 w-9 h-9 rounded-xl glass-panel flex items-center justify-center text-foreground shadow-lg active:scale-90 transition-transform"
-                  aria-label="Chat"
+                  onClick={() => setMobileActionsOpen(!mobileActionsOpen)}
+                  className={cn(
+                    "w-9 h-9 rounded-xl glass-panel flex items-center justify-center text-foreground shadow-lg active:scale-90 transition-all duration-200",
+                    mobileActionsOpen && "rotate-45 bg-primary text-primary-foreground"
+                  )}
+                  aria-label={mobileActionsOpen ? "Close actions" : "More actions"}
                 >
-                  <MessageSquare size={16} />
+                  <Plus size={18} />
                 </button>
-              )}
-              {!tavusConversationUrl && !isTavusLoading && (
-                <button
-                  onClick={handleFloatingConsultAI}
-                  className="shrink-0 w-9 h-9 rounded-xl glass-panel flex items-center justify-center text-foreground shadow-lg active:scale-90 transition-transform"
-                  aria-label="Talk to agent"
-                >
-                  <Mic size={16} />
-                </button>
-              )}
-              <button
-                onClick={async () => {
-                  try {
-                    toast({ title: "Generating PDF…", duration: 2000 })
-                    const captureMap = (window as any).__captureMapImage
-                    const mapImageDataUrl: string | undefined = captureMap ? await captureMap() : undefined
-                    const selectedId = mapState.selectedId
-                    let historicalValues: (number | null)[] = []
-                    let p50: number[] = [], p10: number[] = [], p90: number[] = [], years: number[] = []
-                    if (selectedId) {
-                      const level = selectedId.length === 3 ? "zip3" : selectedId.length === 5 ? "zcta" : selectedId.length === 11 ? "tract" : selectedId.length === 15 ? "tabblock" : "parcel"
-                      const res = await fetch(`/api/forecast-detail?level=${level}&id=${encodeURIComponent(selectedId)}&originYear=${pageOriginYear}`)
-                      if (res.ok) { const json = await res.json(); historicalValues = json.historicalValues || []; p50 = json.p50 || []; p10 = json.p10 || []; p90 = json.p90 || []; years = json.years || [] }
-                    }
-                    const shareUrl = new URL(window.location.href)
-                    if (currentYear !== 2027) shareUrl.searchParams.set("yr", currentYear.toString())
-                    const pdfPinnedIds = (window as any).__getPinnedIds?.() as string[] | undefined
-                    if (pdfPinnedIds?.length) shareUrl.searchParams.set("compare", pdfPinnedIds.join(","))
-                    await generateForecastPDF({
-                      locationName: searchBarValue && !searchBarValue.includes("Loading") ? searchBarValue : selectedId ? selectedId : "Map Overview",
-                      locationId: selectedId || "—", currentYear, historicalValues, p50, p10, p90, years, mapImageDataUrl,
-                      shareUrl: shareUrl.toString(), pinnedComparisons: (window as any).__getPinnedComparisons?.() || undefined,
-                    })
-                  } catch (err) { console.error("PDF generation failed:", err); toast({ title: "PDF failed", description: "Could not generate report", variant: "destructive" }) }
-                }}
-                className="shrink-0 w-9 h-9 rounded-xl glass-panel flex items-center justify-center text-foreground shadow-lg active:scale-90 transition-transform"
-                aria-label="Download PDF"
-              >
-                <FileDown size={16} />
-              </button>
-              <button
-                onClick={() => setIsContactOpen(true)}
-                className="shrink-0 w-9 h-9 rounded-xl glass-panel flex items-center justify-center text-foreground shadow-lg active:scale-90 transition-transform border border-[hsl(var(--primary))]/30"
-                aria-label="Request Analysis"
-              >
-                <CalendarDays size={16} className="text-[hsl(45,80%,45%)]" />
-              </button>
+              </div>
 
               {/* Filters toggle */}
               <button

@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useState, useRef, useEffect } from "react"
 import type { FanChartData } from "@/lib/types"
 
 interface PinnedComparison {
@@ -137,12 +137,30 @@ export function FanChart({
 }: FanChartProps & { onYearChange?: (year: number) => void }) {
   const { p10, p50, p90, y_med } = data
   const [hoveredYear, setHoveredYear] = useState<number | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [containerSize, setContainerSize] = useState({ width: 300, height: height })
+
+  // Measure container for 1:1 pixel rendering (crisp text)
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const ro = new ResizeObserver(entries => {
+      const entry = entries[0]
+      if (entry) {
+        const { width: w, height: h } = entry.contentRect
+        if (w > 0 && h > 0) setContainerSize({ width: Math.round(w), height: Math.round(h) })
+      }
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
 
   const svgContent = useMemo(() => {
-    const width = 300
-    const padding = { top: 10, right: 15, bottom: 20, left: 55 }
+    const width = containerSize.width
+    const actualHeight = containerSize.height
+    const padding = { top: 10, right: 15, bottom: 24, left: 55 }
     const chartWidth = width - padding.left - padding.right
-    const chartHeight = height - padding.top - padding.bottom
+    const chartHeight = actualHeight - padding.top - padding.bottom
 
     // Combine historical and forecast data for Y range calculation
     const allValues: number[] = []
@@ -390,10 +408,11 @@ export function FanChart({
 
     return (
       <svg
-        viewBox={`0 0 ${width} ${height}`}
-        className={onYearChange ? "w-full h-full cursor-crosshair" : "w-full h-full"}
-        preserveAspectRatio="xMidYMid meet"
-        style={{ display: 'block' }}
+        viewBox={`0 0 ${width} ${actualHeight}`}
+        width={width}
+        height={actualHeight}
+        className={onYearChange ? "cursor-crosshair" : ""}
+        style={{ display: 'block', width: '100%', height: '100%' }}
         onMouseMove={onYearChange ? handleMouseMove : undefined}
         onMouseLeave={onYearChange ? () => setHoveredYear(null) : undefined}
         onClick={onYearChange ? handleClick : undefined}
@@ -454,9 +473,9 @@ export function FanChart({
         {/* X-axis line */}
         <line
           x1={padding.left}
-          y1={height - padding.bottom}
+          y1={actualHeight - padding.bottom}
           x2={width - padding.right}
-          y2={height - padding.bottom}
+          y2={actualHeight - padding.bottom}
           stroke="currentColor"
           strokeOpacity={0.2}
         />
@@ -466,7 +485,7 @@ export function FanChart({
           x1={xScale(BASELINE_YEAR)}
           y1={padding.top}
           x2={xScale(BASELINE_YEAR)}
-          y2={height - padding.bottom}
+          y2={actualHeight - padding.bottom}
           stroke="oklch(0.7 0.1 250)"
           strokeWidth={1}
           strokeDasharray="4 2"
@@ -487,7 +506,7 @@ export function FanChart({
             x1={xScale(hoveredYear)}
             y1={padding.top}
             x2={xScale(hoveredYear)}
-            y2={height - padding.bottom}
+            y2={actualHeight - padding.bottom}
             stroke="oklch(0.65 0.2 30)"
             strokeWidth={2}
             strokeOpacity={0.4}
@@ -502,7 +521,7 @@ export function FanChart({
               x1={xScale(currentYear)}
               y1={padding.top}
               x2={xScale(currentYear)}
-              y2={height - padding.bottom}
+              y2={actualHeight - padding.bottom}
               stroke="oklch(0.65 0.2 30)"
               strokeWidth={2}
               strokeOpacity={0.7}
@@ -648,7 +667,7 @@ export function FanChart({
           <text
             key={yr}
             x={xScale(yr)}
-            y={height - padding.bottom + 15}
+            y={actualHeight - padding.bottom + 16}
             textAnchor="middle"
             className="text-[11px] fill-muted-foreground font-mono"
             style={{ pointerEvents: 'none' }}
@@ -674,7 +693,7 @@ export function FanChart({
 
       </svg>
     )
-  }, [data, height, currentYear, historicalValues, p10, p50, p90, y_med, childLines, comparisonData, comparisonHistoricalValues, previewData, previewHistoricalValues, pinnedComparisons, hoveredYear, onYearChange, yDomain])
+  }, [data, containerSize, currentYear, historicalValues, p10, p50, p90, y_med, childLines, comparisonData, comparisonHistoricalValues, previewData, previewHistoricalValues, pinnedComparisons, hoveredYear, onYearChange, yDomain])
 
-  return <div className="w-full h-full">{svgContent}</div>
+  return <div ref={containerRef} className="w-full h-full">{svgContent}</div>
 }
