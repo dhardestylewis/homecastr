@@ -676,29 +676,43 @@ function DashboardContent() {
                 {/* Bottom bar row */}
                 <div className="px-3 py-2 flex items-center gap-2">
                   <div className="flex-1 min-w-0">
-                    {isChatOpen ? (
-                      <div className="flex items-center gap-1.5 bg-muted/30 rounded-lg px-2.5 py-1.5 border border-primary/30">
-                        <MessageSquare size={14} className="text-primary shrink-0" />
-                        <input
-                          value={chatInput}
-                          onChange={(e) => setChatInput(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' && chatInput.trim()) {
-                              chatPanelRef.current?.sendExternalMessage(chatInput.trim())
-                              setChatInput('')
+                    <div className={cn("flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 border transition-colors", isChatOpen ? "bg-muted/30 border-primary/30" : "bg-muted/20 border-border/50")}>
+                      {isChatOpen && <MessageSquare size={14} className="text-primary shrink-0" />}
+                      {!isChatOpen && <Search size={14} className="text-muted-foreground/60 shrink-0" />}
+                      <input
+                        value={chatInput}
+                        onChange={(e) => setChatInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && chatInput.trim()) {
+                            const text = chatInput.trim()
+                            const isQuestion = /^(what|where|how|why|show|compare|tell|explain|which|is |are |can |do |does )/i.test(text)
+                              || text.includes('?')
+                              || (text.split(/\s+/).length > 3 && !/\d/.test(text.charAt(0)))
+                            if (isChatOpen || isQuestion) {
+                              // Route to chat
+                              if (!isChatOpen) setIsChatOpen(true)
+                              // Small delay to let ChatPanel mount if just opened
+                              setTimeout(() => chatPanelRef.current?.sendExternalMessage(text), isChatOpen ? 0 : 100)
+                            } else {
+                              // Route to address search
+                              handleSearch(text)
                             }
-                          }}
-                          placeholder="Ask about a neighborhood..."
-                          className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
-                          autoFocus
-                        />
+                            setChatInput('')
+                          }
+                          if (e.key === 'Escape' && isChatOpen) {
+                            setIsChatOpen(false)
+                            setChatInput('')
+                          }
+                        }}
+                        placeholder={isChatOpen ? "Ask about this area..." : "Search or ask a question..."}
+                        className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
+                      />
+                      {isChatOpen && (
                         <button onClick={() => { setIsChatOpen(false); setChatInput('') }} className="shrink-0 w-5 h-5 rounded flex items-center justify-center hover:bg-muted/50">
                           <X size={12} />
                         </button>
-                      </div>
-                    ) : (
-                      <SearchBox onSearch={handleSearch} placeholder="Search address..." value={searchBarValue} />
-                    )}
+                      )}
+                    </div>
                   </div>
                   <div className="relative shrink-0">
                     {mobileActionsOpen && (
