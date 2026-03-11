@@ -8,7 +8,7 @@ import type { FilterState, MapState, FanChartData } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { useRouter, useSearchParams } from "next/navigation"
 import { HomecastrLogo } from "@/components/homecastr-logo"
-import { Bot } from "lucide-react"
+import { Bot, AlertCircle } from "lucide-react"
 import { FanChart } from "@/components/fan-chart"
 import { StreetViewCarousel } from "@/components/street-view-carousel"
 import { useKeyboardOpen } from "@/hooks/use-keyboard-open"
@@ -182,6 +182,14 @@ export function ForecastMap({
     const mapContainerRef = useRef<HTMLDivElement>(null)
     const mapRef = useRef<maplibregl.Map | null>(null)
     const [isLoaded, setIsLoaded] = useState(false)
+
+    // Pinned comparisons: persistent multi-area comparison (up to 4)
+    const MAX_PINNED = 4
+    const PINNED_COLORS = ["#a3e635", "#38bdf8", "#f472b6", "#facc15"] // lime, sky, pink, amber
+    const [pinnedComparisons, setPinnedComparisons] = useState<PinnedEntry[]>([])
+    const pinnedComparisonsRef = useRef<PinnedEntry[]>([])
+    useEffect(() => { pinnedComparisonsRef.current = pinnedComparisons }, [pinnedComparisons])
+    useEffect(() => { onPinnedCountChange?.(pinnedComparisons.length) }, [pinnedComparisons.length, onPinnedCountChange])
 
     const router = useRouter()
     const searchParams = useSearchParams()
@@ -512,6 +520,7 @@ export function ForecastMap({
     const [historicalValues, setHistoricalValues] = useState<number[] | undefined>(undefined)
     const [isLoadingDetail, setIsLoadingDetail] = useState(false)
     const detailFetchRef = useRef<string | null>(null)
+    const detailTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     // LRU cache for forecast detail responses (key: "level:featureId", value: {fanChart, historicalValues})
     const detailCacheRef = useRef<Map<string, { fanChart: FanChartData | null; historicalValues: number[] | undefined }>>(new Map())
     const DETAIL_CACHE_MAX = 1000
@@ -541,14 +550,6 @@ export function ForecastMap({
     const comparisonFetchRef = useRef<string | null>(null)
     const comparisonTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const hoverDetailTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-    // Pinned comparisons: persistent multi-area comparison (up to 4)
-    const MAX_PINNED = 4
-    const PINNED_COLORS = ["#a3e635", "#38bdf8", "#f472b6", "#facc15"] // lime, sky, pink, amber
-    const [pinnedComparisons, setPinnedComparisons] = useState<PinnedEntry[]>([])
-    const pinnedComparisonsRef = useRef<PinnedEntry[]>([])
-    useEffect(() => { pinnedComparisonsRef.current = pinnedComparisons }, [pinnedComparisons])
-    useEffect(() => { onPinnedCountChange?.(pinnedComparisons.length) }, [pinnedComparisons.length, onPinnedCountChange])
 
     // Sync pinned comparisons to URL query params
     const prevPinnedIdsRef = useRef<string>("")
@@ -1035,9 +1036,11 @@ export function ForecastMap({
             maxZoom: 18,
             minZoom: 2,
             maxTileCacheSize: 30, // Keep very low — forces MapLibre to prioritize visible tiles over off-viewport prefetch
+            // @ts-expect-error MapOptions Typescript definition doesn't include preserveDrawingBuffer but mapbox-gl and maplibre-gl both use it.
             preserveDrawingBuffer: true, // Required for canvas.toDataURL() in PDF export
         })
 
+        // @ts-expect-error map.on 2-arg signature exists but TS gets confused with maplibregl's complex overloads
         map.on("load", () => {
             setIsLoaded(true)
 
@@ -2674,8 +2677,8 @@ export function ForecastMap({
                         bottom: '56px',
                         overflowY: 'hidden',
                     } : {
-                        left: displayPos.globalX,
-                        top: displayPos.globalY,
+                        left: displayPos?.globalX ?? 0,
+                        top: displayPos?.globalY ?? 0,
                         overflow: 'hidden',
                     }}
                     onMouseDown={!isMobile && selectedId ? (e) => {

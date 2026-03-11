@@ -35,7 +35,7 @@ import { generateForecastPDF } from "@/lib/generate-pdf"
 const TavusMiniWindow = dynamic(
   () => import("@/components/tavus-mini-window").then((mod) => mod.TavusMiniWindow),
   { ssr: false }
-) as React.ComponentType<{ conversationUrl: string; onClose: () => void; chatOpen?: boolean; forecastMode?: boolean }>
+) as React.ComponentType<{ conversationUrl: string; onClose: () => void; chatOpen?: boolean; forecastMode?: boolean; embedded?: boolean }>
 
 
 

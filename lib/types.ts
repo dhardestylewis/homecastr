@@ -285,7 +285,7 @@ export interface FanChartData {
   p10: number[]
   p50: number[]
   p90: number[]
-  y_med: number[]
+  y_med?: number[]
 }
 
 // ============================================================================

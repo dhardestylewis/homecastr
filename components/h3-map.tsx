@@ -10,7 +10,7 @@ const PMTILES_URL = 'http://localhost:3000/tiles/h3_data.pmtiles';
 
 interface H3MapProps {
     year?: number;
-    colorMode?: "growth" | "value";
+    colorMode?: "growth" | "value" | "growth_dollar";
     mapState?: MapState;
 }
 
