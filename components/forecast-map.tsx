@@ -2643,39 +2643,80 @@ export function ForecastMap({
                         setSwipeTouchStart(null)
                     } : undefined}
                 >
-                    {/* Mobile: minimal swipe handle + close (no separate header bar) */}
+                    {/* Mobile: swipe handle + close + simplified header */}
                     {isMobile && (
-                        <div
-                            className="w-full flex items-center justify-center pt-1.5 pb-0.5 shrink-0"
-                            data-tooltip-header="true"
-                        >
-                            {/* Swipe handle */}
-                            <div className="w-8 h-1 rounded-full bg-muted-foreground/30" />
-                            {/* Close button — absolute right */}
-                            <button
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    e.preventDefault();
-                                    if (onMobileClose) {
-                                        onMobileClose();
-                                    } else {
-                                        selectedIdRef.current = null;
-                                        setSelectedId(null);
-                                        hoveredIdRef.current = null;
-                                        setTooltipData(null);
-                                        setFixedTooltipPos(null);
-                                        setSelectedCoords(null);
-                                        onFeatureSelect(null);
-                                    }
-                                }}
-                                className="absolute right-2 top-1 w-8 h-8 flex items-center justify-center rounded-full active:bg-muted/60 text-muted-foreground"
-                                aria-label="Close"
-                                style={{ touchAction: 'manipulation' }}
-                            >
-                                <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ pointerEvents: 'none' }}>
-                                    <line x1="2" y1="2" x2="10" y2="10" /><line x1="10" y1="2" x2="2" y2="10" />
-                                </svg>
-                            </button>
+                        <div className="flex flex-col border-b border-border/20 bg-muted/10 pb-1.5" data-tooltip-header="true">
+                            <div className="w-full flex items-center justify-center pt-2 pb-1.5 shrink-0 relative">
+                                {/* Swipe handle */}
+                                <div className="w-8 h-1 rounded-full bg-muted-foreground/30" />
+                                {/* Close button — absolute right */}
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        e.preventDefault();
+                                        if (onMobileClose) {
+                                            onMobileClose();
+                                        } else {
+                                            selectedIdRef.current = null;
+                                            setSelectedId(null);
+                                            hoveredIdRef.current = null;
+                                            setTooltipData(null);
+                                            setFixedTooltipPos(null);
+                                            setSelectedCoords(null);
+                                            onFeatureSelect(null);
+                                        }
+                                    }}
+                                    className="absolute right-2 top-0.5 w-8 h-8 flex items-center justify-center rounded-full active:bg-muted/60 text-muted-foreground"
+                                    aria-label="Close"
+                                    style={{ touchAction: 'manipulation' }}
+                                >
+                                    <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ pointerEvents: 'none' }}>
+                                        <line x1="2" y1="2" x2="10" y2="10" /><line x1="10" y1="2" x2="2" y2="10" />
+                                    </svg>
+                                </button>
+                            </div>
+
+                            {/* Mobile Location Header */}
+                            <div className="px-3 flex flex-col justify-center">
+                                <div className="font-semibold text-[11px] text-foreground truncate flex items-center gap-1.5">
+                                    {geocodedName || displayProps.id}
+                                    {geocodedName && !geocodedName.startsWith('ZIP') && (
+                                        <span className="font-mono text-[9px] text-muted-foreground/60 font-normal">
+                                            {displayProps.id}
+                                        </span>
+                                    )}
+                                </div>
+                                {(comparisonData || pinnedComparisons.length > 0) && (
+                                    <div className="mt-0.5 flex flex-wrap items-center gap-1">
+                                        {comparisonData && tooltipData?.properties?.id && tooltipData.properties.id !== selectedId && (
+                                            <span className="px-1 py-0.5 bg-lime-500/20 text-lime-400 text-[8px] font-semibold uppercase tracking-wider rounded inline-flex">
+                                                vs {comparisonGeocodedName && comparisonGeocodedName !== geocodedName ? comparisonGeocodedName : tooltipData.properties.id}
+                                            </span>
+                                        )}
+                                        {pinnedComparisons.map((pc, idx) => (
+                                            <button
+                                                key={pc.id}
+                                                onClick={(ev) => {
+                                                    ev.stopPropagation()
+                                                    const map = mapRef.current
+                                                    if (map) {
+                                                        ;["forecast-a", "forecast-b"].forEach(s => {
+                                                            try { map.setFeatureState({ source: s, sourceLayer: pc.sourceLayer, id: pc.id }, { pinned: false }) } catch { }
+                                                        })
+                                                    }
+                                                    setPinnedComparisons(prev => prev.filter(p => p.id !== pc.id))
+                                                }}
+                                                className="px-1 py-0.5 text-[8px] font-semibold uppercase tracking-wider rounded flex items-center gap-0.5 hover:opacity-70 transition-opacity cursor-pointer inline-flex"
+                                                style={{ backgroundColor: `${PINNED_COLORS[idx % PINNED_COLORS.length]}20`, color: PINNED_COLORS[idx % PINNED_COLORS.length] }}
+                                            >
+                                                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: PINNED_COLORS[idx % PINNED_COLORS.length] }} />
+                                                {pc.label || pc.id}
+                                                <span className="ml-[1px]">×</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     )}
 
