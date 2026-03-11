@@ -101,7 +101,7 @@ function AttributionBarSVG() {
 export default function AboutPage() {
     return (
         <div className="overflow-auto h-screen">
-            <div className="min-h-screen bg-background text-foreground font-sans">
+            <main className="min-h-screen bg-background text-foreground font-sans">
 
                 {/* Nav */}
                 <header className="border-b border-border/40 bg-background/80 backdrop-blur-md sticky top-0 z-50">
@@ -535,7 +535,7 @@ export default function AboutPage() {
                         </div>
                     </div>
                 </footer>
-            </div >
+            </main >
         </div >
     )
 }

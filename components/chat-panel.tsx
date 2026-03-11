@@ -181,6 +181,8 @@ export function ChatPanel({ isOpen, onClose, onMapAction, forecastMode, onTavusR
 
     return (
         <div
+            {...(!isOpen ? { inert: true } : {})}
+            aria-hidden={!isOpen}
             className={`
         fixed z-[10000]
         transition-all duration-300 ease-in-out

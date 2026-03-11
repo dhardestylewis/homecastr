@@ -15,9 +15,12 @@ interface LegendProps {
   onColorModeChange?: (mode: "growth" | "value" | "growth_dollar") => void
   year?: number
   originYear?: number
+  compareMode?: boolean
+  onCompareModeChange?: (compare: boolean) => void
+  pinnedCount?: number
 }
 
-export function Legend({ className, colorMode = "growth", onColorModeChange, year = 2026, originYear = 2024 }: LegendProps) {
+export function Legend({ className, colorMode = "growth", onColorModeChange, year = 2026, originYear = 2024, compareMode, onCompareModeChange, pinnedCount }: LegendProps) {
   // Data-driven growth labels + gradient stops from API
   const [growthLabels, setGrowthLabels] = useState<[string, string, string]>(["-20%", "0%", "+100%+"])
   const [growthGradient, setGrowthGradient] = useState<string>(
@@ -127,6 +130,38 @@ export function Legend({ className, colorMode = "growth", onColorModeChange, yea
                 )}
               >
                 Value
+              </button>
+            </div>
+          )}
+          {/* Single/Compare toggle — same row */}
+          {onCompareModeChange && (
+            <div className="grid grid-cols-2 gap-1 p-0.5 bg-secondary/50 rounded-md shrink-0">
+              <button
+                onClick={() => onCompareModeChange(false)}
+                className={cn(
+                  "px-2 py-1 text-[10px] font-medium rounded transition-all",
+                  !compareMode
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Single
+              </button>
+              <button
+                onClick={() => onCompareModeChange(true)}
+                className={cn(
+                  "px-2 py-1 text-[10px] font-medium rounded transition-all relative",
+                  compareMode
+                    ? "bg-lime-500/80 text-black shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Compare
+                {(pinnedCount ?? 0) > 0 && (
+                  <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-lime-400 text-black text-[7px] font-bold rounded-full flex items-center justify-center">
+                    {pinnedCount}
+                  </span>
+                )}
               </button>
             </div>
           )}

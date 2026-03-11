@@ -651,6 +651,31 @@ function DashboardContent() {
             isTavusOpen={!!tavusConversationUrl && !isTavusLoading}
             compareMode={compareMode}
             onPinnedCountChange={setPinnedCount}
+            mobileBottomBar={isMobileViewport ? (
+              <div className="px-3 py-2 flex items-center gap-2">
+                <div className="flex-1 min-w-0">
+                  <SearchBox onSearch={handleSearch} placeholder="Search address..." value={searchBarValue} />
+                </div>
+                <div className="relative shrink-0">
+                  {mobileActionsOpen && (
+                    <div className="absolute bottom-12 right-0 flex flex-col gap-2 animate-in fade-in slide-in-from-bottom-2 duration-150 z-[70]">
+                      {!isChatOpen && (
+                        <button onClick={() => { setIsChatOpen(true); setMobileActionsOpen(false) }} className="h-10 px-3 rounded-full glass-panel flex items-center gap-2 text-foreground shadow-xl active:scale-95 transition-transform"><MessageSquare size={16} /><span className="text-xs font-medium">Chat</span></button>
+                      )}
+                      {!tavusConversationUrl && !isTavusLoading && (
+                        <button onClick={() => { handleFloatingConsultAI(); setMobileActionsOpen(false) }} className="h-10 px-3 rounded-full glass-panel flex items-center gap-2 text-foreground shadow-xl active:scale-95 transition-transform"><Mic size={16} /><span className="text-xs font-medium">Talk</span></button>
+                      )}
+                      <button onClick={() => { setIsContactOpen(true); setMobileActionsOpen(false) }} className="h-10 px-3 rounded-full glass-panel flex items-center gap-2 text-foreground shadow-xl active:scale-95 transition-transform border border-[hsl(var(--primary))]/30"><CalendarDays size={16} className="text-[hsl(45,80%,45%)]" /><span className="text-xs font-medium">Analysis</span></button>
+                    </div>
+                  )}
+                  <button onClick={() => setMobileActionsOpen(!mobileActionsOpen)} className={cn("w-9 h-9 rounded-xl glass-panel flex items-center justify-center text-foreground shadow-lg active:scale-90 transition-all duration-200", mobileActionsOpen && "rotate-45 bg-primary text-primary-foreground")}><Plus size={18} /></button>
+                </div>
+                <div className="shrink-0 flex flex-col items-center justify-center w-9 h-9 cursor-pointer active:scale-95 transition-transform" onClick={() => setMobileFiltersOpen(!mobileFiltersOpen)}>
+                  <div className="w-6 h-1 rounded-full bg-muted-foreground/40 mb-0.5" />
+                  <div className="w-4 h-1 rounded-full bg-muted-foreground/25" />
+                </div>
+              </div>
+            ) : undefined}
           />
         ) : filters.useVectorMap ? (
           <VectorMap
@@ -859,97 +884,47 @@ function DashboardContent() {
         )}
 
         {/* ═══ MOBILE BOTTOM BAR — Apple Maps style ═══ */}
-        {!searchParams.has("embedded") && isMobileViewport && (
-          <div
-            className={cn(
-              "fixed left-0 right-0 z-[60] flex flex-col transition-all duration-300",
-              (mapState.selectedId || mapState.hoveredId) && filters.useForecastMap
-                ? "bottom-[25vh]" : "bottom-0"
-            )}
-          >
-            {/* Pull-up filters sheet */}
+        {/* When tooltip active: this content is inside ForecastMap tooltip (via mobileBottomBar prop) */}
+        {/* When no tooltip: renders standalone at bottom */}
+        {!searchParams.has("embedded") && isMobileViewport && !((mapState.selectedId || mapState.hoveredId) && filters.useForecastMap) && (
+          <div className="fixed left-0 right-0 bottom-0 z-[60] flex flex-col">
+            {/* Swipe handle + filters sheet */}
             {mobileFiltersOpen && (
               <div className="glass-panel border-t border-border/50 px-4 py-3 space-y-3 animate-in slide-in-from-bottom-4 duration-200">
-                {/* Time Controls */}
                 <TimeControls
-                  minYear={2019}
-                  maxYear={2030}
-                  currentYear={currentYear}
+                  minYear={2019} maxYear={2030} currentYear={currentYear}
                   onChange={(yr) => { setHasManuallySetYear(true); setCurrentYear(yr) }}
                   onPlayStart={() => console.log("[PAGE] Play started")}
                   className="w-full"
                 />
-                {/* Legend + Selection mode inline */}
-                <div className="flex items-stretch gap-2">
-                  <Legend
-                    className="flex-1"
-                    colorMode={filters.colorMode}
-                    onColorModeChange={handleColorModeChange}
-                    year={currentYear}
-                    originYear={pageOriginYear}
-                  />
-                  {/* Single/Compare toggle — inline with legend */}
-                  <div className="flex flex-col gap-1 shrink-0">
-                    <button
-                      onClick={() => { setCompareMode(false); setMobileSelectionMode('replace') }}
-                      className={cn(
-                        "px-3 py-1.5 rounded-md text-[10px] font-bold transition-colors",
-                        !compareMode ? "bg-primary text-primary-foreground" : "glass-panel text-foreground border border-border/50"
-                      )}
-                    >
-                      Single
-                    </button>
-                    <button
-                      onClick={() => setCompareMode(!compareMode)}
-                      className={cn(
-                        "px-3 py-1.5 rounded-md text-[10px] font-bold transition-colors relative",
-                        compareMode ? "bg-lime-500 text-black" : "glass-panel text-foreground border border-border/50"
-                      )}
-                    >
-                      Compare
-                      {pinnedCount > 0 && (
-                        <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-lime-400 text-black text-[8px] font-bold rounded-full flex items-center justify-center">
-                          {pinnedCount}
-                        </span>
-                      )}
-                    </button>
-                  </div>
-                </div>
+                <Legend
+                  className="w-full" colorMode={filters.colorMode}
+                  onColorModeChange={handleColorModeChange} year={currentYear} originYear={pageOriginYear}
+                  compareMode={compareMode}
+                  onCompareModeChange={(c) => { setCompareMode(c); if (!c) setMobileSelectionMode('replace') }}
+                  pinnedCount={pinnedCount}
+                />
               </div>
             )}
 
             {/* Main bottom bar */}
             <div className="glass-panel border-t border-border/50 px-3 py-2 flex items-center gap-2">
-              {/* Search pill — Apple Maps style */}
               <div className="flex-1 min-w-0">
-                <SearchBox
-                  onSearch={handleSearch}
-                  placeholder="Search address..."
-                  value={searchBarValue}
-                />
+                <SearchBox onSearch={handleSearch} placeholder="Search address..." value={searchBarValue} />
               </div>
 
-              {/* FAB speed dial — single button that fans out actions */}
+              {/* FAB speed dial — labelled actions */}
               <div className="relative shrink-0">
-                {/* Expanded action menu — floats above the FAB */}
                 {mobileActionsOpen && (
                   <div className="absolute bottom-12 right-0 flex flex-col gap-2 animate-in fade-in slide-in-from-bottom-2 duration-150">
                     {!isChatOpen && (
-                      <button
-                        onClick={() => { setIsChatOpen(true); setMobileActionsOpen(false) }}
-                        className="w-10 h-10 rounded-full glass-panel flex items-center justify-center text-foreground shadow-xl active:scale-90 transition-transform"
-                        aria-label="Chat"
-                      >
-                        <MessageSquare size={18} />
+                      <button onClick={() => { setIsChatOpen(true); setMobileActionsOpen(false) }} className="h-10 px-3 rounded-full glass-panel flex items-center gap-2 text-foreground shadow-xl active:scale-95 transition-transform" aria-label="Chat">
+                        <MessageSquare size={16} /><span className="text-xs font-medium">Chat</span>
                       </button>
                     )}
                     {!tavusConversationUrl && !isTavusLoading && (
-                      <button
-                        onClick={() => { handleFloatingConsultAI(); setMobileActionsOpen(false) }}
-                        className="w-10 h-10 rounded-full glass-panel flex items-center justify-center text-foreground shadow-xl active:scale-90 transition-transform"
-                        aria-label="Talk to agent"
-                      >
-                        <Mic size={18} />
+                      <button onClick={() => { handleFloatingConsultAI(); setMobileActionsOpen(false) }} className="h-10 px-3 rounded-full glass-panel flex items-center gap-2 text-foreground shadow-xl active:scale-95 transition-transform" aria-label="Talk">
+                        <Mic size={16} /><span className="text-xs font-medium">Talk</span>
                       </button>
                     )}
                     <button
@@ -978,41 +953,29 @@ function DashboardContent() {
                           })
                         } catch (err) { console.error("PDF generation failed:", err); toast({ title: "PDF failed", description: "Could not generate report", variant: "destructive" }) }
                       }}
-                      className="w-10 h-10 rounded-full glass-panel flex items-center justify-center text-foreground shadow-xl active:scale-90 transition-transform"
-                      aria-label="Download PDF"
+                      className="h-10 px-3 rounded-full glass-panel flex items-center gap-2 text-foreground shadow-xl active:scale-95 transition-transform" aria-label="PDF"
                     >
-                      <FileDown size={18} />
+                      <FileDown size={16} /><span className="text-xs font-medium">PDF</span>
                     </button>
-                    <button
-                      onClick={() => { setIsContactOpen(true); setMobileActionsOpen(false) }}
-                      className="w-10 h-10 rounded-full glass-panel flex items-center justify-center text-foreground shadow-xl active:scale-90 transition-transform border border-[hsl(var(--primary))]/30"
-                      aria-label="Request Analysis"
-                    >
-                      <CalendarDays size={18} className="text-[hsl(45,80%,45%)]" />
+                    <button onClick={() => { setIsContactOpen(true); setMobileActionsOpen(false) }} className="h-10 px-3 rounded-full glass-panel flex items-center gap-2 text-foreground shadow-xl active:scale-95 transition-transform border border-[hsl(var(--primary))]/30" aria-label="Analysis">
+                      <CalendarDays size={16} className="text-[hsl(45,80%,45%)]" /><span className="text-xs font-medium">Analysis</span>
                     </button>
                   </div>
                 )}
-                {/* Main FAB trigger */}
-                <button
-                  onClick={() => setMobileActionsOpen(!mobileActionsOpen)}
-                  className={cn(
-                    "w-9 h-9 rounded-xl glass-panel flex items-center justify-center text-foreground shadow-lg active:scale-90 transition-all duration-200",
-                    mobileActionsOpen && "rotate-45 bg-primary text-primary-foreground"
-                  )}
-                  aria-label={mobileActionsOpen ? "Close actions" : "More actions"}
-                >
+                <button onClick={() => setMobileActionsOpen(!mobileActionsOpen)} className={cn("w-9 h-9 rounded-xl glass-panel flex items-center justify-center text-foreground shadow-lg active:scale-90 transition-all duration-200", mobileActionsOpen && "rotate-45 bg-primary text-primary-foreground")} aria-label={mobileActionsOpen ? "Close actions" : "More actions"}>
                   <Plus size={18} />
                 </button>
               </div>
 
-              {/* Filters toggle */}
-              <button
+              {/* Swipe handle to pull up filters */}
+              <div
+                className="shrink-0 flex flex-col items-center justify-center w-9 h-9 cursor-pointer active:scale-95 transition-transform"
                 onClick={() => setMobileFiltersOpen(!mobileFiltersOpen)}
-                className="shrink-0 w-9 h-9 rounded-xl glass-panel flex items-center justify-center text-foreground shadow-lg active:scale-90 transition-transform"
                 aria-label={mobileFiltersOpen ? "Hide filters" : "Show filters"}
               >
-                {mobileFiltersOpen ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
-              </button>
+                <div className="w-6 h-1 rounded-full bg-muted-foreground/40 mb-0.5" />
+                <div className="w-4 h-1 rounded-full bg-muted-foreground/25" />
+              </div>
             </div>
           </div>
         )}

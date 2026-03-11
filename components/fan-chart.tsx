@@ -158,7 +158,7 @@ export function FanChart({
   const svgContent = useMemo(() => {
     const width = containerSize.width
     const actualHeight = containerSize.height
-    const padding = { top: 10, right: 15, bottom: 24, left: 55 }
+    const padding = { top: 10, right: 55, bottom: 24, left: 10 }
     const chartWidth = width - padding.left - padding.right
     const chartHeight = actualHeight - padding.top - padding.bottom
 
@@ -680,9 +680,9 @@ export function FanChart({
         {yTicks.map((tick) => (
           <text
             key={tick}
-            x={padding.left - 5}
+            x={width - padding.right + 5}
             y={yScale(tick) + 3}
-            textAnchor="end"
+            textAnchor="start"
             className="text-[11px] fill-muted-foreground font-mono"
             style={{ pointerEvents: 'none' }}
           >
