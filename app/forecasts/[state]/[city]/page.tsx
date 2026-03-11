@@ -87,15 +87,34 @@ export default async function CityHubPage({ params, searchParams }: PageProps) {
     const supabase = getSupabaseAdmin()
     const tractIds = tracts.map(t => t.tractGeoid)
 
-    const [{ data: forecastRows }, enrichedNames, dynamicBounds] = await Promise.all([
-        supabase
-            .schema(schema as any)
-            .from("metrics_tract_forecast")
-            .select("tract_geoid20, origin_year, horizon_m, p50, p10, p90")
-            .in("tract_geoid20", tractIds)
-            .in("horizon_m", [12, 60])
-            .eq("series_kind", "forecast")
-            .not("p50", "is", null),
+    // Use range query (not .in()) to avoid Supabase URL-length / 1000-row cap
+    // for large counties like Harris (Houston) with 800+ tracts.
+    async function fetchAllForecastRows() {
+        const PAGE_SIZE = 1000
+        const allRows: any[] = []
+        let offset = 0
+        while (true) {
+            const { data: page } = await supabase
+                .schema(schema as any)
+                .from("metrics_tract_forecast")
+                .select("tract_geoid20, origin_year, horizon_m, p50, p10, p90")
+                .gte("tract_geoid20", countyFipsPrefix)
+                .lt("tract_geoid20", countyFipsPrefix + "z")
+                .in("horizon_m", [12, 60])
+                .eq("series_kind", "forecast")
+                .not("p50", "is", null)
+                .order("tract_geoid20")
+                .range(offset, offset + PAGE_SIZE - 1)
+            if (!page || page.length === 0) break
+            allRows.push(...page)
+            if (page.length < PAGE_SIZE) break
+            offset += PAGE_SIZE
+        }
+        return allRows
+    }
+
+    const [forecastRows, enrichedNames, dynamicBounds] = await Promise.all([
+        fetchAllForecastRows(),
         batchEnrichTracts(tractIds),
         getDynamicBounds("county", countyFipsPrefix)
     ])
