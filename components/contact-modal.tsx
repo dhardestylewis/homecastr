@@ -214,6 +214,7 @@ export function ContactModal({ isOpen, onClose, embedded = false }: ContactModal
                             onClick={handleCopyEmail}
                             className="px-3 py-2.5 rounded-xl bg-background border border-border hover:border-[hsl(45,80%,45%)]/40 transition-colors"
                             title="Copy email"
+                            aria-label="Copy email"
                         >
                             {copied ? (
                                 <Check size={16} className="text-green-500" />

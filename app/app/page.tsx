@@ -740,7 +740,7 @@ function DashboardContent() {
             </button>
           </div>
         )}
-        <button onClick={() => setMobileActionsOpen(!mobileActionsOpen)} className={cn("w-9 h-9 rounded-xl glass-panel flex items-center justify-center text-foreground shadow-lg active:scale-90 transition-all duration-200", mobileActionsOpen && "rotate-45 bg-primary text-primary-foreground")}><Plus size={18} /></button>
+        <button aria-label="Toggle actions menu" onClick={() => setMobileActionsOpen(!mobileActionsOpen)} className={cn("w-9 h-9 rounded-xl glass-panel flex items-center justify-center text-foreground shadow-lg active:scale-90 transition-all duration-200", mobileActionsOpen && "rotate-45 bg-primary text-primary-foreground")}><Plus size={18} /></button>
       </div>
       <div className="shrink-0 flex flex-col items-center justify-center w-9 h-9 cursor-pointer active:scale-95 transition-transform" onClick={() => { setMobileActionsOpen(false); setMobileFiltersOpen(!mobileFiltersOpen) }}>
         <div className="w-6 h-1 rounded-full bg-muted-foreground/40 mb-0.5" />
