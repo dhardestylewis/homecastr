@@ -247,6 +247,26 @@ export function ForecastMap({
 
     // Restore selection from URL param on initial map load
     const hasRestoredUrlSelection = useRef(false)
+
+    // Sync pinned comparisons to URL query params
+    const prevPinnedIdsRef = useRef<string>("")
+    useEffect(() => {
+        const sortedIds = pinnedComparisons.map(p => p.id).sort().join(",")
+        if (prevPinnedIdsRef.current === sortedIds) return
+        prevPinnedIdsRef.current = sortedIds
+
+        const params = new URLSearchParams(window.location.search)
+        if (pinnedComparisons.length > 0) {
+            params.set("compare", pinnedComparisons.map(p => p.id).join(","))
+        } else {
+            params.delete("compare")
+        }
+        
+        // Use replace state to avoid polluting browser history with every comparison toggle
+        const newUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ""}${window.location.hash}`
+        window.history.replaceState({}, "", newUrl)
+    }, [pinnedComparisons])
+
     useEffect(() => {
         if (hasRestoredUrlSelection.current) return
         if (!isLoaded || !mapRef.current || !mapState.selectedId) return
@@ -648,9 +668,14 @@ export function ForecastMap({
     const [studentLoading, setStudentLoading] = useState(false)
     // Debug: collected p50 trajectories from all visible student buildings for spaghetti plot
     const [studentChildLines, setStudentChildLines] = useState<number[][] | undefined>(undefined)
-
     // Fetch all horizons for a given feature to build FanChart data
     const fetchForecastDetail = useCallback(async (featureId: string, level: string) => {
+        // Clear previous timeout
+        if (detailTimerRef.current) {
+            clearTimeout(detailTimerRef.current)
+            detailTimerRef.current = null
+        }
+
         const cacheKey = `${level}:${featureId}`
         // Check cache first — instant re-hover
         const cached = detailCacheRef.current.get(cacheKey)
@@ -660,7 +685,7 @@ export function ForecastMap({
             detailCacheRef.current.set(cacheKey, cached)
             setFanChartData(cached.fanChart)
             setHistoricalValues(cached.historicalValues)
-            detailFetchRef.current = cacheKey
+            detailFetchRef.current = cacheKey // Prevent duplicate fetches
             return
         }
         if (detailFetchRef.current === cacheKey) return // already fetching
@@ -1014,6 +1039,24 @@ export function ForecastMap({
         map.on("load", () => {
             setIsLoaded(true)
 
+            // Add a crosshatch pattern image for selected/pinned features
+            const addCrosshatchPattern = () => {
+                const svg = `
+                    <svg width="20" height="20" xmlns="http://www.w3.org/2000/svg">
+                        <rect width="20" height="20" fill="transparent" />
+                        <path d="M-5,25 L25,-5 M-5,-5 L25,25" stroke="rgba(255, 255, 255, 0.4)" stroke-width="2" />
+                    </svg>
+                `.trim();
+                const img = new Image(20, 20);
+                img.onload = () => {
+                    if (!map.hasImage('crosshatch-pattern')) {
+                        map.addImage('crosshatch-pattern', img);
+                    }
+                };
+                img.src = 'data:image/svg+xml;base64,' + btoa(svg);
+            };
+            addCrosshatchPattern();
+
                 // Expose global map capture for PDF export (zoom in for closer view)
                 ; (window as any).__captureMapImage = () => {
                     return new Promise<string | undefined>((resolve) => {
@@ -1073,6 +1116,14 @@ export function ForecastMap({
                             "fill-color": fillColor,
                             "fill-opacity": 0.35,
                             "fill-outline-color": "rgba(255,255,255,0.2)",
+                            "fill-pattern": [
+                                "case",
+                                ["boolean", ["feature-state", "selected"], false],
+                                "crosshatch-pattern",
+                                ["boolean", ["feature-state", "pinned"], false],
+                                "crosshatch-pattern",
+                                null
+                            ]
                         },
                     })
 
@@ -1434,7 +1485,53 @@ export function ForecastMap({
             if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null }
             longPressActive = false
             touchStartPos = null
-        }, { passive: true })
+        })
+
+        // Undulating animation loop for selected boundaries
+        let animationFrameId: number;
+        let startTime = Date.now();
+        const animateSelectedLine = () => {
+            if (!mapRef.current || !isLoaded) return;
+            const now = Date.now();
+            // Pulse between 0.4 and 1.0 using a sine wave (2.5-second period)
+            const phase = ((now - startTime) % 2500) / 2500;
+            const opacity = 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(phase * Math.PI * 2));
+            
+            const mapInstance = mapRef.current;
+            if (mapInstance.getStyle()) {
+                for (const lvl of GEO_LEVELS) {
+                    for (const suffix of ["a", "b"]) {
+                        const layerId = `forecast-outline-${lvl.name}-${suffix}`;
+                        if (mapInstance.getLayer(layerId)) {
+                            mapInstance.setPaintProperty(layerId, "line-opacity", [
+                                "case",
+                                ["boolean", ["feature-state", "selected"], false],
+                                opacity,
+                                ["boolean", ["feature-state", "hover"], false],
+                                1.0,
+                                ["boolean", ["feature-state", "pinned"], false],
+                                1.0,
+                                0
+                            ]);
+                        }
+                    }
+                }
+            }
+            animationFrameId = requestAnimationFrame(animateSelectedLine);
+        };
+        
+        // Start animation loop once loaded
+        if (isLoaded) {
+            animateSelectedLine();
+        }
+
+        // On unmount
+        return () => {
+            if (hoverDetailTimerRef.current) clearTimeout(hoverDetailTimerRef.current)
+            if (hoverDwellTimerRef.current) clearTimeout(hoverDwellTimerRef.current)
+            if (animationFrameId) cancelAnimationFrame(animationFrameId)
+        }
+    }, [isLoaded, debugBuildings])
 
         // MOUSELEAVE: clear tooltip when cursor exits the map (unless locked)
         map.getCanvas().addEventListener("mouseleave", () => {

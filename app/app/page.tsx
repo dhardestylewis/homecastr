@@ -754,8 +754,11 @@ function DashboardContent() {
       {/* Full-screen Map Container */}
       <div 
         className="flex-1 relative h-full w-full"
-        onClickCapture={() => {
-          if (mobileFiltersOpen) setMobileFiltersOpen(false)
+        onClickCapture={(e) => {
+          // Don't close filters if clicking interactable UI elements like popups or the legend
+          const target = e.target as HTMLElement
+          const isInteractiveUI = target.closest('.mapboxgl-popup') || target.closest('.glass-panel') || target.closest('button')
+          if (mobileFiltersOpen && !isInteractiveUI) setMobileFiltersOpen(false)
         }}
       >
         {isUsingMockData && (
