@@ -248,24 +248,7 @@ export function ForecastMap({
     // Restore selection from URL param on initial map load
     const hasRestoredUrlSelection = useRef(false)
 
-    // Sync pinned comparisons to URL query params
-    const prevPinnedIdsRef = useRef<string>("")
-    useEffect(() => {
-        const sortedIds = pinnedComparisons.map(p => p.id).sort().join(",")
-        if (prevPinnedIdsRef.current === sortedIds) return
-        prevPinnedIdsRef.current = sortedIds
 
-        const params = new URLSearchParams(window.location.search)
-        if (pinnedComparisons.length > 0) {
-            params.set("compare", pinnedComparisons.map(p => p.id).join(","))
-        } else {
-            params.delete("compare")
-        }
-        
-        // Use replace state to avoid polluting browser history with every comparison toggle
-        const newUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ""}${window.location.hash}`
-        window.history.replaceState({}, "", newUrl)
-    }, [pinnedComparisons])
 
     useEffect(() => {
         if (hasRestoredUrlSelection.current) return
@@ -566,6 +549,25 @@ export function ForecastMap({
     const pinnedComparisonsRef = useRef<PinnedEntry[]>([])
     useEffect(() => { pinnedComparisonsRef.current = pinnedComparisons }, [pinnedComparisons])
     useEffect(() => { onPinnedCountChange?.(pinnedComparisons.length) }, [pinnedComparisons.length, onPinnedCountChange])
+
+    // Sync pinned comparisons to URL query params
+    const prevPinnedIdsRef = useRef<string>("")
+    useEffect(() => {
+        const sortedIds = pinnedComparisons.map(p => p.id).sort().join(",")
+        if (prevPinnedIdsRef.current === sortedIds) return
+        prevPinnedIdsRef.current = sortedIds
+
+        const params = new URLSearchParams(window.location.search)
+        if (pinnedComparisons.length > 0) {
+            params.set("compare", pinnedComparisons.map(p => p.id).join(","))
+        } else {
+            params.delete("compare")
+        }
+        
+        // Use replace state to avoid polluting browser history with every comparison toggle
+        const newUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ""}${window.location.hash}`
+        window.history.replaceState({}, "", newUrl)
+    }, [pinnedComparisons])
     // Expose pinned data for PDF export and sharing
     useEffect(() => {
         ; (window as any).__getPinnedComparisons = () => pinnedComparisons.map(pc => ({
