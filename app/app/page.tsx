@@ -630,8 +630,15 @@ function DashboardContent() {
             onKeyDown={(e) => {
               if (e.key === 'Enter' && chatInput.trim()) {
                 const text = chatInput.trim()
-                const isAddress = /^\d/.test(text) || /^\d{5}(-\d{4})?$/.test(text) || /,\s*[A-Z]{2}\b/i.test(text)
-                if (!isChatOpen && isAddress) {
+                // Chat vs Search heuristic:
+                // Route to SEARCH if: starts with digit, looks like zip, has state abbrev, OR is a short phrase (1-3 words) that doesn't start with conversational intent.
+                // Route to CHAT if: it's a longer sentence, or starts with greetings/questions (hi, hello, what, why, show me, tell me).
+                const isShortPhrase = text.split(/\s+/).length <= 4;
+                const isConversational = /^(hi|hello|hey|what|why|how|who|where|when|can|could|would|please|show|tell|explain)\b/i.test(text);
+                const isExplicitAddress = /^\d/.test(text) || /^\d{5}(-\d{4})?$/.test(text) || /,\s*[A-Z]{2}\b/i.test(text);
+                const isSearch = isExplicitAddress || (isShortPhrase && !isConversational);
+
+                if (!isChatOpen && isSearch) {
                   handleSearch(text)
                 } else {
                   if (!isChatOpen) setIsChatOpen(true)
