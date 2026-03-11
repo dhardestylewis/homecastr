@@ -617,6 +617,95 @@ function DashboardContent() {
       setIsTavusLoading(false)
     }
   }, [isTavusLoading, toast, mapState.selectedId, mapState.center, currentYear, filters.useForecastMap])
+  // ═══ Shared bottom bar row — used in BOTH tooltip and standalone contexts ═══
+  const mobileBottomBarRow = isMobileViewport ? (
+    <div className="px-3 py-2 flex items-center gap-2">
+      <div className="flex-1 min-w-0">
+        <div className={cn("flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 border transition-colors", isChatOpen ? "bg-muted/30 border-primary/30" : "bg-muted/20 border-border/50")}>
+          {isChatOpen && <MessageSquare size={14} className="text-primary shrink-0" />}
+          {!isChatOpen && <Search size={14} className="text-muted-foreground/60 shrink-0" />}
+          <input
+            value={chatInput}
+            onChange={(e) => setChatInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && chatInput.trim()) {
+                const text = chatInput.trim()
+                const isAddress = /^\d/.test(text) || /^\d{5}(-\d{4})?$/.test(text) || /,\s*[A-Z]{2}\b/i.test(text)
+                if (!isChatOpen && isAddress) {
+                  handleSearch(text)
+                } else {
+                  if (!isChatOpen) setIsChatOpen(true)
+                  setTimeout(() => chatPanelRef.current?.sendExternalMessage(text), isChatOpen ? 0 : 100)
+                }
+                setChatInput('')
+              }
+              if (e.key === 'Escape' && isChatOpen) {
+                setIsChatOpen(false)
+                setChatInput('')
+              }
+            }}
+            placeholder={isChatOpen ? "Ask about this area..." : "Search or ask a question..."}
+            className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
+          />
+          {!tavusConversationUrl && !isTavusLoading && (
+            <button onClick={handleFloatingConsultAI} className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center hover:bg-muted/50 active:scale-90 transition-transform" aria-label="Voice agent">
+              <Mic size={14} className="text-muted-foreground/70" />
+            </button>
+          )}
+          {isChatOpen && (
+            <button onClick={() => { setIsChatOpen(false); setChatInput('') }} className="shrink-0 w-5 h-5 rounded flex items-center justify-center hover:bg-muted/50">
+              <X size={12} />
+            </button>
+          )}
+        </div>
+      </div>
+      {/* FAB — PDF and Analysis */}
+      <div className="relative shrink-0">
+        {mobileActionsOpen && (
+          <div className="absolute bottom-12 right-0 flex flex-col gap-2 animate-in fade-in slide-in-from-bottom-2 duration-150 z-[70]">
+            <button
+              onClick={async () => {
+                setMobileActionsOpen(false)
+                try {
+                  toast({ title: "Generating PDF…", duration: 2000 })
+                  const captureMap = (window as any).__captureMapImage
+                  const mapImageDataUrl: string | undefined = captureMap ? await captureMap() : undefined
+                  const selectedId = mapState.selectedId
+                  let historicalValues: (number | null)[] = []
+                  let p50: number[] = [], p10: number[] = [], p90: number[] = [], years: number[] = []
+                  if (selectedId) {
+                    const level = selectedId.length === 3 ? "zip3" : selectedId.length === 5 ? "zcta" : selectedId.length === 11 ? "tract" : selectedId.length === 15 ? "tabblock" : "parcel"
+                    const res = await fetch(`/api/forecast-detail?level=${level}&id=${encodeURIComponent(selectedId)}&originYear=${pageOriginYear}`)
+                    if (res.ok) { const json = await res.json(); historicalValues = json.historicalValues || []; p50 = json.p50 || []; p10 = json.p10 || []; p90 = json.p90 || []; years = json.years || [] }
+                  }
+                  const shareUrl = new URL(window.location.href)
+                  if (currentYear !== 2027) shareUrl.searchParams.set("yr", currentYear.toString())
+                  const pdfPinnedIds = (window as any).__getPinnedIds?.() as string[] | undefined
+                  if (pdfPinnedIds?.length) shareUrl.searchParams.set("compare", pdfPinnedIds.join(","))
+                  await generateForecastPDF({
+                    locationName: searchBarValue && !searchBarValue.includes("Loading") ? searchBarValue : selectedId ? selectedId : "Map Overview",
+                    locationId: selectedId || "—", currentYear, historicalValues, p50, p10, p90, years, mapImageDataUrl,
+                    shareUrl: shareUrl.toString(), pinnedComparisons: (window as any).__getPinnedComparisons?.() || undefined,
+                  })
+                } catch (err) { console.error("PDF generation failed:", err); toast({ title: "PDF failed", description: "Could not generate report", variant: "destructive" }) }
+              }}
+              className="h-10 px-3 rounded-full glass-panel flex items-center gap-2 text-foreground shadow-xl active:scale-95 transition-transform" aria-label="PDF"
+            >
+              <FileDown size={16} /><span className="text-xs font-medium">PDF</span>
+            </button>
+            <button onClick={() => { setIsContactOpen(true); setMobileActionsOpen(false) }} className="h-10 px-3 rounded-full glass-panel flex items-center gap-2 text-foreground shadow-xl active:scale-95 transition-transform border border-[hsl(var(--primary))]/30" aria-label="Analysis">
+              <CalendarDays size={16} className="text-[hsl(45,80%,45%)]" /><span className="text-xs font-medium">Analysis</span>
+            </button>
+          </div>
+        )}
+        <button onClick={() => setMobileActionsOpen(!mobileActionsOpen)} className={cn("w-9 h-9 rounded-xl glass-panel flex items-center justify-center text-foreground shadow-lg active:scale-90 transition-all duration-200", mobileActionsOpen && "rotate-45 bg-primary text-primary-foreground")}><Plus size={18} /></button>
+      </div>
+      <div className="shrink-0 flex flex-col items-center justify-center w-9 h-9 cursor-pointer active:scale-95 transition-transform" onClick={() => { setMobileActionsOpen(false); setMobileFiltersOpen(!mobileFiltersOpen) }}>
+        <div className="w-6 h-1 rounded-full bg-muted-foreground/40 mb-0.5" />
+        <div className="w-4 h-1 rounded-full bg-muted-foreground/25" />
+      </div>
+    </div>
+  ) : null
 
   return (
     <main className="h-dvh flex flex-col">
@@ -673,94 +762,6 @@ function DashboardContent() {
                     />
                   </div>
                 )}
-                {/* Bottom bar row */}
-                <div className="px-3 py-2 flex items-center gap-2">
-                  <div className="flex-1 min-w-0">
-                    <div className={cn("flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 border transition-colors", isChatOpen ? "bg-muted/30 border-primary/30" : "bg-muted/20 border-border/50")}>
-                      {isChatOpen && <MessageSquare size={14} className="text-primary shrink-0" />}
-                      {!isChatOpen && <Search size={14} className="text-muted-foreground/60 shrink-0" />}
-                      <input
-                        value={chatInput}
-                        onChange={(e) => setChatInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && chatInput.trim()) {
-                            const text = chatInput.trim()
-                            const isAddress = /^\d/.test(text) || /^\d{5}(-\d{4})?$/.test(text) || /,\s*[A-Z]{2}\b/i.test(text)
-                            if (!isChatOpen && isAddress) {
-                              handleSearch(text)
-                            } else {
-                              if (!isChatOpen) setIsChatOpen(true)
-                              setTimeout(() => chatPanelRef.current?.sendExternalMessage(text), isChatOpen ? 0 : 100)
-                            }
-                            setChatInput('')
-                          }
-                          if (e.key === 'Escape' && isChatOpen) {
-                            setIsChatOpen(false)
-                            setChatInput('')
-                          }
-                        }}
-                        placeholder={isChatOpen ? "Ask about this area..." : "Search or ask a question..."}
-                        className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
-                      />
-                      {/* Mic button — starts Tavus voice agent */}
-                      {!tavusConversationUrl && !isTavusLoading && (
-                        <button onClick={handleFloatingConsultAI} className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center hover:bg-muted/50 active:scale-90 transition-transform" aria-label="Voice agent">
-                          <Mic size={14} className="text-muted-foreground/70" />
-                        </button>
-                      )}
-                      {isChatOpen && (
-                        <button onClick={() => { setIsChatOpen(false); setChatInput('') }} className="shrink-0 w-5 h-5 rounded flex items-center justify-center hover:bg-muted/50">
-                          <X size={12} />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  {/* FAB — PDF and Analysis only */}
-                  <div className="relative shrink-0">
-                    {mobileActionsOpen && (
-                      <div className="absolute bottom-12 right-0 flex flex-col gap-2 animate-in fade-in slide-in-from-bottom-2 duration-150 z-[70]">
-                        <button
-                          onClick={async () => {
-                            setMobileActionsOpen(false)
-                            try {
-                              toast({ title: "Generating PDF…", duration: 2000 })
-                              const captureMap = (window as any).__captureMapImage
-                              const mapImageDataUrl: string | undefined = captureMap ? await captureMap() : undefined
-                              const selectedId = mapState.selectedId
-                              let historicalValues: (number | null)[] = []
-                              let p50: number[] = [], p10: number[] = [], p90: number[] = [], years: number[] = []
-                              if (selectedId) {
-                                const level = selectedId.length === 3 ? "zip3" : selectedId.length === 5 ? "zcta" : selectedId.length === 11 ? "tract" : selectedId.length === 15 ? "tabblock" : "parcel"
-                                const res = await fetch(`/api/forecast-detail?level=${level}&id=${encodeURIComponent(selectedId)}&originYear=${pageOriginYear}`)
-                                if (res.ok) { const json = await res.json(); historicalValues = json.historicalValues || []; p50 = json.p50 || []; p10 = json.p10 || []; p90 = json.p90 || []; years = json.years || [] }
-                              }
-                              const shareUrl = new URL(window.location.href)
-                              if (currentYear !== 2027) shareUrl.searchParams.set("yr", currentYear.toString())
-                              const pdfPinnedIds = (window as any).__getPinnedIds?.() as string[] | undefined
-                              if (pdfPinnedIds?.length) shareUrl.searchParams.set("compare", pdfPinnedIds.join(","))
-                              await generateForecastPDF({
-                                locationName: searchBarValue && !searchBarValue.includes("Loading") ? searchBarValue : selectedId ? selectedId : "Map Overview",
-                                locationId: selectedId || "—", currentYear, historicalValues, p50, p10, p90, years, mapImageDataUrl,
-                                shareUrl: shareUrl.toString(), pinnedComparisons: (window as any).__getPinnedComparisons?.() || undefined,
-                              })
-                            } catch (err) { console.error("PDF generation failed:", err); toast({ title: "PDF failed", description: "Could not generate report", variant: "destructive" }) }
-                          }}
-                          className="h-10 px-3 rounded-full glass-panel flex items-center gap-2 text-foreground shadow-xl active:scale-95 transition-transform" aria-label="PDF"
-                        >
-                          <FileDown size={16} /><span className="text-xs font-medium">PDF</span>
-                        </button>
-                        <button onClick={() => { setIsContactOpen(true); setMobileActionsOpen(false) }} className="h-10 px-3 rounded-full glass-panel flex items-center gap-2 text-foreground shadow-xl active:scale-95 transition-transform border border-[hsl(var(--primary))]/30" aria-label="Analysis">
-                          <CalendarDays size={16} className="text-[hsl(45,80%,45%)]" /><span className="text-xs font-medium">Analysis</span>
-                        </button>
-                      </div>
-                    )}
-                    <button onClick={() => setMobileActionsOpen(!mobileActionsOpen)} className={cn("w-9 h-9 rounded-xl glass-panel flex items-center justify-center text-foreground shadow-lg active:scale-90 transition-all duration-200", mobileActionsOpen && "rotate-45 bg-primary text-primary-foreground")}><Plus size={18} /></button>
-                  </div>
-                  <div className="shrink-0 flex flex-col items-center justify-center w-9 h-9 cursor-pointer active:scale-95 transition-transform" onClick={() => { setMobileActionsOpen(false); setMobileFiltersOpen(!mobileFiltersOpen) }}>
-                    <div className="w-6 h-1 rounded-full bg-muted-foreground/40 mb-0.5" />
-                    <div className="w-4 h-1 rounded-full bg-muted-foreground/25" />
-                  </div>
-                </div>
               </div>
             ) : undefined}
             mobileContentOverride={isMobileViewport && isChatOpen ? (
@@ -780,6 +781,12 @@ function DashboardContent() {
                 onClose={() => { setTavusConversationUrl(null); setIsTavusLoading(false) }}
                 forecastMode={filters.useForecastMap ?? false}
                 embedded={true}
+              />
+            ) : isMobileViewport && isContactOpen ? (
+              <ContactModal
+                isOpen={true}
+                embedded={true}
+                onClose={() => setIsContactOpen(false)}
               />
             ) : undefined}
           />
@@ -954,12 +961,10 @@ function DashboardContent() {
           </div>
         )}
 
-        {/* ═══ MOBILE BOTTOM BAR — Apple Maps style ═══ */}
-        {/* When tooltip active: this content is inside ForecastMap tooltip (via mobileBottomBar prop) */}
-        {/* When no tooltip: renders standalone at bottom */}
-        {!searchParams.has("embedded") && isMobileViewport && !((mapState.selectedId || mapState.hoveredId) && filters.useForecastMap) && (
+        {/* ═══ MOBILE BOTTOM BAR — always fixed at bottom, ONE element ═══ */}
+        {!searchParams.has("embedded") && isMobileViewport && (
           <div className="fixed left-0 right-0 bottom-0 z-[60] flex flex-col">
-            {/* Swipe handle + filters sheet */}
+            {/* Filters sheet — slides up above the bar */}
             {mobileFiltersOpen && (
               <div className="glass-panel border-t border-border/50 px-4 py-3 space-y-3 animate-in slide-in-from-bottom-4 duration-200">
                 <TimeControls
@@ -978,101 +983,9 @@ function DashboardContent() {
               </div>
             )}
 
-            {/* Main bottom bar */}
-            <div className="glass-panel border-t border-border/50 px-3 py-2 flex items-center gap-2">
-              <div className="flex-1 min-w-0">
-                <div className={cn("flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 border transition-colors", isChatOpen ? "bg-muted/30 border-primary/30" : "bg-muted/20 border-border/50")}>
-                  {isChatOpen && <MessageSquare size={14} className="text-primary shrink-0" />}
-                  {!isChatOpen && <Search size={14} className="text-muted-foreground/60 shrink-0" />}
-                  <input
-                    value={chatInput}
-                    onChange={(e) => setChatInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && chatInput.trim()) {
-                        const text = chatInput.trim()
-                        const isAddress = /^\d/.test(text) || /^\d{5}(-\d{4})?$/.test(text) || /,\s*[A-Z]{2}\b/i.test(text)
-                        if (!isChatOpen && isAddress) {
-                          handleSearch(text)
-                        } else {
-                          if (!isChatOpen) setIsChatOpen(true)
-                          setTimeout(() => chatPanelRef.current?.sendExternalMessage(text), isChatOpen ? 0 : 100)
-                        }
-                        setChatInput('')
-                      }
-                      if (e.key === 'Escape' && isChatOpen) {
-                        setIsChatOpen(false)
-                        setChatInput('')
-                      }
-                    }}
-                    placeholder={isChatOpen ? "Ask about this area..." : "Search or ask a question..."}
-                    className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
-                  />
-                  {!tavusConversationUrl && !isTavusLoading && (
-                    <button onClick={handleFloatingConsultAI} className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center hover:bg-muted/50 active:scale-90 transition-transform" aria-label="Voice agent">
-                      <Mic size={14} className="text-muted-foreground/70" />
-                    </button>
-                  )}
-                  {isChatOpen && (
-                    <button onClick={() => { setIsChatOpen(false); setChatInput('') }} className="shrink-0 w-5 h-5 rounded flex items-center justify-center hover:bg-muted/50">
-                      <X size={12} />
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* FAB — PDF and Analysis only */}
-              <div className="relative shrink-0">
-                {mobileActionsOpen && (
-                  <div className="absolute bottom-12 right-0 flex flex-col gap-2 animate-in fade-in slide-in-from-bottom-2 duration-150">
-                    <button
-                      onClick={async () => {
-                        setMobileActionsOpen(false)
-                        try {
-                          toast({ title: "Generating PDF…", duration: 2000 })
-                          const captureMap = (window as any).__captureMapImage
-                          const mapImageDataUrl: string | undefined = captureMap ? await captureMap() : undefined
-                          const selectedId = mapState.selectedId
-                          let historicalValues: (number | null)[] = []
-                          let p50: number[] = [], p10: number[] = [], p90: number[] = [], years: number[] = []
-                          if (selectedId) {
-                            const level = selectedId.length === 3 ? "zip3" : selectedId.length === 5 ? "zcta" : selectedId.length === 11 ? "tract" : selectedId.length === 15 ? "tabblock" : "parcel"
-                            const res = await fetch(`/api/forecast-detail?level=${level}&id=${encodeURIComponent(selectedId)}&originYear=${pageOriginYear}`)
-                            if (res.ok) { const json = await res.json(); historicalValues = json.historicalValues || []; p50 = json.p50 || []; p10 = json.p10 || []; p90 = json.p90 || []; years = json.years || [] }
-                          }
-                          const shareUrl = new URL(window.location.href)
-                          if (currentYear !== 2027) shareUrl.searchParams.set("yr", currentYear.toString())
-                          const pdfPinnedIds = (window as any).__getPinnedIds?.() as string[] | undefined
-                          if (pdfPinnedIds?.length) shareUrl.searchParams.set("compare", pdfPinnedIds.join(","))
-                          await generateForecastPDF({
-                            locationName: searchBarValue && !searchBarValue.includes("Loading") ? searchBarValue : selectedId ? selectedId : "Map Overview",
-                            locationId: selectedId || "—", currentYear, historicalValues, p50, p10, p90, years, mapImageDataUrl,
-                            shareUrl: shareUrl.toString(), pinnedComparisons: (window as any).__getPinnedComparisons?.() || undefined,
-                          })
-                        } catch (err) { console.error("PDF generation failed:", err); toast({ title: "PDF failed", description: "Could not generate report", variant: "destructive" }) }
-                      }}
-                      className="h-10 px-3 rounded-full glass-panel flex items-center gap-2 text-foreground shadow-xl active:scale-95 transition-transform" aria-label="PDF"
-                    >
-                      <FileDown size={16} /><span className="text-xs font-medium">PDF</span>
-                    </button>
-                    <button onClick={() => { setIsContactOpen(true); setMobileActionsOpen(false) }} className="h-10 px-3 rounded-full glass-panel flex items-center gap-2 text-foreground shadow-xl active:scale-95 transition-transform border border-[hsl(var(--primary))]/30" aria-label="Analysis">
-                      <CalendarDays size={16} className="text-[hsl(45,80%,45%)]" /><span className="text-xs font-medium">Analysis</span>
-                    </button>
-                  </div>
-                )}
-                <button onClick={() => setMobileActionsOpen(!mobileActionsOpen)} className={cn("w-9 h-9 rounded-xl glass-panel flex items-center justify-center text-foreground shadow-lg active:scale-90 transition-all duration-200", mobileActionsOpen && "rotate-45 bg-primary text-primary-foreground")} aria-label={mobileActionsOpen ? "Close actions" : "More actions"}>
-                  <Plus size={18} />
-                </button>
-              </div>
-
-              {/* Swipe handle to pull up filters */}
-              <div
-                className="shrink-0 flex flex-col items-center justify-center w-9 h-9 cursor-pointer active:scale-95 transition-transform"
-                onClick={() => { setMobileActionsOpen(false); setMobileFiltersOpen(!mobileFiltersOpen) }}
-                aria-label={mobileFiltersOpen ? "Hide filters" : "Show filters"}
-              >
-                <div className="w-6 h-1 rounded-full bg-muted-foreground/40 mb-0.5" />
-                <div className="w-4 h-1 rounded-full bg-muted-foreground/25" />
-              </div>
+            {/* The ONE bar row — shared via mobileBottomBarRow */}
+            <div className="glass-panel border-t border-border/50">
+              {mobileBottomBarRow}
             </div>
           </div>
         )}
@@ -1216,7 +1129,7 @@ function DashboardContent() {
 
       {/* Cinematic onboarding intro — first-visit only */}
       <OnboardingIntro />
-      <ContactModal isOpen={isContactOpen} onClose={() => setIsContactOpen(false)} />
+      {!isMobileViewport && <ContactModal isOpen={isContactOpen} onClose={() => setIsContactOpen(false)} />}
     </main >
   )
 }

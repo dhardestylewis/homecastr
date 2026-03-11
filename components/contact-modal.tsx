@@ -14,9 +14,10 @@ declare global {
 interface ContactModalProps {
     isOpen: boolean
     onClose: () => void
+    embedded?: boolean
 }
 
-export function ContactModal({ isOpen, onClose }: ContactModalProps) {
+export function ContactModal({ isOpen, onClose, embedded = false }: ContactModalProps) {
     const [copied, setCopied] = useState(false)
     const [formName, setFormName] = useState("")
     const [formEmail, setFormEmail] = useState("")
@@ -78,16 +79,19 @@ export function ContactModal({ isOpen, onClose }: ContactModalProps) {
     if (!isOpen) return null
 
     return (
-        <div className="fixed inset-0 z-[10001] flex items-center justify-center">
-            {/* Backdrop */}
+        <div className={embedded ? "h-full flex flex-col overflow-y-auto" : "fixed inset-0 z-[10001] flex items-center justify-center"}>
+            {/* Backdrop — hidden in embedded mode */}
+            {!embedded && (
             <div
                 className="absolute inset-0 bg-black/50 backdrop-blur-sm"
                 onClick={onClose}
             />
+            )}
 
             {/* Modal */}
-            <div className="relative z-10 w-full max-w-md mx-4 glass-panel rounded-2xl shadow-2xl border border-border/50 overflow-hidden">
-                {/* Header */}
+            <div className={embedded ? "flex-1 flex flex-col" : "relative z-10 w-full max-w-md mx-4 glass-panel rounded-2xl shadow-2xl border border-border/50 overflow-hidden"}>
+                {/* Header — hidden in embedded mode */}
+                {!embedded && (
                 <div className="flex items-center justify-between px-6 pt-5 pb-3">
                     <div>
                         <h2 className="text-lg font-bold text-foreground">Get in touch</h2>
@@ -102,6 +106,7 @@ export function ContactModal({ isOpen, onClose }: ContactModalProps) {
                         <X size={18} />
                     </button>
                 </div>
+                )}
 
                 <div className="px-6 pb-6 space-y-4">
                     {/* Option 1: Schedule a call */}
