@@ -24,6 +24,7 @@ import { getH3CellDetails } from "@/app/actions/h3-details"
 // import { ExplainerPopup } from "@/components/explainer-popup"  // Deactivated — replaced by OnboardingIntro
 import { OnboardingIntro } from "@/components/onboarding-intro"
 import { ChatPanel, type MapAction, type ChatPanelHandle } from "@/components/chat-panel"
+import { useKeyboardOpen } from "@/hooks/use-keyboard-open"
 
 import { createTavusConversation } from "@/app/actions/tavus"
 import dynamic from "next/dynamic"
@@ -58,36 +59,14 @@ function DashboardContent() {
   const [isMobileViewport, setIsMobileViewport] = useState(false)
   const chatPanelRef = useRef<ChatPanelHandle>(null)
   const [chatInput, setChatInput] = useState("")
-  const [keyboardHeight, setKeyboardHeight] = useState(0)
+  const { keyboardHeight } = useKeyboardOpen()
 
-  // Track mobile viewport and keyboard height
+  // Track mobile viewport
   useEffect(() => {
     const checkMobile = () => setIsMobileViewport(window.innerWidth < 768)
     checkMobile()
     window.addEventListener('resize', checkMobile)
-
-    const handleViewportChange = () => {
-      if (window.visualViewport) {
-        // Calculate difference between window height and visual viewport height
-        // This gives us the approximate height of the software keyboard
-        const offset = window.innerHeight - window.visualViewport.height
-        // Only set keyboard height if it's significant (>100px) to ignore small toolbars
-        setKeyboardHeight(offset > 100 ? offset : 0)
-      }
-    }
-
-    if (window.visualViewport) {
-      window.visualViewport.addEventListener('resize', handleViewportChange)
-      window.visualViewport.addEventListener('scroll', handleViewportChange)
-    }
-
-    return () => {
-      window.removeEventListener('resize', checkMobile)
-      if (window.visualViewport) {
-        window.visualViewport.removeEventListener('resize', handleViewportChange)
-        window.visualViewport.removeEventListener('scroll', handleViewportChange)
-      }
-    }
+    return () => window.removeEventListener('resize', checkMobile)
   }, [])
   const [compareMode, setCompareMode] = useState(false)
   const [pinnedCount, setPinnedCount] = useState(0)
