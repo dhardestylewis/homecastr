@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect, useCallback } from "react"
+import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from "react"
 import { useKeyboardOpen } from "@/hooks/use-keyboard-open"
 import { Send, X, Loader2, MessageSquare, MapPin, Sparkles, Link2, FileDown, CalendarDays } from "lucide-react"
 import { HomecastrLogo } from "./homecastr-logo"
@@ -37,7 +37,12 @@ interface ChatPanelProps {
     embedded?: boolean
 }
 
-export function ChatPanel({ isOpen, onClose, onMapAction, forecastMode, onTavusRequest, tooltipVisible = false, mapViewport, onShare, onPDF, onContact, embedded = false }: ChatPanelProps) {
+export interface ChatPanelHandle {
+    sendExternalMessage: (text: string) => void
+    isLoading: boolean
+}
+
+export const ChatPanel = forwardRef<ChatPanelHandle, ChatPanelProps>(function ChatPanel({ isOpen, onClose, onMapAction, forecastMode, onTavusRequest, tooltipVisible = false, mapViewport, onShare, onPDF, onContact, embedded = false }, ref) {
     const [messages, setMessages] = useState<ChatMessage[]>([])
     const [input, setInput] = useState("")
     const [isLoading, setIsLoading] = useState(false)
@@ -70,13 +75,14 @@ export function ChatPanel({ isOpen, onClose, onMapAction, forecastMode, onTavusR
         }
     }, [isOpen])
 
-    const sendMessage = useCallback(async () => {
-        if (!input.trim() || isLoading) return
+    const sendMessage = useCallback(async (externalText?: string) => {
+        const text = externalText || input.trim()
+        if (!text || isLoading) return
 
-        const userMessage: ChatMessage = { role: "user", content: input.trim() }
+        const userMessage: ChatMessage = { role: "user", content: text }
         const newMessages = [...messages, userMessage]
         setMessages(newMessages)
-        setInput("")
+        if (!externalText) setInput("")
         setIsLoading(true)
 
         try {
@@ -111,24 +117,18 @@ export function ChatPanel({ isOpen, onClose, onMapAction, forecastMode, onTavusR
 
             // Execute map actions (fly-to, select hex, clear selection)
             if (data.mapActions && data.mapActions.length > 0) {
-                // Filter out non-navigation actions (like clear_selection)
                 const navActions = data.mapActions.filter((a: any) => !a.action)
                 const controlActions = data.mapActions.filter((a: any) => a.action)
 
-                // Handle control actions (clear_selection, etc.)
                 for (const ca of controlActions) {
                     onMapAction(ca)
                 }
 
-                // Handle navigation actions (fly-to with lat/lng)
                 if (navActions.length > 0) {
-
-                    // Preserve area_id/level from whichever action has them
                     const areaAction = navActions.find((a: any) => a.area_id)
                     const areaId = areaAction?.area_id
                     const level = areaAction?.level
 
-                    // Deduplicate identical coordinate pairs
                     const seen = new Set<string>()
                     const uniqueActions = navActions.filter((a: any) => {
                         const key = `${a.lat.toFixed(6)},${a.lng.toFixed(6)}`
@@ -138,12 +138,9 @@ export function ChatPanel({ isOpen, onClose, onMapAction, forecastMode, onTavusR
                     })
 
                     if (uniqueActions.length === 1) {
-                        // Single location — fly directly
                         const a = uniqueActions[0]
-                        console.log(`[MapAction] Requested: (${a.lat.toFixed(5)}, ${a.lng.toFixed(5)}) zoom=${a.zoom}`)
                         onMapAction({ ...a, ...(areaId ? { area_id: areaId, level } : {}) })
                     } else {
-                        // Multiple locations (e.g. comparison) — compute midpoint + zoom to show all
                         const actions = uniqueActions as MapAction[]
                         const avgLat = actions.reduce((s, a) => s + a.lat, 0) / actions.length
                         const avgLng = actions.reduce((s, a) => s + a.lng, 0) / actions.length
@@ -151,8 +148,6 @@ export function ChatPanel({ isOpen, onClose, onMapAction, forecastMode, onTavusR
                         const lngSpan = Math.max(...actions.map(a => a.lng)) - Math.min(...actions.map(a => a.lng))
                         const maxSpan = Math.max(latSpan, lngSpan)
                         const fitZoom = maxSpan < 0.01 ? 15 : maxSpan < 0.05 ? 13 : maxSpan < 0.1 ? 12 : maxSpan < 0.3 ? 11 : 10
-                        console.log(`[MapAction] ${actions.length} locations:`, actions.map(a => `(${a.lat.toFixed(5)}, ${a.lng.toFixed(5)})`))
-                        console.log(`[MapAction] Midpoint: (${avgLat.toFixed(5)}, ${avgLng.toFixed(5)}), span=${maxSpan.toFixed(4)}, fitZoom=${fitZoom}`)
                         onMapAction({ lat: avgLat, lng: avgLng, zoom: fitZoom, ...(areaId ? { area_id: areaId, level } : {}) })
                     }
                 }
@@ -169,6 +164,12 @@ export function ChatPanel({ isOpen, onClose, onMapAction, forecastMode, onTavusR
             setIsLoading(false)
         }
     }, [input, messages, isLoading, onMapAction])
+
+    // Expose imperative handle for external input (unified search bar)
+    useImperativeHandle(ref, () => ({
+        sendExternalMessage: (text: string) => sendMessage(text),
+        isLoading,
+    }), [sendMessage, isLoading])
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === "Enter" && !e.shiftKey) {
@@ -208,8 +209,8 @@ export function ChatPanel({ isOpen, onClose, onMapAction, forecastMode, onTavusR
             } : {}}
         >
             <div className={embedded ? "h-full flex flex-col" : "h-full flex flex-col glass-panel border border-white/10 rounded-t-xl md:rounded-2xl shadow-2xl"}>
-                {/* Header — minimal in embedded mode */}
-                {!isKeyboardOpen && (
+                {/* Header — hidden in embedded mode */}
+                {!embedded && !isKeyboardOpen && (
                     <div className="flex items-center justify-between px-3 h-9 border-b border-border bg-background/80 shrink-0">
                         <div className="flex items-center gap-2">
                             <HomecastrLogo variant="horizontal" size={16} />
@@ -322,7 +323,8 @@ export function ChatPanel({ isOpen, onClose, onMapAction, forecastMode, onTavusR
 
                     <div ref={messagesEndRef} />
                 </div>
-                {/* Input */}
+                {/* Input — hidden in embedded mode (parent search bar drives input) */}
+                {!embedded && (
                 <div className="px-3 pb-3 pt-2 border-t border-border">
                     <div className="flex items-center gap-2 bg-muted/30 rounded-xl px-3 py-1.5 border border-border/50 focus-within:border-primary/50 transition-colors">
                         <input
@@ -339,7 +341,7 @@ export function ChatPanel({ isOpen, onClose, onMapAction, forecastMode, onTavusR
                             disabled={isLoading}
                         />
                         <button
-                            onClick={sendMessage}
+                            onClick={() => sendMessage()}
                             disabled={!input.trim() || isLoading}
                             className="w-8 h-8 rounded-lg flex items-center justify-center bg-primary text-primary-foreground disabled:opacity-30 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors shrink-0"
                             aria-label="Send message"
@@ -351,7 +353,8 @@ export function ChatPanel({ isOpen, onClose, onMapAction, forecastMode, onTavusR
                         AI responses are for informational purposes only
                     </p>
                 </div>
+                )}
             </div>
         </div>
     )
-}
+})

@@ -15,7 +15,7 @@ import { useToast } from "@/hooks/use-toast"
 import type { PropertyForecast } from "@/app/actions/property-forecast"
 import { TimeControls } from "@/components/time-controls"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { AlertCircle, Plus, Minus, RotateCcw, ArrowLeftRight, Copy, Terminal, Activity, MessageSquare, Mic, CalendarDays, Link2, FileDown, Check, Search, ChevronUp, ChevronDown } from "lucide-react"
+import { AlertCircle, Plus, Minus, RotateCcw, ArrowLeftRight, Copy, Terminal, Activity, MessageSquare, Mic, CalendarDays, Link2, FileDown, Check, Search, ChevronUp, ChevronDown, X } from "lucide-react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { geocodeAddress, reverseGeocode } from "@/app/actions/geocode"
 
@@ -23,7 +23,7 @@ import { cellToLatLng, latLngToCell } from "h3-js"
 import { getH3CellDetails } from "@/app/actions/h3-details"
 // import { ExplainerPopup } from "@/components/explainer-popup"  // Deactivated — replaced by OnboardingIntro
 import { OnboardingIntro } from "@/components/onboarding-intro"
-import { ChatPanel, type MapAction } from "@/components/chat-panel"
+import { ChatPanel, type MapAction, type ChatPanelHandle } from "@/components/chat-panel"
 
 import { createTavusConversation } from "@/app/actions/tavus"
 import dynamic from "next/dynamic"
@@ -56,6 +56,8 @@ function DashboardContent() {
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const [mobileActionsOpen, setMobileActionsOpen] = useState(false)
   const [isMobileViewport, setIsMobileViewport] = useState(false)
+  const chatPanelRef = useRef<ChatPanelHandle>(null)
+  const [chatInput, setChatInput] = useState("")
 
   // Track mobile viewport
   useEffect(() => {
@@ -674,7 +676,29 @@ function DashboardContent() {
                 {/* Bottom bar row */}
                 <div className="px-3 py-2 flex items-center gap-2">
                   <div className="flex-1 min-w-0">
-                    <SearchBox onSearch={handleSearch} placeholder="Search address..." value={searchBarValue} />
+                    {isChatOpen ? (
+                      <div className="flex items-center gap-1.5 bg-muted/30 rounded-lg px-2.5 py-1.5 border border-primary/30">
+                        <MessageSquare size={14} className="text-primary shrink-0" />
+                        <input
+                          value={chatInput}
+                          onChange={(e) => setChatInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && chatInput.trim()) {
+                              chatPanelRef.current?.sendExternalMessage(chatInput.trim())
+                              setChatInput('')
+                            }
+                          }}
+                          placeholder="Ask about a neighborhood..."
+                          className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
+                          autoFocus
+                        />
+                        <button onClick={() => { setIsChatOpen(false); setChatInput('') }} className="shrink-0 w-5 h-5 rounded flex items-center justify-center hover:bg-muted/50">
+                          <X size={12} />
+                        </button>
+                      </div>
+                    ) : (
+                      <SearchBox onSearch={handleSearch} placeholder="Search address..." value={searchBarValue} />
+                    )}
                   </div>
                   <div className="relative shrink-0">
                     {mobileActionsOpen && (
@@ -699,6 +723,7 @@ function DashboardContent() {
             ) : undefined}
             mobileContentOverride={isMobileViewport && isChatOpen ? (
               <ChatPanel
+                ref={chatPanelRef}
                 isOpen={true}
                 embedded={true}
                 onClose={() => setIsChatOpen(false)}
