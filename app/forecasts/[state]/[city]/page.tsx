@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 import Link from "next/link"
-import { getTractsForCity, batchEnrichTracts, getStatesWithData, getCitiesForState, ZIP_NAMES } from "@/lib/publishing/geo-crosswalk"
+import { getTractsForCity, batchEnrichTracts, getStatesWithData, getCitiesForState, ZIP_CITY_NATIONAL } from "@/lib/publishing/geo-crosswalk"
 import { isOutlierTract, logFlaggedOutliers, createOutlierTag, type OutlierTag } from "@/lib/publishing/forecast-outlier-filter"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
 import { SortableNeighborhoodTable } from "@/components/publishing/SortableNeighborhoodTable"
@@ -216,8 +216,8 @@ export default async function CityHubPage({ params, searchParams }: PageProps) {
             if (zip && zipFreq === 1) {
                 // ZIP alone is unique within this name group
                 let qualifier = zip
-                if (ZIP_NAMES[zip]) {
-                    const resolvedName = ZIP_NAMES[zip]
+                if (ZIP_CITY_NATIONAL[zip]) {
+                    const resolvedName = ZIP_CITY_NATIONAL[zip]
                     if (resolvedName.toLowerCase() !== baseName.toLowerCase()) {
                         qualifier = resolvedName
                     }
@@ -232,8 +232,8 @@ export default async function CityHubPage({ params, searchParams }: PageProps) {
             
             // Try to resolve ZIP to a human name using the national ZIP dictionary (if imported),
             let qualifier = zip ? zip : `Tr.${tractSuffix}`
-            if (zip && ZIP_NAMES[zip]) {
-                const resolvedName = ZIP_NAMES[zip]
+            if (zip && ZIP_CITY_NATIONAL[zip]) {
+                const resolvedName = ZIP_CITY_NATIONAL[zip]
                 // Only use the resolved name if it adds new information (isn't identical to the base Name)
                 if (resolvedName.toLowerCase() !== baseName.toLowerCase()) {
                     qualifier = resolvedName
@@ -242,7 +242,7 @@ export default async function CityHubPage({ params, searchParams }: PageProps) {
             
             // Check if the qualifier (ZIP or resolved name) is unique within this baseName group
             const zipOrNameFreq = group.filter(
-                g => g.zcta5 === zip || (g.zcta5 && ZIP_NAMES[g.zcta5] === qualifier)
+                g => g.zcta5 === zip || (g.zcta5 && ZIP_CITY_NATIONAL[g.zcta5] === qualifier)
             ).length
 
             if (qualifier && zipOrNameFreq === 1) {

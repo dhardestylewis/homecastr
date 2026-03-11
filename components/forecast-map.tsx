@@ -568,7 +568,7 @@ export function ForecastMap({
         } else {
             params.delete("compare")
         }
-        
+
         // Use replace state to avoid polluting browser history with every comparison toggle
         const newUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ""}${window.location.hash}`
         window.history.replaceState({}, "", newUrl)
@@ -932,7 +932,13 @@ export function ForecastMap({
                 // Must enforce strictly ascending for MapLibre (percentiles can be equal
                 // when distribution is tight, e.g. at state aggregation level)
                 const eps = 0.01
-                const raw = [levelStats.p5, levelStats.p25, levelStats.p50, levelStats.p75, levelStats.p95]
+                const raw = [
+                    levelStats.p5 ?? -5,
+                    levelStats.p25 ?? -2,
+                    levelStats.p50 ?? 0,
+                    levelStats.p75 ?? 5,
+                    levelStats.p95 ?? 20
+                ]
                 // Walk forward ensuring each value is strictly greater than previous
                 for (let i = 1; i < raw.length; i++) {
                     if (raw[i] <= raw[i - 1]) raw[i] = raw[i - 1] + eps
@@ -1044,22 +1050,36 @@ export function ForecastMap({
             preserveDrawingBuffer: true, // Required for canvas.toDataURL() in PDF export
         })
 
-        // MONKEY-PATCH MapLibre Events to trace the crash
-        const originalOn = map.on;
-        map.on = function(type: any, layerIdsOrListener: any, listener?: any) {
-            if (listener !== undefined && typeof layerIdsOrListener === 'object' && !Array.isArray(layerIdsOrListener) && layerIdsOrListener !== null) {
-                console.error("[MAP DEBUG] BAD MAP.ON!!!", type, layerIdsOrListener, listener);
+        // MONKEY-PATCH MapLibre Events to trace invalid 3-arg registrations
+        // IMPORTANT: forward EXACT original arity/args. Do not always pass 3 args,
+        // or valid 2-arg calls like map.on("load", handler) can be misread internally.
+        const originalOn = map.on.bind(map)
+        map.on = function (...args: any[]) {
+            const [type, second, third] = args
+            if (
+                args.length === 3 &&
+                typeof second === "object" &&
+                !Array.isArray(second) &&
+                second !== null
+            ) {
+                console.error("[MAP DEBUG] BAD MAP.ON!!!", type, second, third)
             }
-            return originalOn.call(this, type, layerIdsOrListener, listener);
-        };
+            return (originalOn as any)(...args)
+        } as any
 
-        const originalOnce = map.once;
-        map.once = function(type: any, layerIdsOrListener?: any, listener?: any) {
-            if (listener !== undefined && typeof layerIdsOrListener === 'object' && !Array.isArray(layerIdsOrListener) && layerIdsOrListener !== null) {
-                console.error("[MAP DEBUG] BAD MAP.ONCE!!!", type, layerIdsOrListener, listener);
+        const originalOnce = map.once.bind(map)
+        map.once = function (...args: any[]) {
+            const [type, second, third] = args
+            if (
+                args.length === 3 &&
+                typeof second === "object" &&
+                !Array.isArray(second) &&
+                second !== null
+            ) {
+                console.error("[MAP DEBUG] BAD MAP.ONCE!!!", type, second, third)
             }
-            return originalOnce.call(this, type, layerIdsOrListener, listener);
-        };
+            return (originalOnce as any)(...args)
+        } as any
 
         // @ts-expect-error map.on 2-arg signature exists but TS gets confused with maplibregl's complex overloads
         map.on("load", () => {
@@ -1231,306 +1251,306 @@ export function ForecastMap({
                 },
             })
 
-        // Suppress MapLibre tile loading error events (e.g. transient 500s from Supabase)
-        map.on("error", (e: any) => {
-            const rawMsg = e?.error?.message || e?.message || (typeof e === 'string' ? e : "Unknown MapLibre error")
-            if (typeof rawMsg === "string" && (
-                rawMsg.includes("status") ||
-                rawMsg.includes("AJAXError") ||
-                rawMsg.includes("Cannot read properties of undefined")
-            )) {
-                // Silently ignore tile fetch errors — the retry + empty tile fallback handles these
-                return
-            }
-            console.error("[MapLibre] Error:", rawMsg)
-        })
+            // Suppress MapLibre tile loading error events (e.g. transient 500s from Supabase)
+            map.on("error", (e: any) => {
+                const rawMsg = e?.error?.message || e?.message || (typeof e === 'string' ? e : "Unknown MapLibre error")
+                if (typeof rawMsg === "string" && (
+                    rawMsg.includes("status") ||
+                    rawMsg.includes("AJAXError") ||
+                    rawMsg.includes("Cannot read properties of undefined")
+                )) {
+                    // Silently ignore tile fetch errors — the retry + empty tile fallback handles these
+                    return
+                }
+                console.error("[MapLibre] Error:", rawMsg)
+            })
 
-        // HOVER handling
-        map.on("mousemove", (e: maplibregl.MapMouseEvent) => {
-            const zoom = map.getZoom()
-            const sourceLayer = getSourceLayer(zoom)
+            // HOVER handling
+            map.on("mousemove", (e: maplibregl.MapMouseEvent) => {
+                const zoom = map.getZoom()
+                const sourceLayer = getSourceLayer(zoom)
 
-            // Query fill layers for active suffix
-            const activeSuffix = (map as any)._activeSuffix || "a"
-            const fillLayerId = `forecast-fill-${sourceLayer}-${activeSuffix}`
+                // Query fill layers for active suffix
+                const activeSuffix = (map as any)._activeSuffix || "a"
+                const fillLayerId = `forecast-fill-${sourceLayer}-${activeSuffix}`
 
-            const features = map.getLayer(fillLayerId)
-                ? map.queryRenderedFeatures(e.point, { layers: [fillLayerId] })
-                : []
-
-            if (features.length === 0) {
-                // No MVT features — check student buildings layer
-                const studentFeatures = map.getLayer('student-buildings-fill')
-                    ? map.queryRenderedFeatures(e.point, { layers: ['student-buildings-fill'] })
+                const features = map.getLayer(fillLayerId)
+                    ? map.queryRenderedFeatures(e.point, { layers: [fillLayerId] })
                     : []
-                if (studentFeatures.length > 0) {
-                    map.getCanvas().style.cursor = 'pointer'
-                    const sf = studentFeatures[0]
-                    const p = sf.properties
-                    // Show student building tooltip using the same tooltip system
-                    const smartPos = getSmartTooltipPos(
-                        e.originalEvent.clientX,
-                        e.originalEvent.clientY,
-                        window.innerWidth,
-                        window.innerHeight
-                    )
-                    // Debug badge: building ID + p50 value (only with ?debug=buildings)
-                    const debugLabel = debugBuildings
-                        ? `🏠 #${sf.id ?? '?'} | p50=$${p?.p50 ? Math.round(p.p50 / 1000) + 'k' : '—'}`
-                        : undefined
-                    setTooltipData({
-                        globalX: smartPos.x,
-                        globalY: smartPos.y,
-                        properties: {
-                            ...p,
-                            id: `student-${sf.id || Math.random()}`,
-                            p50: p?.p50,
-                            p10: p?.p10,
-                            p90: p?.p90,
-                            _isStudent: true,
-                            _debugLabel: debugLabel,
-                        },
-                    })
 
-                    // Synthesize FanChartData from student model full trajectory
-                    if (p.p50_arr) {
-                        try {
-                            const p10Arr = typeof p.p10_arr === 'string' ? JSON.parse(p.p10_arr) : p.p10_arr;
-                            const p50Arr = typeof p.p50_arr === 'string' ? JSON.parse(p.p50_arr) : p.p50_arr;
-                            const p90Arr = typeof p.p90_arr === 'string' ? JSON.parse(p.p90_arr) : p.p90_arr;
+                if (features.length === 0) {
+                    // No MVT features — check student buildings layer
+                    const studentFeatures = map.getLayer('student-buildings-fill')
+                        ? map.queryRenderedFeatures(e.point, { layers: ['student-buildings-fill'] })
+                        : []
+                    if (studentFeatures.length > 0) {
+                        map.getCanvas().style.cursor = 'pointer'
+                        const sf = studentFeatures[0]
+                        const p = sf.properties
+                        // Show student building tooltip using the same tooltip system
+                        const smartPos = getSmartTooltipPos(
+                            e.originalEvent.clientX,
+                            e.originalEvent.clientY,
+                            window.innerWidth,
+                            window.innerHeight
+                        )
+                        // Debug badge: building ID + p50 value (only with ?debug=buildings)
+                        const debugLabel = debugBuildings
+                            ? `🏠 #${sf.id ?? '?'} | p50=$${p?.p50 ? Math.round(p.p50 / 1000) + 'k' : '—'}`
+                            : undefined
+                        setTooltipData({
+                            globalX: smartPos.x,
+                            globalY: smartPos.y,
+                            properties: {
+                                ...p,
+                                id: `student-${sf.id || Math.random()}`,
+                                p50: p?.p50,
+                                p10: p?.p10,
+                                p90: p?.p90,
+                                _isStudent: true,
+                                _debugLabel: debugLabel,
+                            },
+                        })
 
-                            if (Array.isArray(p50Arr) && p50Arr.length > 0) {
-                                // Default forecast displays up to 5 years [2026, 2027, 2028, 2029, 2030]
-                                const len = Math.min(5, p50Arr.length)
-                                const synthYears = [2026, 2027, 2028, 2029, 2030].slice(0, len)
+                        // Synthesize FanChartData from student model full trajectory
+                        if (p.p50_arr) {
+                            try {
+                                const p10Arr = typeof p.p10_arr === 'string' ? JSON.parse(p.p10_arr) : p.p10_arr;
+                                const p50Arr = typeof p.p50_arr === 'string' ? JSON.parse(p.p50_arr) : p.p50_arr;
+                                const p90Arr = typeof p.p90_arr === 'string' ? JSON.parse(p.p90_arr) : p.p90_arr;
 
-                                setFanChartData({
-                                    years: synthYears,
-                                    p10: p10Arr.slice(0, len),
-                                    p50: p50Arr.slice(0, len),
-                                    p90: p90Arr.slice(0, len),
-                                    y_med: p50Arr.slice(0, len)
-                                })
-                                setHistoricalValues(undefined)
-                            } else {
+                                if (Array.isArray(p50Arr) && p50Arr.length > 0) {
+                                    // Default forecast displays up to 5 years [2026, 2027, 2028, 2029, 2030]
+                                    const len = Math.min(5, p50Arr.length)
+                                    const synthYears = [2026, 2027, 2028, 2029, 2030].slice(0, len)
+
+                                    setFanChartData({
+                                        years: synthYears,
+                                        p10: p10Arr.slice(0, len),
+                                        p50: p50Arr.slice(0, len),
+                                        p90: p90Arr.slice(0, len),
+                                        y_med: p50Arr.slice(0, len)
+                                    })
+                                    setHistoricalValues(undefined)
+                                } else {
+                                    setFanChartData(null)
+                                    setHistoricalValues(undefined)
+                                }
+                            } catch (err) {
+                                console.error('Failed to parse student fan arrays:', err)
                                 setFanChartData(null)
                                 setHistoricalValues(undefined)
                             }
-                        } catch (err) {
-                            console.error('Failed to parse student fan arrays:', err)
+                        } else {
                             setFanChartData(null)
                             setHistoricalValues(undefined)
                         }
-                    } else {
-                        setFanChartData(null)
-                        setHistoricalValues(undefined)
-                    }
 
+                        return
+                    }
+                    // Clear hover
+                    if (hoveredIdRef.current) {
+                        ;["forecast-a", "forecast-b"].forEach((s) => {
+                            try {
+                                map.removeFeatureState({ source: s, sourceLayer })
+                            } catch (err) {
+                                /* ignore */
+                            }
+                        })
+                        hoveredIdRef.current = null
+                        if (!selectedIdRef.current) {
+                            setTooltipData(null)
+                        }
+                        onFeatureHover(null)
+                        // Clear street view dwell timer
+                        if (hoverDwellTimerRef.current) { clearTimeout(hoverDwellTimerRef.current); hoverDwellTimerRef.current = null }
+                        setHoverDwell(false)
+                    }
+                    map.getCanvas().style.cursor = ""
                     return
                 }
-                // Clear hover
-                if (hoveredIdRef.current) {
+
+                map.getCanvas().style.cursor = "pointer"
+                const feature = features[0]
+                const id = (feature.properties?.id || feature.id) as string
+                if (!id) return
+
+                // Clear previous hover
+                const isNewFeature = hoveredIdRef.current !== id
+                if (hoveredIdRef.current && isNewFeature) {
                     ;["forecast-a", "forecast-b"].forEach((s) => {
                         try {
-                            map.removeFeatureState({ source: s, sourceLayer })
+                            map.setFeatureState(
+                                { source: s, sourceLayer, id: hoveredIdRef.current! },
+                                { hover: false }
+                            )
                         } catch (err) {
                             /* ignore */
                         }
                     })
-                    hoveredIdRef.current = null
-                    if (!selectedIdRef.current) {
-                        setTooltipData(null)
-                    }
-                    onFeatureHover(null)
-                    // Clear street view dwell timer
-                    if (hoverDwellTimerRef.current) { clearTimeout(hoverDwellTimerRef.current); hoverDwellTimerRef.current = null }
+                }
+
+                hoveredIdRef.current = id
+                onFeatureHover(id)
+
+                    // Set hover state
+                    ;["forecast-a", "forecast-b"].forEach((s) => {
+                        try {
+                            map.setFeatureState(
+                                { source: s, sourceLayer, id },
+                                { hover: true }
+                            )
+                        } catch (err) {
+                            /* ignore */
+                        }
+                    })
+
+
+                // Debounced fan chart fetch on hover (only when NOT locked, only on new feature)
+                if (!selectedIdRef.current && isNewFeature) {
+                    if (hoverDetailTimerRef.current) clearTimeout(hoverDetailTimerRef.current)
+                    hoverDetailTimerRef.current = setTimeout(() => {
+                        const hoverZoom = map.getZoom()
+                        const hoverLevel = getSourceLayer(hoverZoom)
+                        fetchForecastDetail(id, hoverLevel)
+                    }, 500)
+
+                    // Street view dwell hover: 1.5s on same feature before loading images
+                    if (hoverDwellTimerRef.current) clearTimeout(hoverDwellTimerRef.current)
                     setHoverDwell(false)
+                    hoverDwellTimerRef.current = setTimeout(() => setHoverDwell(true), 1500)
                 }
-                map.getCanvas().style.cursor = ""
-                return
-            }
 
-            map.getCanvas().style.cursor = "pointer"
-            const feature = features[0]
-            const id = (feature.properties?.id || feature.id) as string
-            if (!id) return
-
-            // Clear previous hover
-            const isNewFeature = hoveredIdRef.current !== id
-            if (hoveredIdRef.current && isNewFeature) {
-                ;["forecast-a", "forecast-b"].forEach((s) => {
-                    try {
-                        map.setFeatureState(
-                            { source: s, sourceLayer, id: hoveredIdRef.current! },
-                            { hover: false }
-                        )
-                    } catch (err) {
-                        /* ignore */
-                    }
-                })
-            }
-
-            hoveredIdRef.current = id
-            onFeatureHover(id)
-
-            // Set hover state
-            ;["forecast-a", "forecast-b"].forEach((s) => {
-                try {
-                    map.setFeatureState(
-                        { source: s, sourceLayer, id },
-                        { hover: true }
-                    )
-                } catch (err) {
-                    /* ignore */
-                }
-            })
-
-
-            // Debounced fan chart fetch on hover (only when NOT locked, only on new feature)
-            if (!selectedIdRef.current && isNewFeature) {
-                if (hoverDetailTimerRef.current) clearTimeout(hoverDetailTimerRef.current)
-                hoverDetailTimerRef.current = setTimeout(() => {
-                    const hoverZoom = map.getZoom()
-                    const hoverLevel = getSourceLayer(hoverZoom)
-                    fetchForecastDetail(id, hoverLevel)
-                }, 500)
-
-                // Street view dwell hover: 1.5s on same feature before loading images
-                if (hoverDwellTimerRef.current) clearTimeout(hoverDwellTimerRef.current)
-                setHoverDwell(false)
-                hoverDwellTimerRef.current = setTimeout(() => setHoverDwell(true), 1500)
-            }
-
-            if (selectedIdRef.current) {
-                // Locked mode: DON'T move tooltip (it stays pinned), but DO update
-                // tooltipData.properties with the hovered feature so comparison works.
-                setTooltipData(prev => prev ? { ...prev, properties: feature.properties } : prev)
-                setComparisonCoords([e.lngLat.lat, e.lngLat.lng])
-                return
-            }
-
-            // Unlocked: tooltip follows cursor
-            const smartPos = getSmartTooltipPos(
-                e.originalEvent.clientX,
-                e.originalEvent.clientY,
-                window.innerWidth,
-                window.innerHeight
-            )
-            setTooltipData({
-                globalX: smartPos.x,
-                globalY: smartPos.y,
-                properties: feature.properties,
-            })
-            // Only update coords (used for StreetView) when the feature changes, not every pixel
-            if (isNewFeature) {
-                setTooltipCoords([e.lngLat.lat, e.lngLat.lng])
-            }
-        })
-
-        // MOBILE LONG-PRESS HOVER: simulate hover/comparison on touch hold
-        let longPressTimer: ReturnType<typeof setTimeout> | null = null
-        let longPressActive = false
-        let touchStartPos: { x: number; y: number } | null = null
-
-        const simulateHoverAtPoint = (clientX: number, clientY: number) => {
-            if (!selectedIdRef.current) return
-            const point = map.project(map.unproject([clientX - map.getCanvas().getBoundingClientRect().left, clientY - map.getCanvas().getBoundingClientRect().top]))
-            const zoom = map.getZoom()
-            const sourceLayer = getSourceLayer(zoom)
-            const activeSuffix = (map as any)._activeSuffix || "a"
-            const fillLayerId = `forecast-fill-${sourceLayer}-${activeSuffix}`
-            const features = map.getLayer(fillLayerId)
-                ? map.queryRenderedFeatures(point, { layers: [fillLayerId] })
-                : []
-            if (features.length === 0) return
-            const feature = features[0]
-            const id = (feature.properties?.id || feature.id) as string
-            if (!id || id === selectedIdRef.current) return
-            // Update hover state for comparison
-            hoveredIdRef.current = id
-            onFeatureHover(id)
-            setTooltipData(prev => prev ? { ...prev, properties: feature.properties } : prev)
-        }
-
-        map.getCanvas().addEventListener("touchstart", (e: TouchEvent) => {
-            if (!selectedIdRef.current) return
-            const touch = e.touches[0]
-            touchStartPos = { x: touch.clientX, y: touch.clientY }
-            longPressActive = false
-            longPressTimer = setTimeout(() => {
-                longPressActive = true
-                simulateHoverAtPoint(touch.clientX, touch.clientY)
-            }, 400)
-        }, { passive: true })
-
-        map.getCanvas().addEventListener("touchmove", (e: TouchEvent) => {
-            const touch = e.touches[0]
-            if (touchStartPos) {
-                const dx = touch.clientX - touchStartPos.x
-                const dy = touch.clientY - touchStartPos.y
-                if (Math.sqrt(dx * dx + dy * dy) > 10 && !longPressActive) {
-                    // Moved too much before long-press activated — cancel
-                    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null }
+                if (selectedIdRef.current) {
+                    // Locked mode: DON'T move tooltip (it stays pinned), but DO update
+                    // tooltipData.properties with the hovered feature so comparison works.
+                    setTooltipData(prev => prev ? { ...prev, properties: feature.properties } : prev)
+                    setComparisonCoords([e.lngLat.lat, e.lngLat.lng])
                     return
                 }
-            }
-            if (longPressActive) {
-                e.preventDefault()
-                simulateHoverAtPoint(touch.clientX, touch.clientY)
-            }
-        })
 
-        map.getCanvas().addEventListener("touchend", () => {
-            if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null }
-            longPressActive = false
-            touchStartPos = null
-        })
+                // Unlocked: tooltip follows cursor
+                const smartPos = getSmartTooltipPos(
+                    e.originalEvent.clientX,
+                    e.originalEvent.clientY,
+                    window.innerWidth,
+                    window.innerHeight
+                )
+                setTooltipData({
+                    globalX: smartPos.x,
+                    globalY: smartPos.y,
+                    properties: feature.properties,
+                })
+                // Only update coords (used for StreetView) when the feature changes, not every pixel
+                if (isNewFeature) {
+                    setTooltipCoords([e.lngLat.lat, e.lngLat.lng])
+                }
+            })
 
-        // Undulating animation loop for selected boundaries
-        let animationFrameId: number;
-        let startTime = Date.now();
-        const animateSelectedLine = () => {
-            if (!mapRef.current || !isLoaded) return;
-            const now = Date.now();
-            // Pulse between 0.4 and 1.0 using a sine wave (2.5-second period)
-            const phase = ((now - startTime) % 2500) / 2500;
-            const opacity = 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(phase * Math.PI * 2));
-            
-            const mapInstance = mapRef.current;
-            if (mapInstance.getStyle()) {
-                for (const lvl of GEO_LEVELS) {
-                    for (const suffix of ["a", "b"]) {
-                        const layerId = `forecast-outline-${lvl.name}-${suffix}`;
-                        if (mapInstance.getLayer(layerId)) {
-                            mapInstance.setPaintProperty(layerId, "line-opacity", [
-                                "case",
-                                ["boolean", ["feature-state", "selected"], false],
-                                opacity,
-                                ["boolean", ["feature-state", "hover"], false],
-                                1.0,
-                                ["boolean", ["feature-state", "pinned"], false],
-                                1.0,
-                                0
-                            ]);
+            // MOBILE LONG-PRESS HOVER: simulate hover/comparison on touch hold
+            let longPressTimer: ReturnType<typeof setTimeout> | null = null
+            let longPressActive = false
+            let touchStartPos: { x: number; y: number } | null = null
+
+            const simulateHoverAtPoint = (clientX: number, clientY: number) => {
+                if (!selectedIdRef.current) return
+                const point = map.project(map.unproject([clientX - map.getCanvas().getBoundingClientRect().left, clientY - map.getCanvas().getBoundingClientRect().top]))
+                const zoom = map.getZoom()
+                const sourceLayer = getSourceLayer(zoom)
+                const activeSuffix = (map as any)._activeSuffix || "a"
+                const fillLayerId = `forecast-fill-${sourceLayer}-${activeSuffix}`
+                const features = map.getLayer(fillLayerId)
+                    ? map.queryRenderedFeatures(point, { layers: [fillLayerId] })
+                    : []
+                if (features.length === 0) return
+                const feature = features[0]
+                const id = (feature.properties?.id || feature.id) as string
+                if (!id || id === selectedIdRef.current) return
+                // Update hover state for comparison
+                hoveredIdRef.current = id
+                onFeatureHover(id)
+                setTooltipData(prev => prev ? { ...prev, properties: feature.properties } : prev)
+            }
+
+            map.getCanvas().addEventListener("touchstart", (e: TouchEvent) => {
+                if (!selectedIdRef.current) return
+                const touch = e.touches[0]
+                touchStartPos = { x: touch.clientX, y: touch.clientY }
+                longPressActive = false
+                longPressTimer = setTimeout(() => {
+                    longPressActive = true
+                    simulateHoverAtPoint(touch.clientX, touch.clientY)
+                }, 400)
+            }, { passive: true })
+
+            map.getCanvas().addEventListener("touchmove", (e: TouchEvent) => {
+                const touch = e.touches[0]
+                if (touchStartPos) {
+                    const dx = touch.clientX - touchStartPos.x
+                    const dy = touch.clientY - touchStartPos.y
+                    if (Math.sqrt(dx * dx + dy * dy) > 10 && !longPressActive) {
+                        // Moved too much before long-press activated — cancel
+                        if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null }
+                        return
+                    }
+                }
+                if (longPressActive) {
+                    e.preventDefault()
+                    simulateHoverAtPoint(touch.clientX, touch.clientY)
+                }
+            })
+
+            map.getCanvas().addEventListener("touchend", () => {
+                if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null }
+                longPressActive = false
+                touchStartPos = null
+            })
+
+            // Undulating animation loop for selected boundaries
+            let animationFrameId: number;
+            let startTime = Date.now();
+            const animateSelectedLine = () => {
+                if (!mapRef.current || !isLoaded) return;
+                const now = Date.now();
+                // Pulse between 0.4 and 1.0 using a sine wave (2.5-second period)
+                const phase = ((now - startTime) % 2500) / 2500;
+                const opacity = 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(phase * Math.PI * 2));
+
+                const mapInstance = mapRef.current;
+                if (mapInstance.getStyle()) {
+                    for (const lvl of GEO_LEVELS) {
+                        for (const suffix of ["a", "b"]) {
+                            const layerId = `forecast-outline-${lvl.name}-${suffix}`;
+                            if (mapInstance.getLayer(layerId)) {
+                                mapInstance.setPaintProperty(layerId, "line-opacity", [
+                                    "case",
+                                    ["boolean", ["feature-state", "selected"], false],
+                                    opacity,
+                                    ["boolean", ["feature-state", "hover"], false],
+                                    1.0,
+                                    ["boolean", ["feature-state", "pinned"], false],
+                                    1.0,
+                                    0
+                                ]);
+                            }
                         }
                     }
                 }
-            }
-            animationFrameId = requestAnimationFrame(animateSelectedLine);
-        };
-        
-        // Start animation loop once loaded
-        if (isLoaded) {
-            animateSelectedLine();
-        }
+                animationFrameId = requestAnimationFrame(animateSelectedLine);
+            };
 
-        // On unmount
-        return () => {
-            if (hoverDetailTimerRef.current) clearTimeout(hoverDetailTimerRef.current)
-            if (hoverDwellTimerRef.current) clearTimeout(hoverDwellTimerRef.current)
-            if (animationFrameId) cancelAnimationFrame(animationFrameId)
-        }
-    }, [isLoaded, debugBuildings])
+            // Start animation loop once loaded
+            if (isLoaded) {
+                animateSelectedLine();
+            }
+
+            // On unmount
+            return () => {
+                if (hoverDetailTimerRef.current) clearTimeout(hoverDetailTimerRef.current)
+                if (hoverDwellTimerRef.current) clearTimeout(hoverDwellTimerRef.current)
+                if (animationFrameId) cancelAnimationFrame(animationFrameId)
+            }
+        }, [isLoaded, debugBuildings])
 
         // MOUSELEAVE: clear tooltip when cursor exits the map (unless locked)
         map.getCanvas().addEventListener("mouseleave", () => {
@@ -1542,14 +1562,14 @@ export function ForecastMap({
             if (hoveredIdRef.current) {
                 const zoom = map.getZoom()
                 const sourceLayer = getSourceLayer(zoom)
-                ;["forecast-a", "forecast-b"].forEach((s) => {
-                    try {
-                        map.setFeatureState(
-                            { source: s, sourceLayer, id: hoveredIdRef.current! },
-                            { hover: false }
-                        )
-                    } catch { }
-                })
+                    ;["forecast-a", "forecast-b"].forEach((s) => {
+                        try {
+                            map.setFeatureState(
+                                { source: s, sourceLayer, id: hoveredIdRef.current! },
+                                { hover: false }
+                            )
+                        } catch { }
+                    })
                 hoveredIdRef.current = null
                 onFeatureHover(null)
                 // Clear comparison data when mouse leaves (locked mode)
@@ -2921,85 +2941,85 @@ export function ForecastMap({
                     {isMobile && !(isKeyboardOpen) ? (
                         /* Mobile: Full-width chart + embedded bottom bar */
                         <>
-                        <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-                            {mobileContentOverride ? (
-                                /* Chat/Tavus/etc override fills the content area */
-                                mobileContentOverride
-                            ) : (() => {
-                                const currentVal = fanChartData?.p50?.[0] ?? historicalValues?.[historicalValues.length - 1] ?? null
-                                const yearIdx = fanChartData?.years?.indexOf(year) ?? -1
-                                const histIdx = year >= 2019 && year <= 2025 ? year - 2019 : -1
-                                const forecastVal = (yearIdx >= 0 ? fanChartData?.p50?.[yearIdx] : null)
-                                    ?? (histIdx >= 0 ? historicalValues?.[histIdx] : null)
-                                    ?? displayProps.p50 ?? displayProps.value ?? null
-                                const isPast = year < originYear + 2
-                                const isPresent = year === originYear + 2
-                                const leftLabel = isPresent ? "Now" : isPast ? String(year) : "Now"
-                                const leftVal = isPresent ? currentVal : isPast ? forecastVal : currentVal
-                                const rightLabel = isPresent ? String(year) : isPast ? "Now" : String(year)
-                                const rightVal = isPresent ? currentVal : isPast ? currentVal : forecastVal
-                                const pctBase = isPresent ? null : isPast ? forecastVal : currentVal
-                                const pctTarget = isPresent ? null : isPast ? currentVal : forecastVal
-                                const pctChange = pctBase && pctTarget ? ((pctTarget - pctBase) / pctBase * 100) : null
-                                
-                                const isExtremeOutlier = pctChange !== null && (pctChange > 100 || pctChange < -50)
-                                if (isExtremeOutlier && !isPresent) {
-                                    return (
-                                        <div className="flex w-full flex-1 h-full items-center justify-center p-4 bg-destructive/5 text-center">
-                                            <div className="space-y-2">
-                                                <AlertCircle className="w-6 h-6 text-destructive/80 mx-auto" />
-                                                <div className="text-xs font-bold text-destructive">Data Anomaly Detected</div>
-                                                <div className="text-[10px] text-muted-foreground max-w-[220px] mx-auto leading-tight">
-                                                    This area shows anomalous forecasted growth ({pctChange > 0 ? '+' : ''}{pctChange.toFixed(1)}%). It may be a data artifact (e.g., an empty lot zoned for development).
+                            <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+                                {mobileContentOverride ? (
+                                    /* Chat/Tavus/etc override fills the content area */
+                                    mobileContentOverride
+                                ) : (() => {
+                                    const currentVal = fanChartData?.p50?.[0] ?? historicalValues?.[historicalValues.length - 1] ?? null
+                                    const yearIdx = fanChartData?.years?.indexOf(year) ?? -1
+                                    const histIdx = year >= 2019 && year <= 2025 ? year - 2019 : -1
+                                    const forecastVal = (yearIdx >= 0 ? fanChartData?.p50?.[yearIdx] : null)
+                                        ?? (histIdx >= 0 ? historicalValues?.[histIdx] : null)
+                                        ?? displayProps.p50 ?? displayProps.value ?? null
+                                    const isPast = year < originYear + 2
+                                    const isPresent = year === originYear + 2
+                                    const leftLabel = isPresent ? "Now" : isPast ? String(year) : "Now"
+                                    const leftVal = isPresent ? currentVal : isPast ? forecastVal : currentVal
+                                    const rightLabel = isPresent ? String(year) : isPast ? "Now" : String(year)
+                                    const rightVal = isPresent ? currentVal : isPast ? currentVal : forecastVal
+                                    const pctBase = isPresent ? null : isPast ? forecastVal : currentVal
+                                    const pctTarget = isPresent ? null : isPast ? currentVal : forecastVal
+                                    const pctChange = pctBase && pctTarget ? ((pctTarget - pctBase) / pctBase * 100) : null
+
+                                    const isExtremeOutlier = pctChange !== null && (pctChange > 100 || pctChange < -50)
+                                    if (isExtremeOutlier && !isPresent) {
+                                        return (
+                                            <div className="flex w-full flex-1 h-full items-center justify-center p-4 bg-destructive/5 text-center">
+                                                <div className="space-y-2">
+                                                    <AlertCircle className="w-6 h-6 text-destructive/80 mx-auto" />
+                                                    <div className="text-xs font-bold text-destructive">Data Anomaly Detected</div>
+                                                    <div className="text-[10px] text-muted-foreground max-w-[220px] mx-auto leading-tight">
+                                                        This area shows anomalous forecasted growth ({pctChange > 0 ? '+' : ''}{pctChange.toFixed(1)}%). It may be a data artifact (e.g., an empty lot zoned for development).
+                                                    </div>
+                                                    <button onClick={(e) => { e.stopPropagation(); window.location.href = "mailto:daniel@homecastr.com?subject=Requesting Custom Analysis" }} className="mt-2 text-[10px] font-semibold px-3 py-1.5 bg-background text-foreground border border-border rounded shadow-sm hover:bg-muted">
+                                                        Request Custom Analysis
+                                                    </button>
                                                 </div>
-                                                <button onClick={(e) => { e.stopPropagation(); window.location.href="mailto:daniel@homecastr.com?subject=Requesting Custom Analysis" }} className="mt-2 text-[10px] font-semibold px-3 py-1.5 bg-background text-foreground border border-border rounded shadow-sm hover:bg-muted">
-                                                    Request Custom Analysis
-                                                </button>
+                                            </div>
+                                        )
+                                    }
+
+                                    return (
+                                        <div className="flex w-full flex-1 h-full">
+                                            {/* Chart — takes remaining space */}
+                                            <div className="flex-1 min-w-0 h-full">
+                                                {fanChartData ? (
+                                                    <FanChart data={fanChartData} currentYear={year} height={200} historicalValues={historicalValues} childLines={debugBuildings ? studentChildLines : undefined} comparisonData={comparisonData} comparisonHistoricalValues={comparisonHistoricalValues} pinnedComparisons={pinnedComparisons.map(pc => ({ data: pc.data, historicalValues: pc.historicalValues, label: pc.label }))} yDomain={effectiveYDomain} />
+                                                ) : isLoadingDetail ? (
+                                                    <div className="h-full flex items-center justify-center">
+                                                        <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                                                    </div>
+                                                ) : null}
+                                            </div>
+                                            {/* Stats column — to the right of the chart */}
+                                            <div className="shrink-0 w-[90px] flex flex-col justify-center gap-2 p-2 border-l border-border/20">
+                                                <div>
+                                                    <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold">{leftLabel}</div>
+                                                    <div className="text-[12px] font-bold text-foreground leading-tight">{formatValue(leftVal)}</div>
+                                                </div>
+                                                {!isPresent && (
+                                                    <div>
+                                                        <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold">{rightLabel}</div>
+                                                        <div className="text-[12px] font-bold text-foreground leading-tight">{formatValue(rightVal)}</div>
+                                                        {pctChange != null && (
+                                                            <div className={`text-[10px] font-bold ${pctChange >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                                                                {pctChange >= 0 ? '▲' : '▼'} {Math.abs(pctChange).toFixed(1)}%
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     )
-                                }
-
-                                return (
-                                    <div className="flex w-full flex-1 h-full">
-                                        {/* Chart — takes remaining space */}
-                                        <div className="flex-1 min-w-0 h-full">
-                                            {fanChartData ? (
-                                                <FanChart data={fanChartData} currentYear={year} height={200} historicalValues={historicalValues} childLines={debugBuildings ? studentChildLines : undefined} comparisonData={comparisonData} comparisonHistoricalValues={comparisonHistoricalValues} pinnedComparisons={pinnedComparisons.map(pc => ({ data: pc.data, historicalValues: pc.historicalValues, label: pc.label }))} yDomain={effectiveYDomain} />
-                                            ) : isLoadingDetail ? (
-                                                <div className="h-full flex items-center justify-center">
-                                                    <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-                                                </div>
-                                            ) : null}
-                                        </div>
-                                        {/* Stats column — to the right of the chart */}
-                                        <div className="shrink-0 w-[90px] flex flex-col justify-center gap-2 p-2 border-l border-border/20">
-                                            <div>
-                                                <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold">{leftLabel}</div>
-                                                <div className="text-[12px] font-bold text-foreground leading-tight">{formatValue(leftVal)}</div>
-                                            </div>
-                                            {!isPresent && (
-                                                <div>
-                                                    <div className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold">{rightLabel}</div>
-                                                    <div className="text-[12px] font-bold text-foreground leading-tight">{formatValue(rightVal)}</div>
-                                                    {pctChange != null && (
-                                                        <div className={`text-[10px] font-bold ${pctChange >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                                                            {pctChange >= 0 ? '▲' : '▼'} {Math.abs(pctChange).toFixed(1)}%
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                )
-                            })()}
-                        </div>
-                        {/* Bottom bar — rendered as part of this same tooltip container */}
-                        {mobileBottomBar && (
-                            <div className="shrink-0 border-t border-border/30">
-                                {mobileBottomBar}
+                                })()}
                             </div>
-                        )}
+                            {/* Bottom bar — rendered as part of this same tooltip container */}
+                            {mobileBottomBar && (
+                                <div className="shrink-0 border-t border-border/30">
+                                    {mobileBottomBar}
+                                </div>
+                            )}
                         </>
                     ) : (
                         <>
@@ -3032,7 +3052,7 @@ export function ForecastMap({
                                     const pctBase = isPresent ? null : isPast ? forecastVal : currentVal
                                     const pctTarget = isPresent ? null : isPast ? currentVal : forecastVal
                                     const pctChange = pctBase && pctTarget ? ((pctTarget - pctBase) / pctBase * 100) : null
-                                    
+
                                     const isExtremeOutlier = pctChange !== null && (pctChange > 100 || pctChange < -50)
                                     if (isExtremeOutlier && !isPresent) {
                                         return (
@@ -3043,7 +3063,7 @@ export function ForecastMap({
                                                     <div className="text-xs text-muted-foreground px-4 leading-relaxed">
                                                         This area shows anomalous forecasted growth ({pctChange > 0 ? '+' : ''}{pctChange.toFixed(1)}%). It may be a data artifact (e.g., an empty lot zoned for development).
                                                     </div>
-                                                    <button onClick={(e) => { e.stopPropagation(); window.location.href="mailto:daniel@homecastr.com?subject=Requesting Custom Analysis" }} className="mt-4 text-xs font-semibold px-4 py-2 bg-background text-foreground border border-border rounded-md shadow-sm hover:bg-muted transition-colors">
+                                                    <button onClick={(e) => { e.stopPropagation(); window.location.href = "mailto:daniel@homecastr.com?subject=Requesting Custom Analysis" }} className="mt-4 text-xs font-semibold px-4 py-2 bg-background text-foreground border border-border rounded-md shadow-sm hover:bg-muted transition-colors">
                                                         Request Custom Analysis
                                                     </button>
                                                 </div>

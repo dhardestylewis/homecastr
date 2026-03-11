@@ -2,7 +2,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin"
 import { withRedisCache } from "@/lib/redis"
 import { COUNTY_NAMES } from "./county-fips"
 import zipCityRaw from "./zip-city-names.json"
-const ZIP_CITY_NATIONAL: Record<string, string> = zipCityRaw as any
+const ZIP_CITY_NATIONAL_RAW: Record<string, string> = zipCityRaw as any
 
 // ---------------------------------------------------------------------------
 // Census FIPS → Human-readable geography names
@@ -546,7 +546,7 @@ const ZIP_OVERRIDES: Record<string, string> = {
 }
 
 // Merge: use curated Houston names where available, otherwise national
-export const ZIP_NAMES: Record<string, string> = { ...ZIP_CITY_NATIONAL, ...ZIP_OVERRIDES }
+export const ZIP_CITY_NATIONAL: Record<string, string> = { ...ZIP_CITY_NATIONAL_RAW, ...ZIP_OVERRIDES }
 
 export interface GeoInfo {
     tractGeoid: string
@@ -625,6 +625,7 @@ export async function batchEnrichTracts(
     // Cousub labels (e.g. "Northwest Harris") are very broad — if a curated
     // ZIP_OVERRIDES name exists for the tract's ZCTA, prefer that instead.
     for (const tractId of tractGeoids) {
+        const label = TRACT_LABELS[tractId]
         if (label && label.s) {
             const zcta = TRACT_ZCTA[tractId] || ""
             let name = label.s
@@ -695,7 +696,7 @@ export async function batchEnrichTracts(
         if (result.has(tractId)) continue
         const zcta = TRACT_ZCTA[tractId]
         if (zcta) {
-            const placeName = ZIP_NAMES[zcta]
+            const placeName = ZIP_CITY_NATIONAL[zcta]
             const name = placeName || `ZIP ${zcta}`
             
             const mockGeoInfo = {
@@ -729,7 +730,7 @@ export async function batchEnrichTracts(
                 if (data) {
                     for (const row of data as any[]) {
                         if (!result.has(row.tract_geoid20) && row.zcta5) {
-                            const placeName = ZIP_NAMES[row.zcta5]
+                            const placeName = ZIP_CITY_NATIONAL[row.zcta5]
                             const name = placeName || `ZIP ${row.zcta5}`
                             
                             const mockGeoInfo = {
@@ -833,7 +834,7 @@ export async function batchEnrichTracts(
  * Uses the same priority chain as batchEnrichTracts for consistency:
  *   1. TRACT_LABELS (with cousub downgrade to curated ZIP names)
  *   2. parcel_ladder_v1 neighborhood_name
- *   3. ZCTA5 → ZIP_NAMES lookup
+ *   3. ZCTA5 → ZIP_CITY_NATIONAL lookup
  */
 export async function enrichWithNeighborhood(geo: GeoInfo): Promise<GeoInfo> {
     // Try 0: Spatial tract labels (same logic as batchEnrichTracts Phase 0)
@@ -890,7 +891,7 @@ export async function enrichWithNeighborhood(geo: GeoInfo): Promise<GeoInfo> {
         }
     } catch { /* non-fatal */ }
 
-    // Try 2: ZCTA5 → ZIP_NAMES lookup
+    // Try 2: ZCTA5 → ZIP_CITY_NATIONAL lookup
     try {
         const supabase = getSupabaseAdmin()
         const { data } = await supabase
@@ -902,7 +903,7 @@ export async function enrichWithNeighborhood(geo: GeoInfo): Promise<GeoInfo> {
             .maybeSingle()
 
         if (data?.zcta5) {
-            const placeName = ZIP_NAMES[data.zcta5]
+            const placeName = ZIP_CITY_NATIONAL[data.zcta5]
             if (placeName) {
                 const mappedGeo = {
                     ...geo,
@@ -930,7 +931,7 @@ export async function enrichWithNeighborhood(geo: GeoInfo): Promise<GeoInfo> {
     // Try 2.5: Static TRACT_ZCTA crosswalk (instant, no DB hit)
     const staticZcta = TRACT_ZCTA[geo.tractGeoid]
     if (staticZcta) {
-        const placeName = ZIP_NAMES[staticZcta]
+        const placeName = ZIP_CITY_NATIONAL[staticZcta]
         if (placeName) {
             const mappedGeo = {
                 ...geo,
@@ -1264,7 +1265,7 @@ export async function getCitiesForState(
                 for (const tractId of sampleTracts) {
                     const zcta = TRACT_ZCTA[tractId]
                     if (zcta) {
-                        const placeName = ZIP_NAMES[zcta]
+                        const placeName = ZIP_CITY_NATIONAL[zcta]
                         if (placeName) { city = placeName; break }
                     }
                 }
@@ -1297,7 +1298,7 @@ export async function getCitiesForState(
                                 const name = row.county_name
                                     || row.city
                                     || row.neighborhood_name
-                                    || (row.zcta5 && ZIP_NAMES[row.zcta5])
+                                    || (row.zcta5 && ZIP_CITY_NATIONAL[row.zcta5])
                                     || (row.zcta5 ? `ZIP ${row.zcta5}` : null)
                                 if (name) dbResults.set(row.tract_geoid20, name)
                             }
@@ -1427,8 +1428,8 @@ export function buildDisplayNameForTract(geo: GeoInfo): string {
         if (remainder === `tr-${tractSuffix}`) {
             // It fell back to Tr.XXXXX. Append the ZIP/ZIP_NAME if available.
             let qualifier = geo.zcta5 || ""
-            if (qualifier && ZIP_NAMES[qualifier]) {
-                const resolvedName = ZIP_NAMES[qualifier]
+            if (qualifier && ZIP_CITY_NATIONAL[qualifier]) {
+                const resolvedName = ZIP_CITY_NATIONAL[qualifier]
                 if (resolvedName.toLowerCase() !== geo.neighborhoodName.toLowerCase()) {
                     qualifier = resolvedName
                 }
@@ -1441,7 +1442,7 @@ export function buildDisplayNameForTract(geo: GeoInfo): string {
             const qualifierSlug = remainder
             let qualifierStr = qualifierSlug
             if (geo.zcta5 && slugify(geo.zcta5) === qualifierSlug) qualifierStr = geo.zcta5
-            if (geo.zcta5 && ZIP_NAMES[geo.zcta5] && slugify(ZIP_NAMES[geo.zcta5]) === qualifierSlug) qualifierStr = ZIP_NAMES[geo.zcta5]
+            if (geo.zcta5 && ZIP_CITY_NATIONAL[geo.zcta5] && slugify(ZIP_CITY_NATIONAL[geo.zcta5]) === qualifierSlug) qualifierStr = ZIP_CITY_NATIONAL[geo.zcta5]
             
             // Prevent stuttering like "McCall · McCall"
             if (qualifierStr.toLowerCase() !== geo.neighborhoodName.toLowerCase()) {

@@ -171,9 +171,9 @@ export function FanChart({
     // Process forecastVariants if available, else fallback to root arrays
     if (data.forecastVariants && Object.keys(data.forecastVariants).length > 0) {
       Object.values(data.forecastVariants).forEach((variant: any) => {
-        if (variant.p10) allValues.push(...variant.p10.filter((v: number) => Number.isFinite(v)))
-        if (variant.p90) allValues.push(...variant.p90.filter((v: number) => Number.isFinite(v)))
-        if (variant.p50) allValues.push(...variant.p50.filter((v: number) => Number.isFinite(v)))
+        if (variant.p10) allValues.push(...variant.p10?.filter((v: number) => Number.isFinite(v)) || [])
+        if (variant.p90) allValues.push(...variant.p90?.filter((v: number) => Number.isFinite(v)) || [])
+        if (variant.p50) allValues.push(...variant.p50?.filter((v: number) => Number.isFinite(v)) || [])
       })
     } else {
       if (p10) allValues.push(...p10.filter(v => Number.isFinite(v)))
