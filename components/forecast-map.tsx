@@ -1029,66 +1029,21 @@ export function ForecastMap({
             const originalOn = proto.on
             const originalOnce = proto.once
 
-            const isValidSecondArg = (x: any) =>
-                typeof x === "function" ||
-                typeof x === "string" ||
-                Array.isArray(x)
-
             proto.on = function (...args: any[]) {
-                const [type, second, third] = args
-
-                const suspicious =
-                    // 3-arg form but second arg is not a valid delegated-layer arg
-                    (args.length === 3 && !isValidSecondArg(second)) ||
-                    // 3-arg form but third arg is not a function
-                    (args.length === 3 && typeof third !== "function") ||
-                    // 4+ args should never happen here
-                    args.length > 3
-
-                if (suspicious) {
-                    console.error(
-                        "[MAP DEBUG] BAD Map.prototype.on",
-                        "event:", type,
-                        "args.length:", args.length,
-                        "secondType:", typeof second,
-                        "thirdType:", typeof third,
-                        "second:", second,
-                        "third:", third,
-                    )
-                    console.trace("[MAP DEBUG TRACE] Map.prototype.on")
-                    // Strip the bad arg and forward as 2-arg to prevent r.filter crash
-                    if (args.length === 3 && typeof third === "function") {
-                        return originalOn.apply(this, [type, third])
-                    }
+                const [type, second] = args
+                // If second arg is the actual listener (function) but extra args leaked in,
+                // strip them to prevent MapLibre treating it as a delegated-layer call.
+                if (args.length > 2 && typeof second === "function") {
+                    return originalOn.call(this, type, second)
                 }
-
                 return originalOn.apply(this, args)
             }
 
             proto.once = function (...args: any[]) {
-                const [type, second, third] = args
-
-                const suspicious =
-                    (args.length === 3 && !isValidSecondArg(second)) ||
-                    (args.length === 3 && typeof third !== "function") ||
-                    args.length > 3
-
-                if (suspicious) {
-                    console.error(
-                        "[MAP DEBUG] BAD Map.prototype.once",
-                        "event:", type,
-                        "args.length:", args.length,
-                        "secondType:", typeof second,
-                        "thirdType:", typeof third,
-                        "second:", second,
-                        "third:", third,
-                    )
-                    console.trace("[MAP DEBUG TRACE] Map.prototype.once")
-                    if (args.length === 3 && typeof third === "function") {
-                        return originalOnce.apply(this, [type, third])
-                    }
+                const [type, second] = args
+                if (args.length > 2 && typeof second === "function") {
+                    return originalOnce.call(this, type, second)
                 }
-
                 return originalOnce.apply(this, args)
             }
         }
