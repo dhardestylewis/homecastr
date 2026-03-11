@@ -183,7 +183,6 @@ export function ChatPanel({ isOpen, onClose, onMapAction, forecastMode, onTavusR
     return (
         <div
             {...(!isOpen && !embedded ? { inert: true } : {})}
-            aria-hidden={!isOpen && !embedded}
             className={embedded
                 ? "h-full w-full overflow-hidden"
                 : `
@@ -334,6 +333,7 @@ export function ChatPanel({ isOpen, onClose, onMapAction, forecastMode, onTavusR
                             onChange={(e) => setInput(e.target.value)}
                             onKeyDown={handleKeyDown}
                             placeholder="Ask about a neighborhood, address, or metric..."
+                            aria-label="Chat message"
                             className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/50 py-1.5"
                             autoComplete="off"
                             disabled={isLoading}

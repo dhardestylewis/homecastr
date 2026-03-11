@@ -617,9 +617,9 @@ function DashboardContent() {
   }, [isTavusLoading, toast, mapState.selectedId, mapState.center, currentYear, filters.useForecastMap])
 
   return (
-    <div className="h-dvh flex flex-col">
+    <main className="h-dvh flex flex-col">
       {/* Full-screen Map Container */}
-      <main className="flex-1 relative h-full w-full">
+      <div className="flex-1 relative h-full w-full">
         {isUsingMockData && (
           <Alert
             variant="destructive"
@@ -690,7 +690,7 @@ function DashboardContent() {
                     )}
                     <button onClick={() => setMobileActionsOpen(!mobileActionsOpen)} className={cn("w-9 h-9 rounded-xl glass-panel flex items-center justify-center text-foreground shadow-lg active:scale-90 transition-all duration-200", mobileActionsOpen && "rotate-45 bg-primary text-primary-foreground")}><Plus size={18} /></button>
                   </div>
-                  <div className="shrink-0 flex flex-col items-center justify-center w-9 h-9 cursor-pointer active:scale-95 transition-transform" onClick={() => setMobileFiltersOpen(!mobileFiltersOpen)}>
+                  <div className="shrink-0 flex flex-col items-center justify-center w-9 h-9 cursor-pointer active:scale-95 transition-transform" onClick={() => { setMobileActionsOpen(false); setMobileFiltersOpen(!mobileFiltersOpen) }}>
                     <div className="w-6 h-1 rounded-full bg-muted-foreground/40 mb-0.5" />
                     <div className="w-4 h-1 rounded-full bg-muted-foreground/25" />
                   </div>
@@ -706,6 +706,13 @@ function DashboardContent() {
                 forecastMode={filters.useForecastMap ?? false}
                 tooltipVisible={!!(mapState.selectedId || mapState.hoveredId)}
                 mapViewport={{ center: mapState.center, zoom: mapState.zoom, selectedId: mapState.selectedId }}
+              />
+            ) : isMobileViewport && tavusConversationUrl && !isTavusLoading ? (
+              <TavusMiniWindow
+                conversationUrl={tavusConversationUrl}
+                onClose={() => { setTavusConversationUrl(null); setIsTavusLoading(false) }}
+                forecastMode={filters.useForecastMap ?? false}
+                embedded={true}
               />
             ) : undefined}
           />
@@ -967,7 +974,7 @@ function DashboardContent() {
               {/* Swipe handle to pull up filters */}
               <div
                 className="shrink-0 flex flex-col items-center justify-center w-9 h-9 cursor-pointer active:scale-95 transition-transform"
-                onClick={() => setMobileFiltersOpen(!mobileFiltersOpen)}
+                onClick={() => { setMobileActionsOpen(false); setMobileFiltersOpen(!mobileFiltersOpen) }}
                 aria-label={mobileFiltersOpen ? "Hide filters" : "Show filters"}
               >
                 <div className="w-6 h-1 rounded-full bg-muted-foreground/40 mb-0.5" />
@@ -1101,9 +1108,9 @@ function DashboardContent() {
           )
         }
 
-        {/* Tavus AI Analyst Mini Window */}
+        {/* Tavus AI Analyst Mini Window — desktop only (on mobile, embedded in unified bottom sheet) */}
         {
-          tavusConversationUrl && !isTavusLoading && (
+          !isMobileViewport && tavusConversationUrl && !isTavusLoading && (
             <TavusMiniWindow
               conversationUrl={tavusConversationUrl}
               onClose={() => setTavusConversationUrl(null)}
@@ -1112,12 +1119,12 @@ function DashboardContent() {
             />
           )
         }
-      </main >
+      </div >
 
       {/* Cinematic onboarding intro — first-visit only */}
       <OnboardingIntro />
       <ContactModal isOpen={isContactOpen} onClose={() => setIsContactOpen(false)} />
-    </div >
+    </main >
   )
 }
 
