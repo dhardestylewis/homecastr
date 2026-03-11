@@ -2734,7 +2734,8 @@ export function ForecastMap({
 
                     {/* Mobile: Full-width chart (StreetView via floating button) / Desktop: StreetView above chart */}
                     {isMobile && !(isKeyboardOpen) ? (
-                        /* Mobile: Full-width chart */
+                        /* Mobile: Full-width chart + embedded bottom bar */
+                        <>
                         <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
                             {(() => {
                                 const currentVal = fanChartData?.p50?.[0] ?? historicalValues?.[historicalValues.length - 1] ?? null
@@ -2789,6 +2790,7 @@ export function ForecastMap({
                                 {mobileBottomBar}
                             </div>
                         )}
+                        </>
                     ) : (
                         <>
                             {/* Desktop: StreetView above chart */}
