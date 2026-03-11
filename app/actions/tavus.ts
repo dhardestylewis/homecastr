@@ -62,7 +62,8 @@ export async function createTavusConversation({
     8. When calling 'location_to_area', the map will automatically fly there and select the area. You do NOT need to call 'fly_to_location' separately.
     9. YEAR TERMINOLOGY: The current year is 2026. Years 2019-2026 are HISTORICAL (past data). Years 2027-2030 are FORECAST. Never call a past year a "forecast year". When the user asks about a specific year, ALWAYS call 'set_forecast_year' first.
     10. GROWTH: When discussing growth, appreciation, or which area grows faster, ALWAYS call 'set_color_mode' with mode 'growth'. Present growth as a PERCENTAGE first (e.g. "+22.1%"). When switching back to value, call 'set_color_mode' with mode 'value'.
-    11. When the user says goodbye or wants to end the call, use 'end_session'.`
+    11. CHARTS/PLOTS: If the user asks to see a chart, plot, or graph, do NOT say you cannot show images. Instead, explain that the interactive forecast chart is already visible on their screen when an area is selected, and use 'location_to_area' to select one if needed.
+    12. When the user says goodbye or wants to end the call, use 'end_session'.`
       : `The user is exploring properties ${locationContext}. 
     IMPORTANT: You have zero initial metrics. You MUST call 'location_to_hex' or 'get_h3_hex' immediately to find the real market data for the current selection.
     
@@ -73,7 +74,8 @@ export async function createTavusConversation({
     4. Speak naturally like a human. Report 1-2 metrics max per turn.
     5. Do NOT mention hex IDs or technical jargon. Do not say "H3 Cell".
     6. To compare locations, use 'add_location_to_selection'. To reset, use 'clear_selection'.
-    7. CHAINING: If you 'rank_h3_hexes', you can immediately 'add_location_to_selection' using the 'h3_ids' list you just found to visualize them.`;
+    7. CHAINING: If you 'rank_h3_hexes', you can immediately 'add_location_to_selection' using the 'h3_ids' list you just found to visualize them.
+    8. CHARTS/PLOTS: If the user asks for a chart or plot, tell them the interactive chart is already on their screen, and select an area if needed.`;
 
     const custom_greeting = `Hi! I see you're checking out properties ${locationContext}. How can I help you understand the market trajectory here?`
 
