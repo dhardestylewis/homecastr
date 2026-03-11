@@ -195,7 +195,7 @@ export function HistoryForecastChart({ history, horizons, originYear, suppressCo
                         <table className="w-full text-sm">
                             <thead>
                                 <tr className="text-xs uppercase tracking-wider border-b border-border">
-                                    <th className="text-left py-2 pr-3 text-muted-foreground whitespace-nowrap sticky left-0 bg-inherit">Year</th>
+                                    <th className="text-left py-2 pr-3 text-muted-foreground whitespace-nowrap sticky left-0 z-10 bg-card">Year</th>
                                     {uniqueYears.map(yr => (
                                         <th key={yr} className={`text-right py-2 px-1.5 whitespace-nowrap ${yr > bridgeYear ? 'text-primary/70' : yr === bridgeYear ? 'text-primary font-bold' : 'text-muted-foreground'}`}>
                                             {yr}
@@ -206,7 +206,7 @@ export function HistoryForecastChart({ history, horizons, originYear, suppressCo
                             <tbody>
                                 {/* Row 1: Median Value (continuous historical → forecast) */}
                                 <tr>
-                                    <td className="py-2 pr-3 text-muted-foreground whitespace-nowrap sticky left-0 bg-inherit">Median Value</td>
+                                    <td className="py-2 pr-3 text-muted-foreground whitespace-nowrap sticky left-0 z-10 bg-card">Median Value</td>
                                     {uniqueYears.map(yr => {
                                         let value: number | null = null
                                         const isForecast = yr > bridgeYear
@@ -230,7 +230,7 @@ export function HistoryForecastChart({ history, horizons, originYear, suppressCo
 
                                 {/* Row 2: YoY Change */}
                                 <tr className="border-t border-border/50">
-                                    <td className="py-2 pr-3 text-muted-foreground whitespace-nowrap sticky left-0 bg-inherit">YoY Change</td>
+                                    <td className="py-2 pr-3 text-muted-foreground whitespace-nowrap sticky left-0 z-10 bg-card">YoY Change</td>
                                     {uniqueYears.map((yr, i) => {
                                         if (i === 0) return <td key={yr} className="text-right py-2 px-1.5 text-xs text-muted-foreground/40"></td>
 
@@ -265,7 +265,7 @@ export function HistoryForecastChart({ history, horizons, originYear, suppressCo
                                     <>
                                         {/* Row 3: P10 (downside) — only for forecast years */}
                                         <tr className="border-t border-border/30">
-                                            <td className="py-2 pr-3 text-muted-foreground/60 whitespace-nowrap sticky left-0 bg-inherit text-xs">Downside (P10)</td>
+                                            <td className="py-2 pr-3 text-muted-foreground/60 whitespace-nowrap sticky left-0 z-10 bg-card text-xs">Downside (P10)</td>
                                             {uniqueYears.map(yr => {
                                                 if (yr <= bridgeYear) return <td key={yr} className="text-right py-2 px-1.5" />
                                                 const h = fcstMap.get(yr)
@@ -279,7 +279,7 @@ export function HistoryForecastChart({ history, horizons, originYear, suppressCo
 
                                         {/* Row 4: P90 (upside) — only for forecast years */}
                                         <tr className="border-t border-border/30">
-                                            <td className="py-2 pr-3 text-muted-foreground/60 whitespace-nowrap sticky left-0 bg-inherit text-xs">Upside (P90)</td>
+                                            <td className="py-2 pr-3 text-muted-foreground/60 whitespace-nowrap sticky left-0 z-10 bg-card text-xs">Upside (P90)</td>
                                             {uniqueYears.map(yr => {
                                                 if (yr <= bridgeYear) return <td key={yr} className="text-right py-2 px-1.5" />
                                                 const h = fcstMap.get(yr)

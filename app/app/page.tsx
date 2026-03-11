@@ -685,17 +685,12 @@ function DashboardContent() {
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' && chatInput.trim()) {
                             const text = chatInput.trim()
-                            const isQuestion = /^(what|where|how|why|show|compare|tell|explain|which|is |are |can |do |does )/i.test(text)
-                              || text.includes('?')
-                              || (text.split(/\s+/).length > 3 && !/\d/.test(text.charAt(0)))
-                            if (isChatOpen || isQuestion) {
-                              // Route to chat
-                              if (!isChatOpen) setIsChatOpen(true)
-                              // Small delay to let ChatPanel mount if just opened
-                              setTimeout(() => chatPanelRef.current?.sendExternalMessage(text), isChatOpen ? 0 : 100)
-                            } else {
-                              // Route to address search
+                            const isAddress = /^\d/.test(text) || /^\d{5}(-\d{4})?$/.test(text) || /,\s*[A-Z]{2}\b/i.test(text)
+                            if (!isChatOpen && isAddress) {
                               handleSearch(text)
+                            } else {
+                              if (!isChatOpen) setIsChatOpen(true)
+                              setTimeout(() => chatPanelRef.current?.sendExternalMessage(text), isChatOpen ? 0 : 100)
                             }
                             setChatInput('')
                           }
@@ -707,6 +702,12 @@ function DashboardContent() {
                         placeholder={isChatOpen ? "Ask about this area..." : "Search or ask a question..."}
                         className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
                       />
+                      {/* Mic button — starts Tavus voice agent */}
+                      {!tavusConversationUrl && !isTavusLoading && (
+                        <button onClick={handleFloatingConsultAI} className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center hover:bg-muted/50 active:scale-90 transition-transform" aria-label="Voice agent">
+                          <Mic size={14} className="text-muted-foreground/70" />
+                        </button>
+                      )}
                       {isChatOpen && (
                         <button onClick={() => { setIsChatOpen(false); setChatInput('') }} className="shrink-0 w-5 h-5 rounded flex items-center justify-center hover:bg-muted/50">
                           <X size={12} />
@@ -714,16 +715,43 @@ function DashboardContent() {
                       )}
                     </div>
                   </div>
+                  {/* FAB — PDF and Analysis only */}
                   <div className="relative shrink-0">
                     {mobileActionsOpen && (
                       <div className="absolute bottom-12 right-0 flex flex-col gap-2 animate-in fade-in slide-in-from-bottom-2 duration-150 z-[70]">
-                        {!isChatOpen && (
-                          <button onClick={() => { setIsChatOpen(true); setMobileActionsOpen(false) }} className="h-10 px-3 rounded-full glass-panel flex items-center gap-2 text-foreground shadow-xl active:scale-95 transition-transform"><MessageSquare size={16} /><span className="text-xs font-medium">Chat</span></button>
-                        )}
-                        {!tavusConversationUrl && !isTavusLoading && (
-                          <button onClick={() => { handleFloatingConsultAI(); setMobileActionsOpen(false) }} className="h-10 px-3 rounded-full glass-panel flex items-center gap-2 text-foreground shadow-xl active:scale-95 transition-transform"><Mic size={16} /><span className="text-xs font-medium">Talk</span></button>
-                        )}
-                        <button onClick={() => { setIsContactOpen(true); setMobileActionsOpen(false) }} className="h-10 px-3 rounded-full glass-panel flex items-center gap-2 text-foreground shadow-xl active:scale-95 transition-transform border border-[hsl(var(--primary))]/30"><CalendarDays size={16} className="text-[hsl(45,80%,45%)]" /><span className="text-xs font-medium">Analysis</span></button>
+                        <button
+                          onClick={async () => {
+                            setMobileActionsOpen(false)
+                            try {
+                              toast({ title: "Generating PDF…", duration: 2000 })
+                              const captureMap = (window as any).__captureMapImage
+                              const mapImageDataUrl: string | undefined = captureMap ? await captureMap() : undefined
+                              const selectedId = mapState.selectedId
+                              let historicalValues: (number | null)[] = []
+                              let p50: number[] = [], p10: number[] = [], p90: number[] = [], years: number[] = []
+                              if (selectedId) {
+                                const level = selectedId.length === 3 ? "zip3" : selectedId.length === 5 ? "zcta" : selectedId.length === 11 ? "tract" : selectedId.length === 15 ? "tabblock" : "parcel"
+                                const res = await fetch(`/api/forecast-detail?level=${level}&id=${encodeURIComponent(selectedId)}&originYear=${pageOriginYear}`)
+                                if (res.ok) { const json = await res.json(); historicalValues = json.historicalValues || []; p50 = json.p50 || []; p10 = json.p10 || []; p90 = json.p90 || []; years = json.years || [] }
+                              }
+                              const shareUrl = new URL(window.location.href)
+                              if (currentYear !== 2027) shareUrl.searchParams.set("yr", currentYear.toString())
+                              const pdfPinnedIds = (window as any).__getPinnedIds?.() as string[] | undefined
+                              if (pdfPinnedIds?.length) shareUrl.searchParams.set("compare", pdfPinnedIds.join(","))
+                              await generateForecastPDF({
+                                locationName: searchBarValue && !searchBarValue.includes("Loading") ? searchBarValue : selectedId ? selectedId : "Map Overview",
+                                locationId: selectedId || "—", currentYear, historicalValues, p50, p10, p90, years, mapImageDataUrl,
+                                shareUrl: shareUrl.toString(), pinnedComparisons: (window as any).__getPinnedComparisons?.() || undefined,
+                              })
+                            } catch (err) { console.error("PDF generation failed:", err); toast({ title: "PDF failed", description: "Could not generate report", variant: "destructive" }) }
+                          }}
+                          className="h-10 px-3 rounded-full glass-panel flex items-center gap-2 text-foreground shadow-xl active:scale-95 transition-transform" aria-label="PDF"
+                        >
+                          <FileDown size={16} /><span className="text-xs font-medium">PDF</span>
+                        </button>
+                        <button onClick={() => { setIsContactOpen(true); setMobileActionsOpen(false) }} className="h-10 px-3 rounded-full glass-panel flex items-center gap-2 text-foreground shadow-xl active:scale-95 transition-transform border border-[hsl(var(--primary))]/30" aria-label="Analysis">
+                          <CalendarDays size={16} className="text-[hsl(45,80%,45%)]" /><span className="text-xs font-medium">Analysis</span>
+                        </button>
                       </div>
                     )}
                     <button onClick={() => setMobileActionsOpen(!mobileActionsOpen)} className={cn("w-9 h-9 rounded-xl glass-panel flex items-center justify-center text-foreground shadow-lg active:scale-90 transition-all duration-200", mobileActionsOpen && "rotate-45 bg-primary text-primary-foreground")}><Plus size={18} /></button>
@@ -953,23 +981,49 @@ function DashboardContent() {
             {/* Main bottom bar */}
             <div className="glass-panel border-t border-border/50 px-3 py-2 flex items-center gap-2">
               <div className="flex-1 min-w-0">
-                <SearchBox onSearch={handleSearch} placeholder="Search address..." value={searchBarValue} />
+                <div className={cn("flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 border transition-colors", isChatOpen ? "bg-muted/30 border-primary/30" : "bg-muted/20 border-border/50")}>
+                  {isChatOpen && <MessageSquare size={14} className="text-primary shrink-0" />}
+                  {!isChatOpen && <Search size={14} className="text-muted-foreground/60 shrink-0" />}
+                  <input
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && chatInput.trim()) {
+                        const text = chatInput.trim()
+                        const isAddress = /^\d/.test(text) || /^\d{5}(-\d{4})?$/.test(text) || /,\s*[A-Z]{2}\b/i.test(text)
+                        if (!isChatOpen && isAddress) {
+                          handleSearch(text)
+                        } else {
+                          if (!isChatOpen) setIsChatOpen(true)
+                          setTimeout(() => chatPanelRef.current?.sendExternalMessage(text), isChatOpen ? 0 : 100)
+                        }
+                        setChatInput('')
+                      }
+                      if (e.key === 'Escape' && isChatOpen) {
+                        setIsChatOpen(false)
+                        setChatInput('')
+                      }
+                    }}
+                    placeholder={isChatOpen ? "Ask about this area..." : "Search or ask a question..."}
+                    className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
+                  />
+                  {!tavusConversationUrl && !isTavusLoading && (
+                    <button onClick={handleFloatingConsultAI} className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center hover:bg-muted/50 active:scale-90 transition-transform" aria-label="Voice agent">
+                      <Mic size={14} className="text-muted-foreground/70" />
+                    </button>
+                  )}
+                  {isChatOpen && (
+                    <button onClick={() => { setIsChatOpen(false); setChatInput('') }} className="shrink-0 w-5 h-5 rounded flex items-center justify-center hover:bg-muted/50">
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
               </div>
 
-              {/* FAB speed dial — labelled actions */}
+              {/* FAB — PDF and Analysis only */}
               <div className="relative shrink-0">
                 {mobileActionsOpen && (
                   <div className="absolute bottom-12 right-0 flex flex-col gap-2 animate-in fade-in slide-in-from-bottom-2 duration-150">
-                    {!isChatOpen && (
-                      <button onClick={() => { setIsChatOpen(true); setMobileActionsOpen(false) }} className="h-10 px-3 rounded-full glass-panel flex items-center gap-2 text-foreground shadow-xl active:scale-95 transition-transform" aria-label="Chat">
-                        <MessageSquare size={16} /><span className="text-xs font-medium">Chat</span>
-                      </button>
-                    )}
-                    {!tavusConversationUrl && !isTavusLoading && (
-                      <button onClick={() => { handleFloatingConsultAI(); setMobileActionsOpen(false) }} className="h-10 px-3 rounded-full glass-panel flex items-center gap-2 text-foreground shadow-xl active:scale-95 transition-transform" aria-label="Talk">
-                        <Mic size={16} /><span className="text-xs font-medium">Talk</span>
-                      </button>
-                    )}
                     <button
                       onClick={async () => {
                         setMobileActionsOpen(false)

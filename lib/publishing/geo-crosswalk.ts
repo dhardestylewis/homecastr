@@ -1002,7 +1002,33 @@ export async function resolveSlugToTract(
         })
 
         const slugMap = new Map<string, string>(mapping as [string, string][])
-        return slugMap.get(neighborhoodSlug) || null
+        const fromSlugMap = slugMap.get(neighborhoodSlug)
+        if (fromSlugMap) return fromSlugMap
+
+        // Fallback: if slug ends with a 5-digit ZIP (e.g. "houston-77067"),
+        // try resolving via ZCTA→tract crosswalk. This handles stale slugs
+        // that were generated before neighborhood names were updated.
+        const zipMatch = neighborhoodSlug.match(/-(\d{5})$/)
+        if (zipMatch) {
+            const zip = zipMatch[1]
+            // Find all tracts in this county that map to this ZCTA
+            for (const [tractId, zcta] of Object.entries(TRACT_ZCTA)) {
+                if (zcta === zip && tractId.startsWith(countyEntry[0])) {
+                    // Verify it exists in the forecast database
+                    const supabase = getSupabaseAdmin()
+                    const { data: exists } = await supabase
+                        .schema(schema as any)
+                        .from("metrics_tract_forecast")
+                        .select("tract_geoid20")
+                        .eq("tract_geoid20", tractId)
+                        .limit(1)
+                        .maybeSingle()
+                    if (exists) return exists.tract_geoid20
+                }
+            }
+        }
+
+        return null
     }
 
     return null
