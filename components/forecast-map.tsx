@@ -1082,10 +1082,11 @@ export function ForecastMap({
         map.on("load", () => {
             setIsLoaded(true)
 
-            // Add a crosshatch pattern image synchronously using canvas
+            // Add a crosshatch pattern image synchronously using canvas pixel data
+            const patternSize = 20;
             const patternCanvas = document.createElement('canvas');
-            patternCanvas.width = 20;
-            patternCanvas.height = 20;
+            patternCanvas.width = patternSize;
+            patternCanvas.height = patternSize;
             const ctx = patternCanvas.getContext('2d');
             if (ctx) {
                 ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
@@ -1096,8 +1097,9 @@ export function ForecastMap({
                 ctx.moveTo(-5, -5);
                 ctx.lineTo(25, 25);
                 ctx.stroke();
+                const imageData = ctx.getImageData(0, 0, patternSize, patternSize);
+                map.addImage('crosshatch-pattern', { width: patternSize, height: patternSize, data: new Uint8Array(imageData.data.buffer) });
             }
-            map.addImage('crosshatch-pattern', patternCanvas);
 
             const fillColor = buildFillColor()
 
