@@ -926,6 +926,15 @@ function DashboardContent() {
                 />
               </div>
 
+              {/* Year badge — always visible so user knows which year the map shows */}
+              <button
+                onClick={() => setMobileFiltersOpen(!mobileFiltersOpen)}
+                className="shrink-0 px-2 py-1 rounded-lg bg-primary/15 border border-primary/30 text-primary text-[11px] font-bold tabular-nums active:scale-95 transition-transform"
+                aria-label="Change year"
+              >
+                {currentYear}
+              </button>
+
               {/* Action icons — compact row */}
               {!isChatOpen && (
                 <button
