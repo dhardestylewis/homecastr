@@ -1020,6 +1020,72 @@ export function ForecastMap({
             }
         }
 
+        // DEBUG: patch MapLibre event registration BEFORE map construction.
+        // This catches bad calls from plugins/controls/constructor-time code too.
+        if (!(window as any).__MAPLIBRE_ON_DEBUG_PATCHED__) {
+            ;(window as any).__MAPLIBRE_ON_DEBUG_PATCHED__ = true
+
+            const proto = maplibregl.Map.prototype as any
+            const originalOn = proto.on
+            const originalOnce = proto.once
+
+            const isValidSecondArg = (x: any) =>
+                typeof x === "function" ||
+                typeof x === "string" ||
+                Array.isArray(x)
+
+            proto.on = function (...args: any[]) {
+                const [type, second, third] = args
+
+                const suspicious =
+                    // 3-arg form but second arg is not a valid delegated-layer arg
+                    (args.length === 3 && !isValidSecondArg(second)) ||
+                    // 3-arg form but third arg is not a function
+                    (args.length === 3 && typeof third !== "function") ||
+                    // 4+ args should never happen here
+                    args.length > 3
+
+                if (suspicious) {
+                    console.error("[MAP DEBUG] BAD Map.prototype.on", {
+                        type,
+                        args,
+                        secondType: typeof second,
+                        thirdType: typeof third,
+                        second,
+                        third,
+                    })
+                    console.trace("[MAP DEBUG TRACE] Map.prototype.on")
+                    throw new Error(`[MAP DEBUG] Invalid map.on registration for event "${String(type)}"`)
+                }
+
+                return originalOn.apply(this, args)
+            }
+
+            proto.once = function (...args: any[]) {
+                const [type, second, third] = args
+
+                const suspicious =
+                    (args.length === 3 && !isValidSecondArg(second)) ||
+                    (args.length === 3 && typeof third !== "function") ||
+                    args.length > 3
+
+                if (suspicious) {
+                    console.error("[MAP DEBUG] BAD Map.prototype.once", {
+                        type,
+                        args,
+                        secondType: typeof second,
+                        thirdType: typeof third,
+                        second,
+                        third,
+                    })
+                    console.trace("[MAP DEBUG TRACE] Map.prototype.once")
+                    throw new Error(`[MAP DEBUG] Invalid map.once registration for event "${String(type)}"`)
+                }
+
+                return originalOnce.apply(this, args)
+            }
+        }
+
         const map = new maplibregl.Map({
             container: mapContainerRef.current,
             style: {
@@ -1050,36 +1116,6 @@ export function ForecastMap({
             preserveDrawingBuffer: true, // Required for canvas.toDataURL() in PDF export
         })
 
-        // MONKEY-PATCH MapLibre Events to trace invalid 3-arg registrations
-        // IMPORTANT: forward EXACT original arity/args. Do not always pass 3 args,
-        // or valid 2-arg calls like map.on("load", handler) can be misread internally.
-        const originalOn = map.on.bind(map)
-        map.on = function (...args: any[]) {
-            const [type, second, third] = args
-            if (
-                args.length === 3 &&
-                typeof second === "object" &&
-                !Array.isArray(second) &&
-                second !== null
-            ) {
-                console.error("[MAP DEBUG] BAD MAP.ON!!!", type, second, third)
-            }
-            return (originalOn as any)(...args)
-        } as any
-
-        const originalOnce = map.once.bind(map)
-        map.once = function (...args: any[]) {
-            const [type, second, third] = args
-            if (
-                args.length === 3 &&
-                typeof second === "object" &&
-                !Array.isArray(second) &&
-                second !== null
-            ) {
-                console.error("[MAP DEBUG] BAD MAP.ONCE!!!", type, second, third)
-            }
-            return (originalOnce as any)(...args)
-        } as any
 
         // @ts-expect-error map.on 2-arg signature exists but TS gets confused with maplibregl's complex overloads
         map.on("load", () => {
