@@ -392,7 +392,7 @@ export function FanChart({
       <svg
         viewBox={`0 0 ${width} ${height}`}
         className={onYearChange ? "w-full h-full cursor-crosshair" : "w-full h-full"}
-        preserveAspectRatio="none"
+        preserveAspectRatio="xMidYMid meet"
         style={{ display: 'block' }}
         onMouseMove={onYearChange ? handleMouseMove : undefined}
         onMouseLeave={onYearChange ? () => setHoveredYear(null) : undefined}
