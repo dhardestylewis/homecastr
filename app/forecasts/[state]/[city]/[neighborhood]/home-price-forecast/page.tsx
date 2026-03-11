@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 
-import { resolveSlugToTract, parseTractGeoid, enrichWithNeighborhood, batchEnrichTracts } from "@/lib/publishing/geo-crosswalk"
+import { resolveSlugToTract, parseTractGeoid, enrichWithNeighborhood, batchEnrichTracts, slugify, ZIP_NAMES } from "@/lib/publishing/geo-crosswalk"
 import { fetchForecastPageData, isForecastOutlier } from "@/lib/publishing/forecast-data"
 import { fetchSeoNarrative } from "@/lib/publishing/seo-narratives"
 
@@ -84,6 +84,38 @@ export default async function NeighborhoodForecastPage({ params, searchParams }:
     // Get geo info
     let geo = parseTractGeoid(tractGeoid)
     geo = await enrichWithNeighborhood(geo)
+
+    // RECONSTRUCT DISAMBIGUATED NAME FROM URL SLUG (mirrors city page logic)
+    const baseSlug = slugify(geo.neighborhoodName)
+    let displayName = geo.neighborhoodName
+    
+    if (neighborhood !== baseSlug && neighborhood.startsWith(baseSlug + "-")) {
+        const remainder = neighborhood.substring(baseSlug.length + 1) // e.g. "lakehead", "tr-970200"
+        const tractSuffix = geo.tractGeoid.substring(5)
+        
+        if (remainder === `tr-${tractSuffix}`) {
+            // It fell back to Tr.XXXXX. The city page would have appended the ZIP/ZIP_NAME if available.
+            let qualifier = geo.zcta5 || ""
+            if (qualifier && ZIP_NAMES[qualifier]) {
+                const resolvedName = ZIP_NAMES[qualifier]
+                if (resolvedName.toLowerCase() !== geo.neighborhoodName.toLowerCase()) {
+                    qualifier = resolvedName
+                }
+            }
+            displayName = qualifier 
+                ? `${geo.neighborhoodName} · ${qualifier} · Tr.${tractSuffix}`
+                : `${geo.neighborhoodName} · Tr.${tractSuffix}`
+        } else {
+            // It's a unique ZIP or ZIP_NAME (e.g. "lakehead" or "83638")
+            const qualifierSlug = remainder
+            let qualifierStr = qualifierSlug
+            if (geo.zcta5 && slugify(geo.zcta5) === qualifierSlug) qualifierStr = geo.zcta5
+            if (geo.zcta5 && ZIP_NAMES[geo.zcta5] && slugify(ZIP_NAMES[geo.zcta5]) === qualifierSlug) qualifierStr = ZIP_NAMES[geo.zcta5]
+            
+            displayName = `${geo.neighborhoodName} · ${qualifierStr}`
+        }
+    }
+    geo.neighborhoodName = displayName
 
     // Fetch all forecast data + AI narrative in parallel
     const countyFips = tractGeoid.substring(0, 5)
@@ -256,6 +288,7 @@ export default async function NeighborhoodForecastPage({ params, searchParams }:
                     horizons={data.forecast.horizons}
                     neighborhoodName={geo.neighborhoodName}
                     city={geo.city}
+                    stateAbbr={geo.stateAbbr}
                     aiNarrative={isOutlier ? null : narrative}
                 />
 

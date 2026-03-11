@@ -5,6 +5,7 @@ interface Props {
     horizons: ForecastHorizon[]
     neighborhoodName: string
     city: string
+    stateAbbr: string
     aiNarrative?: SeoNarrative | null
 }
 
@@ -13,7 +14,7 @@ interface Props {
  * grounded in the page's numeric metrics.
  * When an AI narrative is available, renders it as a richer lead paragraph.
  */
-export function InterpretationSection({ horizons, neighborhoodName, city, aiNarrative }: Props) {
+export function InterpretationSection({ horizons, neighborhoodName, city, stateAbbr, aiNarrative }: Props) {
     const h1 = horizons.find(h => h.horizon_m === 12)
     const h5 = horizons.find(h => h.horizon_m === 60)
 
@@ -35,14 +36,21 @@ export function InterpretationSection({ horizons, neighborhoodName, city, aiNarr
     else if (spread5Pct < 50) dispersion = "wide"
     else dispersion = "very wide"
 
+    let locationText = `${neighborhoodName} in ${city}`
+    if (neighborhoodName.toLowerCase() === city.toLowerCase() || city.toLowerCase() === 'city') {
+        locationText = `${neighborhoodName}`
+    } else if (stateAbbr) {
+        locationText = `${neighborhoodName} in ${city}, ${stateAbbr}`
+    }
+
     const sentences: string[] = []
 
     if (appreciation5 > 3) {
-        sentences.push(`${neighborhoodName} in ${city} is forecast to appreciate ${appreciation5.toFixed(1)}% over five years, with a ${dispersion} confidence range.`)
+        sentences.push(`${locationText} is forecast to appreciate ${appreciation5.toFixed(1)}% over five years, with a ${dispersion} confidence range.`)
     } else if (appreciation5 < -3) {
-        sentences.push(`${neighborhoodName} in ${city} is forecast to decline ${Math.abs(appreciation5).toFixed(1)}% over five years, with a ${dispersion} confidence range.`)
+        sentences.push(`${locationText} is forecast to decline ${Math.abs(appreciation5).toFixed(1)}% over five years, with a ${dispersion} confidence range.`)
     } else {
-        sentences.push(`${neighborhoodName} in ${city} is forecast to remain roughly flat over five years (${appreciation5 > 0 ? "+" : ""}${appreciation5.toFixed(1)}%), with a ${dispersion} confidence range.`)
+        sentences.push(`${locationText} is forecast to remain roughly flat over five years (${appreciation5 > 0 ? "+" : ""}${appreciation5.toFixed(1)}%), with a ${dispersion} confidence range.`)
     }
 
     if (h1.appreciation > 0 && appreciation5 < 0) {
