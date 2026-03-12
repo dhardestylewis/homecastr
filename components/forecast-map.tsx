@@ -1872,6 +1872,17 @@ export function ForecastMap({
                             /* ignore */
                         }
                     })
+                    // Clear pinned feature-state per-feature (may span different sourceLayers)
+                    pinnedComparisonsRef.current.forEach((pc) => {
+                        ;["forecast-a", "forecast-b"].forEach((s) => {
+                            try {
+                                map.setFeatureState(
+                                    { source: s, sourceLayer: pc.sourceLayer, id: pc.id },
+                                    { pinned: false, pinnedIdx: 0 }
+                                )
+                            } catch { }
+                        })
+                    })
                     selectedIdRef.current = null
                     setSelectedId(null)
                     setSelectedProps(null)
@@ -1881,7 +1892,6 @@ export function ForecastMap({
                     setComparisonData(null)
                     setComparisonHistoricalValues(undefined)
                     comparisonFetchRef.current = null
-                    // Clear pinned comparisons — removeFeatureState above already wiped map state
                     setPinnedComparisons([])
                     onFeatureSelect(null)
                 }
