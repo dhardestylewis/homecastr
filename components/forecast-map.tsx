@@ -159,6 +159,7 @@ interface PinnedEntry {
     label?: string
     coords: [number, number]
     sourceLayer: string
+    colorIdx: number // Stable color slot (1-4), assigned at pin time, never changes
 }
 
 export function ForecastMap({
@@ -191,18 +192,89 @@ export function ForecastMap({
     useEffect(() => { pinnedComparisonsRef.current = pinnedComparisons }, [pinnedComparisons])
     useEffect(() => { onPinnedCountChange?.(pinnedComparisons.length) }, [pinnedComparisons.length, onPinnedCountChange])
 
-    // Helper: re-index all pinned feature states so border colors match array position
-    const reindexPinnedFeatureStates = (map: maplibregl.Map, entries: PinnedEntry[]) => {
-        entries.forEach((pc, idx) => {
+    // Find the lowest unused color slot (1-4) among current pins
+    const getNextColorSlot = (entries: PinnedEntry[]): number => {
+        const used = new Set(entries.map(e => e.colorIdx))
+        for (let i = 1; i <= MAX_PINNED; i++) {
+            if (!used.has(i)) return i
+        }
+        return 1 // fallback (should not happen if entries.length < MAX_PINNED)
+    }
+
+    // Apply feature states for all pinned entries using their stable colorIdx
+    const applyPinnedFeatureStates = (map: maplibregl.Map, entries: PinnedEntry[]) => {
+        entries.forEach((pc) => {
             ;["forecast-a", "forecast-b"].forEach((s) => {
                 try {
                     map.setFeatureState(
                         { source: s, sourceLayer: pc.sourceLayer, id: pc.id },
-                        { pinned: true, pinnedIdx: idx + 1 }
+                        { pinned: true, pinnedIdx: pc.colorIdx }
                     )
                 } catch { }
             })
         })
+    }
+
+    // Centralized clear: robustly wipes all selected/hovered/pinned feature-state
+    const clearAllLocalMapState = (map: maplibregl.Map) => {
+        // Clear selected feature-state across ALL layers (zoom may have changed)
+        if (selectedIdRef.current) {
+            ;["forecast-a", "forecast-b"].forEach((s) => {
+                for (const lvl of GEO_LEVELS) {
+                    try {
+                        map.setFeatureState(
+                            { source: s, sourceLayer: lvl.name, id: selectedIdRef.current! },
+                            { selected: false }
+                        )
+                    } catch { }
+                }
+            })
+        }
+        // Clear hovered feature-state across ALL layers
+        if (hoveredIdRef.current) {
+            ;["forecast-a", "forecast-b"].forEach((s) => {
+                for (const lvl of GEO_LEVELS) {
+                    try {
+                        map.setFeatureState(
+                            { source: s, sourceLayer: lvl.name, id: hoveredIdRef.current! },
+                            { hover: false }
+                        )
+                    } catch { }
+                }
+            })
+        }
+        // Clear pinned feature-state per-feature using stored sourceLayer
+        pinnedComparisonsRef.current.forEach((pc) => {
+            ;["forecast-a", "forecast-b"].forEach((s) => {
+                try {
+                    map.setFeatureState(
+                        { source: s, sourceLayer: pc.sourceLayer, id: pc.id },
+                        { pinned: false, pinnedIdx: 0 }
+                    )
+                } catch { }
+            })
+        })
+    }
+
+    // Reset all local React state after clearing map state
+    const resetLocalState = () => {
+        selectedIdRef.current = null
+        hoveredIdRef.current = null
+        hoveredSourceLayerRef.current = null
+        selectedSourceLayerRef.current = null
+        setSelectedId(null)
+        setSelectedProps(null)
+        setTooltipData(null)
+        setFixedTooltipPos(null)
+        userDraggedRef.current = false
+        setSelectedCoords(null)
+        setFanChartData(null)
+        setHistoricalValues(undefined)
+        setComparisonData(null)
+        setComparisonHistoricalValues(undefined)
+        comparisonFetchRef.current = null
+        detailFetchRef.current = null
+        setPinnedComparisons([])
     }
 
     const router = useRouter()
@@ -239,30 +311,8 @@ export function ForecastMap({
     useEffect(() => {
         if (mapState.selectedId === null && selectedId !== null) {
             const map = mapRef.current
-            if (map && selectedIdRef.current) {
-                ;["forecast-a", "forecast-b"].forEach((s) => {
-                    for (const lvl of GEO_LEVELS) {
-                        try {
-                            map.removeFeatureState({ source: s, sourceLayer: lvl.name })
-                        } catch (err) { /* ignore */ }
-                    }
-                })
-            }
-            selectedIdRef.current = null
-            hoveredIdRef.current = null
-            setSelectedId(null)
-            setSelectedProps(null)
-            setTooltipData(null)
-            setFixedTooltipPos(null)
-            setSelectedCoords(null)
-            setFanChartData(null)
-            setHistoricalValues(undefined)
-            setComparisonData(null)
-            setComparisonHistoricalValues(undefined)
-            comparisonFetchRef.current = null
-            detailFetchRef.current = null
-            // Clear pinned comparisons — removeFeatureState above already wiped map state
-            setPinnedComparisons([])
+            if (map) clearAllLocalMapState(map)
+            resetLocalState()
             onFeatureSelect(null)
         }
     }, [mapState.selectedId])
@@ -578,7 +628,7 @@ export function ForecastMap({
 
         const params = new URLSearchParams(window.location.search)
         if (pinnedComparisons.length > 0) {
-            params.set("compare", pinnedComparisons.map(p => p.id).join(","))
+            params.set("compare", pinnedComparisons.map(p => `${p.sourceLayer}:${p.id}`).join(","))
         } else {
             params.delete("compare")
         }
@@ -604,7 +654,7 @@ export function ForecastMap({
         }
     }, [pinnedComparisons])
 
-    // Restore pinned comparisons from URL ?compare=id1,id2,id3
+    // Restore pinned comparisons from URL ?compare=layer:id1,layer:id2
     const compareRestoredRef = useRef(false)
     useEffect(() => {
         if (!isLoaded || compareRestoredRef.current) return
@@ -612,17 +662,23 @@ export function ForecastMap({
         if (!compareParam) return
         compareRestoredRef.current = true
 
-        const ids = compareParam.split(",").filter(Boolean).slice(0, MAX_PINNED)
-        if (!ids.length) return
-
         const map = mapRef.current
-        // Derive sourceLayer from current zoom instead of hardcoding
-        const zoom = map?.getZoom() || 10
-        const restoredSourceLayer = getSourceLayer(zoom)
+        const fallbackLayer = getSourceLayer(map?.getZoom() || 10)
+
+        // Parse entries: "layer:id" or legacy "id" (backwards compat)
+        const rawTokens = compareParam.split(",").filter(Boolean).slice(0, MAX_PINNED)
+        const parsed = rawTokens.map(tok => {
+            const colonIdx = tok.indexOf(":")
+            if (colonIdx > 0) {
+                return { id: tok.slice(colonIdx + 1), sourceLayer: tok.slice(0, colonIdx) }
+            }
+            return { id: tok, sourceLayer: fallbackLayer } // legacy format
+        })
+        if (!parsed.length) return
 
         // Fetch and pin each comparison
         const restoredEntries: PinnedEntry[] = []
-        Promise.all(ids.map(async (id) => {
+        Promise.all(parsed.map(async ({ id, sourceLayer }) => {
             try {
                 const res = await fetch(`/api/forecast-detail?id=${id}&yr=${year}${schema ? `&schema=${schema}` : ""}`)
                 if (!res.ok) return
@@ -638,9 +694,10 @@ export function ForecastMap({
                     id,
                     data: fanChart,
                     historicalValues: json.historical_values,
-                    label: id, // Use GEOID as label for URL-restored comparisons
+                    label: id,
                     coords: [0, 0],
-                    sourceLayer: restoredSourceLayer,
+                    sourceLayer,
+                    colorIdx: restoredEntries.length + 1, // assign sequentially on restore
                 }
                 restoredEntries.push(entry)
             } catch { /* skip silently */ }
@@ -651,11 +708,13 @@ export function ForecastMap({
                 for (const entry of restoredEntries) {
                     if (combined.some(p => p.id === entry.id)) continue
                     if (combined.length >= MAX_PINNED) break
+                    // Assign colorIdx based on combined state
+                    entry.colorIdx = getNextColorSlot(combined)
                     combined.push(entry)
                 }
                 // Apply feature-state to map after tiles have had time to load
                 if (map) {
-                    setTimeout(() => reindexPinnedFeatureStates(map, combined), 1500)
+                    setTimeout(() => applyPinnedFeatureStates(map, combined), 1500)
                 }
                 return combined
             })
@@ -1865,34 +1924,8 @@ export function ForecastMap({
 
                 // Normal clear selection
                 if (selectedIdRef.current) {
-                    ;["forecast-a", "forecast-b"].forEach((s) => {
-                        try {
-                            map.removeFeatureState({ source: s, sourceLayer: effectiveSourceLayer })
-                        } catch (err) {
-                            /* ignore */
-                        }
-                    })
-                    // Clear pinned feature-state per-feature (may span different sourceLayers)
-                    pinnedComparisonsRef.current.forEach((pc) => {
-                        ;["forecast-a", "forecast-b"].forEach((s) => {
-                            try {
-                                map.setFeatureState(
-                                    { source: s, sourceLayer: pc.sourceLayer, id: pc.id },
-                                    { pinned: false, pinnedIdx: 0 }
-                                )
-                            } catch { }
-                        })
-                    })
-                    selectedIdRef.current = null
-                    setSelectedId(null)
-                    setSelectedProps(null)
-                    setFixedTooltipPos(null)
-                    userDraggedRef.current = false // reset for next lock
-                    setSelectedCoords(null)
-                    setComparisonData(null)
-                    setComparisonHistoricalValues(undefined)
-                    comparisonFetchRef.current = null
-                    setPinnedComparisons([])
+                    clearAllLocalMapState(map)
+                    resetLocalState()
                     onFeatureSelect(null)
                 }
                 return
@@ -1902,38 +1935,10 @@ export function ForecastMap({
                 const id = (feature.properties?.id || feature.id) as string
                 if (!id) return
 
-                // Clear prev selection — targeted clear (preserves pinnedIdx on other features)
-                if (selectedIdRef.current) {
-                    const prevLayer = selectedSourceLayerRef.current || effectiveSourceLayer
-                    ;["forecast-a", "forecast-b"].forEach((s) => {
-                        try {
-                            map.setFeatureState(
-                                { source: s, sourceLayer: prevLayer, id: selectedIdRef.current! },
-                                { selected: false }
-                            )
-                        } catch (err) {
-                            /* ignore */
-                        }
-                    })
-                }
-
-                // Toggle selection
+                // 1) Toggle off same primary — full clear
                 if (selectedIdRef.current === id) {
-                    selectedIdRef.current = null
-                    setSelectedId(null)
-                    setSelectedProps(null)
-                    setFixedTooltipPos(null)
-                    setSelectedCoords(null)
-                    setComparisonData(null)
-                    setComparisonHistoricalValues(undefined)
-                    comparisonFetchRef.current = null
-                    // Clear all pinned comparisons
-                    pinnedComparisonsRef.current.forEach(pc => {
-                        ;["forecast-a", "forecast-b"].forEach(s => {
-                            try { map.setFeatureState({ source: s, sourceLayer: pc.sourceLayer, id: pc.id }, { pinned: false, pinnedIdx: 0 }) } catch { }
-                        })
-                    })
-                    setPinnedComparisons([])
+                    clearAllLocalMapState(map)
+                    resetLocalState()
                     onFeatureSelect(null)
                     return
                 }
@@ -1942,16 +1947,12 @@ export function ForecastMap({
                 if ((e.originalEvent.shiftKey || compareModeRef.current) && selectedIdRef.current) {
                     const existingIdx = pinnedComparisonsRef.current.findIndex(p => p.id === id)
                     if (existingIdx !== -1) {
-                        // Unpin
+                        // Unpin — clear only this feature, survivors keep their colorIdx
+                        const pinEntry = pinnedComparisonsRef.current[existingIdx]
                         ;["forecast-a", "forecast-b"].forEach(s => {
-                            try { map.setFeatureState({ source: s, sourceLayer: effectiveSourceLayer, id }, { pinned: false, pinnedIdx: 0 }) } catch { }
+                            try { map.setFeatureState({ source: s, sourceLayer: pinEntry.sourceLayer, id }, { pinned: false, pinnedIdx: 0 }) } catch { }
                         })
-                        setPinnedComparisons(prev => {
-                            const updated = prev.filter(p => p.id !== id)
-                            // Re-index survivors so border colors stay in sync
-                            reindexPinnedFeatureStates(map, updated)
-                            return updated
-                        })
+                        setPinnedComparisons(prev => prev.filter(p => p.id !== id))
                     } else {
                         // Pin: fetch detail and add
                         const pinLevel = effectiveSourceLayer
@@ -1977,6 +1978,7 @@ export function ForecastMap({
                                 label,
                                 coords: [e.lngLat.lat, e.lngLat.lng],
                                 sourceLayer: effectiveSourceLayer,
+                                colorIdx: 1, // placeholder, assigned below in setPinnedComparisons
                             }
                             setPinnedComparisons(prev => {
                                 // Replace oldest if at max
@@ -1985,18 +1987,28 @@ export function ForecastMap({
                                         ;["forecast-a", "forecast-b"].forEach(s => {
                                             try { map.setFeatureState({ source: s, sourceLayer: removed.sourceLayer, id: removed.id }, { pinned: false, pinnedIdx: 0 }) } catch { }
                                         })
+                                    // Inherit the removed pin's color slot
+                                    newPin.colorIdx = removed.colorIdx
                                     const updated = [...prev.slice(1), newPin]
-                                    // Re-index all so border colors match new positions
-                                    reindexPinnedFeatureStates(map, updated)
+                                    // Apply only the new pin's feature state
+                                    ;["forecast-a", "forecast-b"].forEach((s) => {
+                                        try {
+                                            map.setFeatureState(
+                                                { source: s, sourceLayer: effectiveSourceLayer, id },
+                                                { pinned: true, pinnedIdx: newPin.colorIdx }
+                                            )
+                                        } catch { }
+                                    })
                                     return updated
                                 }
+                                // Assign next available color slot
+                                newPin.colorIdx = getNextColorSlot(prev)
                                 const updated = [...prev, newPin]
-                                // Set MapLibre feature state for new pin with correct index
                                 ;["forecast-a", "forecast-b"].forEach((s) => {
                                     try {
                                         map.setFeatureState(
                                             { source: s, sourceLayer: effectiveSourceLayer, id },
-                                            { pinned: true, pinnedIdx: updated.length }
+                                            { pinned: true, pinnedIdx: newPin.colorIdx }
                                         )
                                     } catch { }
                                 })
@@ -2024,6 +2036,21 @@ export function ForecastMap({
                         }
                     }
                     return // Don't change primary selection
+                }
+
+                // 3) Only now clear the old primary — we are replacing it with a new one
+                if (selectedIdRef.current) {
+                    const prevLayer = selectedSourceLayerRef.current || effectiveSourceLayer
+                    ;["forecast-a", "forecast-b"].forEach((s) => {
+                        try {
+                            map.setFeatureState(
+                                { source: s, sourceLayer: prevLayer, id: selectedIdRef.current! },
+                                { selected: false }
+                            )
+                        } catch (err) {
+                            /* ignore */
+                        }
+                    })
                 }
 
                 selectedIdRef.current = id
@@ -2094,38 +2121,9 @@ export function ForecastMap({
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === "Escape" && selectedIdRef.current) {
                 const map = mapRef.current
-                if (map) {
-                    ;["forecast-a", "forecast-b"].forEach((s) => {
-                        for (const lvl of GEO_LEVELS) {
-                            try {
-                                map.removeFeatureState({ source: s, sourceLayer: lvl.name })
-                            } catch (err) { /* ignore */ }
-                        }
-                    })
-                }
+                if (map) clearAllLocalMapState(map)
                 if (hoverDetailTimerRef.current) { clearTimeout(hoverDetailTimerRef.current); hoverDetailTimerRef.current = null }
-                selectedIdRef.current = null
-                hoveredIdRef.current = null
-                setSelectedId(null)
-                setSelectedProps(null)
-                setTooltipData(null)
-                setFixedTooltipPos(null)
-                userDraggedRef.current = false
-                setSelectedCoords(null)
-                setFanChartData(null)
-                setHistoricalValues(undefined)
-                setComparisonData(null)
-                setComparisonHistoricalValues(undefined)
-                comparisonFetchRef.current = null
-                detailFetchRef.current = null
-                // Clear pinned comparisons on ESC
-                const map2 = mapRef.current
-                pinnedComparisonsRef.current.forEach(pc => {
-                    ;["forecast-a", "forecast-b"].forEach(s => {
-                        try { map2?.setFeatureState({ source: s, sourceLayer: pc.sourceLayer, id: pc.id }, { pinned: false, pinnedIdx: 0 }) } catch { }
-                    })
-                })
-                setPinnedComparisons([])
+                resetLocalState()
                 onFeatureSelect(null)
             }
         }
@@ -2133,30 +2131,16 @@ export function ForecastMap({
         return () => window.removeEventListener("keydown", handleKeyDown)
     }, [onFeatureSelect])
 
-    // Dynamic hover outline color: amber (primary) when nothing selected,
-    // lime (comparison) when a feature is locked
+    // Dynamic hover outline color: when a primary is selected, hover previews
+    // the color that will be assigned to the NEXT pinned comparable
     useEffect(() => {
         const map = mapRef.current
         if (!map || !isLoaded) return
-        const hoverColor = selectedId ? "#a3e635" : "#fbbf24"
-        for (const suffix of ["a", "b"]) {
-            for (const lvl of GEO_LEVELS) {
-                const layerId = `forecast-outline-${lvl.name}-${suffix}`
-                if (!map.getLayer(layerId)) continue
-                try {
-                    map.setPaintProperty(layerId, "line-color", [
-                        "case",
-                        ["boolean", ["feature-state", "selected"], false],
-                        "#fbbf24",   // amber — always for locked selection
-                        ["boolean", ["feature-state", "hover"], false],
-                        hoverColor,  // amber when previewing, lime when comparing
-                        "rgba(0,0,0,0)",
-                    ])
-                } catch { /* layer may not exist yet */ }
-            }
-        }
+        // Hover color = next available pin slot's color (preview)
+        const nextSlot = selectedId ? getNextColorSlot(pinnedComparisons) : 0
+        const hoverColor = selectedId ? PINNED_COLORS[(nextSlot - 1) % PINNED_COLORS.length] : "#fbbf24"
 
-        // Update outline colors — add pinned state with per-index colors
+        // Update outline colors — pinned state with per-index colors + hover preview
         for (const suffix of ["a", "b"]) {
             for (const lvl of GEO_LEVELS) {
                 const layerId = `forecast-outline-${lvl.name}-${suffix}`
@@ -2175,7 +2159,7 @@ export function ForecastMap({
                             "#a3e635",     // fallback
                         ],
                         ["boolean", ["feature-state", "hover"], false],
-                        hoverColor,  // amber when previewing, lime when comparing
+                        hoverColor,  // previews the next pin's color
                         "rgba(0,0,0,0)",
                     ])
                 } catch { /* layer may not exist yet */ }
@@ -2191,37 +2175,9 @@ export function ForecastMap({
                 const map = mapRef.current
                 if (map && selectedIdRef.current) {
                     const zoom = map.getZoom()
-                    const sourceLayer = getSourceLayer(zoom)
-                        ;["forecast-a", "forecast-b"].forEach((s) => {
-                            try {
-                                map.setFeatureState(
-                                    { source: s, sourceLayer, id: selectedIdRef.current! },
-                                    { selected: false }
-                                )
-                            } catch (err) { /* ignore */ }
-                        })
+                    clearAllLocalMapState(map)
                 }
-                selectedIdRef.current = null
-                hoveredIdRef.current = null
-                setSelectedId(null)
-                setSelectedProps(null)
-                setTooltipData(null)
-                setFixedTooltipPos(null)
-                setSelectedCoords(null)
-                setFanChartData(null)
-                setHistoricalValues(undefined)
-                setComparisonData(null)
-                setComparisonHistoricalValues(undefined)
-                comparisonFetchRef.current = null
-                detailFetchRef.current = null
-                // Clear pinned comparisons on clear_selection
-                pinnedComparisonsRef.current.forEach(pc => {
-                    const map2 = mapRef.current
-                        ;["forecast-a", "forecast-b"].forEach(s => {
-                            try { map2?.setFeatureState({ source: s, sourceLayer: pc.sourceLayer, id: pc.id }, { pinned: false, pinnedIdx: 0 }) } catch { }
-                        })
-                })
-                setPinnedComparisons([])
+                resetLocalState()
                 onFeatureSelect(null)
             } else if (action === "clear_comparison") {
                 // Clear only the comparison overlay, keep primary selection
@@ -2660,7 +2616,7 @@ export function ForecastMap({
             const map = mapRef.current
             if (!map) return
             const zoom = map.getZoom()
-            const level = getSourceLayer(zoom)
+            const level = hoveredSourceLayerRef.current || getSourceLayer(zoom)
             const cacheKey = `${level}:${hoveredId}`
             if (comparisonFetchRef.current === cacheKey) return
             comparisonFetchRef.current = cacheKey
@@ -2921,7 +2877,9 @@ export function ForecastMap({
                                                 vs {comparisonGeocodedName && comparisonGeocodedName !== geocodedName ? comparisonGeocodedName : tooltipData.properties.id}
                                             </span>
                                         )}
-                                        {pinnedComparisons.map((pc, idx) => (
+                                        {pinnedComparisons.map((pc) => {
+                                            const color = PINNED_COLORS[(pc.colorIdx - 1) % PINNED_COLORS.length]
+                                            return (
                                             <button
                                                 key={pc.id}
                                                 onClick={(ev) => {
@@ -2932,20 +2890,17 @@ export function ForecastMap({
                                                             try { map.setFeatureState({ source: s, sourceLayer: pc.sourceLayer, id: pc.id }, { pinned: false, pinnedIdx: 0 }) } catch { }
                                                         })
                                                     }
-                                                    setPinnedComparisons(prev => {
-                                                        const updated = prev.filter(p => p.id !== pc.id)
-                                                        if (map) reindexPinnedFeatureStates(map, updated)
-                                                        return updated
-                                                    })
+                                                    setPinnedComparisons(prev => prev.filter(p => p.id !== pc.id))
                                                 }}
                                                 className="px-1 py-0.5 text-[8px] font-semibold uppercase tracking-wider rounded flex items-center gap-0.5 hover:opacity-70 transition-opacity cursor-pointer inline-flex"
-                                                style={{ backgroundColor: `${PINNED_COLORS[idx % PINNED_COLORS.length]}20`, color: PINNED_COLORS[idx % PINNED_COLORS.length] }}
+                                                style={{ backgroundColor: `${color}20`, color }}
                                             >
-                                                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: PINNED_COLORS[idx % PINNED_COLORS.length] }} />
+                                                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: color }} />
                                                 {pc.label || pc.id}
                                                 <span className="ml-[1px]">×</span>
                                             </button>
-                                        ))}
+                                            )
+                                        })}
                                     </div>
                                 )}
                             </div>
@@ -3020,7 +2975,9 @@ export function ForecastMap({
                                 )}
                                 {pinnedComparisons.length > 0 && (
                                     <div className="mt-1 flex flex-wrap items-center gap-1">
-                                        {pinnedComparisons.map((pc, idx) => (
+                                        {pinnedComparisons.map((pc) => {
+                                            const color = PINNED_COLORS[(pc.colorIdx - 1) % PINNED_COLORS.length]
+                                            return (
                                             <button
                                                 key={pc.id}
                                                 onClick={(ev) => {
@@ -3031,21 +2988,18 @@ export function ForecastMap({
                                                             try { map.setFeatureState({ source: s, sourceLayer: pc.sourceLayer, id: pc.id }, { pinned: false, pinnedIdx: 0 }) } catch { }
                                                         })
                                                     }
-                                                    setPinnedComparisons(prev => {
-                                                        const updated = prev.filter(p => p.id !== pc.id)
-                                                        if (map) reindexPinnedFeatureStates(map, updated)
-                                                        return updated
-                                                    })
+                                                    setPinnedComparisons(prev => prev.filter(p => p.id !== pc.id))
                                                 }}
                                                 className="px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wider rounded flex items-center gap-1 hover:opacity-70 transition-opacity cursor-pointer"
-                                                style={{ backgroundColor: `${PINNED_COLORS[idx % PINNED_COLORS.length]}20`, color: PINNED_COLORS[idx % PINNED_COLORS.length] }}
+                                                style={{ backgroundColor: `${color}20`, color }}
                                                 title={`Click to unpin ${pc.label || pc.id}`}
                                             >
-                                                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: PINNED_COLORS[idx % PINNED_COLORS.length] }} />
+                                                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: color }} />
                                                 {pc.label || pc.id}
                                                 <span className="ml-0.5">×</span>
                                             </button>
-                                        ))}
+                                            )
+                                        })}
                                     </div>
                                 )}
                             </div>
@@ -3100,7 +3054,7 @@ export function ForecastMap({
                                             {/* Chart — takes remaining space */}
                                             <div className="flex-1 min-w-0 h-full">
                                                 {fanChartData ? (
-                                                    <FanChart data={fanChartData} currentYear={year} height={200} historicalValues={historicalValues} childLines={debugBuildings ? studentChildLines : undefined} comparisonData={comparisonData} comparisonHistoricalValues={comparisonHistoricalValues} pinnedComparisons={pinnedComparisons.map(pc => ({ data: pc.data, historicalValues: pc.historicalValues, label: pc.label }))} yDomain={effectiveYDomain} />
+                                                    <FanChart data={fanChartData} currentYear={year} height={200} historicalValues={historicalValues} childLines={debugBuildings ? studentChildLines : undefined} comparisonData={comparisonData} comparisonHistoricalValues={comparisonHistoricalValues} pinnedComparisons={pinnedComparisons.map(pc => ({ data: pc.data, historicalValues: pc.historicalValues, label: pc.label, colorIdx: pc.colorIdx }))} yDomain={effectiveYDomain} />
                                                 ) : isLoadingDetail ? (
                                                     <div className="h-full flex items-center justify-center">
                                                         <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
@@ -3219,7 +3173,7 @@ export function ForecastMap({
                                             childLines={debugBuildings ? studentChildLines : undefined}
                                             comparisonData={comparisonData}
                                             comparisonHistoricalValues={comparisonHistoricalValues}
-                                            pinnedComparisons={pinnedComparisons.map(pc => ({ data: pc.data, historicalValues: pc.historicalValues, label: pc.label }))}
+                                            pinnedComparisons={pinnedComparisons.map(pc => ({ data: pc.data, historicalValues: pc.historicalValues, label: pc.label, colorIdx: pc.colorIdx }))}
                                             yDomain={effectiveYDomain}
                                         />
                                     ) : isLoadingDetail ? (

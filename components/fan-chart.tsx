@@ -7,6 +7,7 @@ interface PinnedComparison {
   data: FanChartData
   historicalValues?: number[]
   label?: string
+  colorIdx: number // Stable color slot (1-4)
 }
 
 interface FanChartProps {
@@ -554,7 +555,7 @@ export function FanChart({
         {/* Pinned Comparisons — rendered below primary but above grid */}
         {pinnedComparisons?.map((pc, pcIdx) => {
           if (!pc.data?.p10 || !pc.data?.p90 || !pc.data?.p50) return null
-          const color = PINNED_COLORS[pcIdx % PINNED_COLORS.length]
+          const color = PINNED_COLORS[(pc.colorIdx - 1) % PINNED_COLORS.length]
 
           // Fan area
           const pcP90Path = forecastYears.map((year, i) => {
