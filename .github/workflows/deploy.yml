@@ -9,6 +9,7 @@ env:
   VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
   VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
   GIT_LFS_SKIP_SMUDGE: "1"
+  ACTIONS_STEP_DEBUG: "true"
 
 jobs:
   deploy:
