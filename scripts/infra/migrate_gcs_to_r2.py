@@ -76,7 +76,7 @@ def main():
     parser.add_argument("--limit", type=int, default=0, help="Max objects to copy (0=all)")
     args = parser.parse_args()
 
-    print(f"📦 Listing GCS objects in gs://{GCS_BUCKET}/{args.prefix}...")
+    print(f"[LIST] GCS objects in gs://{GCS_BUCKET}/{args.prefix}...")
     blobs = list(gcs_client.list_blobs(GCS_BUCKET, prefix=args.prefix or None))
     total = len(blobs)
     total_bytes = sum(b.size or 0 for b in blobs)
@@ -87,9 +87,9 @@ def main():
         print(f"   Limited to {len(blobs)} objects")
 
     if args.dry_run:
-        print(f"\n🔍 DRY RUN — no data will be transferred\n")
+        print(f"\n[DRY RUN] No data will be transferred\n")
     else:
-        print(f"\n🚀 Copying {len(blobs):,} objects with {args.workers} workers...\n")
+        print(f"\n[COPY] {len(blobs):,} objects with {args.workers} workers...\n")
 
     copied = 0
     skipped = 0
@@ -115,7 +115,7 @@ def main():
                 print(f"  [{i:,}/{len(blobs):,}] {elapsed:.0f}s — {msg}")
 
     elapsed = time.time() - t0
-    print(f"\n✅ Done in {elapsed:.0f}s")
+    print(f"\n[DONE] {elapsed:.0f}s")
     print(f"   Copied:  {copied:,}")
     print(f"   Skipped: {skipped:,}")
     print(f"   Errors:  {errors:,}")
