@@ -680,7 +680,7 @@ export function ForecastMap({
         const restoredEntries: PinnedEntry[] = []
         Promise.all(parsed.map(async ({ id, sourceLayer }) => {
             try {
-                const res = await fetch(`/api/forecast-detail?id=${id}&yr=${year}${schema ? `&schema=${schema}` : ""}`)
+                const res = await fetch(`/api/forecast-detail?level=${sourceLayer}&id=${encodeURIComponent(id)}&originYear=${originYear}${schema ? `&schema=${schema}` : ""}`)
                 if (!res.ok) return
                 const json = await res.json()
                 const fanChart: FanChartData = {
@@ -2820,6 +2820,7 @@ export function ForecastMap({
                                     const map = mapRef.current
                                     if (map) clearAllLocalMapState(map)
                                     resetLocalState()
+                                    onFeatureSelect(null)
                                     onMobileClose()
                                 } else {
                                     const map = mapRef.current
@@ -2850,6 +2851,7 @@ export function ForecastMap({
                                             const map = mapRef.current;
                                             if (map) clearAllLocalMapState(map);
                                             resetLocalState();
+                                            onFeatureSelect(null);
                                             onMobileClose();
                                         } else {
                                             const map = mapRef.current;
@@ -2889,7 +2891,7 @@ export function ForecastMap({
                                             const color = PINNED_COLORS[(pc.colorIdx - 1) % PINNED_COLORS.length]
                                             return (
                                             <button
-                                                key={pc.id}
+                                                key={`${pc.sourceLayer}:${pc.id}`}
                                                 onClick={(ev) => {
                                                     ev.stopPropagation()
                                                     const map = mapRef.current
@@ -2987,7 +2989,7 @@ export function ForecastMap({
                                             const color = PINNED_COLORS[(pc.colorIdx - 1) % PINNED_COLORS.length]
                                             return (
                                             <button
-                                                key={pc.id}
+                                                key={`${pc.sourceLayer}:${pc.id}`}
                                                 onClick={(ev) => {
                                                     ev.stopPropagation()
                                                     const map = mapRef.current
