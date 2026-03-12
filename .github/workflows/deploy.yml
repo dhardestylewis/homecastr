@@ -46,6 +46,8 @@ jobs:
         run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Build Project
+        env:
+          VERCEL_INSTALL_COMMAND: pnpm install --no-frozen-lockfile
         run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Deploy Pre-built Output
