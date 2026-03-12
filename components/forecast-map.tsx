@@ -225,16 +225,13 @@ export function ForecastMap({
         if (mapState.selectedId === null && selectedId !== null) {
             const map = mapRef.current
             if (map && selectedIdRef.current) {
-                const zoom = map.getZoom()
-                const sourceLayer = getSourceLayer(zoom)
-                    ;["forecast-a", "forecast-b"].forEach((s) => {
+                ;["forecast-a", "forecast-b"].forEach((s) => {
+                    for (const lvl of GEO_LEVELS) {
                         try {
-                            map.setFeatureState(
-                                { source: s, sourceLayer, id: selectedIdRef.current! },
-                                { selected: false }
-                            )
+                            map.removeFeatureState({ source: s, sourceLayer: lvl.name })
                         } catch (err) { /* ignore */ }
-                    })
+                    }
+                })
             }
             selectedIdRef.current = null
             hoveredIdRef.current = null
@@ -1852,19 +1849,15 @@ export function ForecastMap({
                 const id = (feature.properties?.id || feature.id) as string
                 if (!id) return
 
-                // Clear prev selection — use the sourceLayer where the selection was made,
-                // NOT the current zoom's sourceLayer, to handle zoom-between-taps on mobile
+                // Clear prev selection — use removeFeatureState for a blanket clear
+                // to prevent stale highlights when feature IDs don't match exactly
                 if (selectedIdRef.current) {
                     const prevLayer = selectedSourceLayerRef.current || effectiveSourceLayer
-                    // Clear on BOTH the previous layer AND current layer to handle edge cases
                     const layersToClean = new Set([prevLayer, effectiveSourceLayer])
                         ;["forecast-a", "forecast-b"].forEach((s) => {
                             layersToClean.forEach((sl) => {
                                 try {
-                                    map.setFeatureState(
-                                        { source: s, sourceLayer: sl, id: selectedIdRef.current! },
-                                        { selected: false }
-                                    )
+                                    map.removeFeatureState({ source: s, sourceLayer: sl })
                                 } catch (err) {
                                     /* ignore */
                                 }
@@ -2036,16 +2029,13 @@ export function ForecastMap({
             if (e.key === "Escape" && selectedIdRef.current) {
                 const map = mapRef.current
                 if (map) {
-                    const zoom = map.getZoom()
-                    const sourceLayer = getSourceLayer(zoom)
-                        ;["forecast-a", "forecast-b"].forEach((s) => {
+                    ;["forecast-a", "forecast-b"].forEach((s) => {
+                        for (const lvl of GEO_LEVELS) {
                             try {
-                                map.setFeatureState(
-                                    { source: s, sourceLayer, id: selectedIdRef.current! },
-                                    { selected: false }
-                                )
+                                map.removeFeatureState({ source: s, sourceLayer: lvl.name })
                             } catch (err) { /* ignore */ }
-                        })
+                        }
+                    })
                 }
                 if (hoverDetailTimerRef.current) { clearTimeout(hoverDetailTimerRef.current); hoverDetailTimerRef.current = null }
                 selectedIdRef.current = null
