@@ -23,6 +23,7 @@ function emptyTile() {
  *
  * Calls forecast_queue.mvt_choropleth_forecast(z,x,y,origin_year,horizon_m)
  * which auto-routes by zoom:
+ *   z <= 4  → State (falls back to ZCTA if no state data)
  *   z <= 7  → ZCTA
  *   z <= 11 → Tract
  *   z <= 16 → Tabblock
@@ -36,7 +37,7 @@ function emptyTile() {
  *   horizonM    (default 12)
  *   seriesKind  (default 'forecast')
  *   variantId   (default '__forecast__')
- *   level       (optional override: zcta/tract/tabblock/parcel/unsd/neighborhood)
+ *   level       (optional override: state/zcta/tract/tabblock/parcel/unsd/neighborhood)
  */
 export async function GET(
     request: Request,
