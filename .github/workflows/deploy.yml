@@ -1,29 +1,16 @@
-name: Build & Deploy to Vercel
+name: Build & Deploy to Cloudflare Pages
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
-env:
-  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-  GIT_LFS_SKIP_SMUDGE: "1"
-  ACTIONS_STEP_DEBUG: "true"
-
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Disable LFS
-        run: |
-          git config --global filter.lfs.smudge "git-lfs smudge --skip -- %f"
-          git config --global filter.lfs.process "git-lfs filter-process --skip"
-
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          lfs: false
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -39,24 +26,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
 
-      - name: Install Vercel CLI
-        run: npm install -g vercel@latest
-
-      - name: Pull Vercel Environment
-        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
-
-      - name: Build Project
-        env:
-          VERCEL_INSTALL_COMMAND: pnpm install --no-frozen-lockfile
-        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
-
-      - name: Deploy Pre-built Output
+      - name: Build for Cloudflare Pages
+        run: pnpm pages:build
         env:
           NODE_OPTIONS: "--max-old-space-size=4096"
-        run: |
-          for i in 1 2 3; do
-            echo "Deploy attempt $i..."
-            vercel deploy --prebuilt --prod --archive=tgz --force --token=${{ secrets.VERCEL_TOKEN }} && break
-            echo "Attempt $i failed, retrying in 10s..."
-            sleep 10
-          done
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy .open-next --project-name=homecastr

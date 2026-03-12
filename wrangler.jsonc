@@ -1,0 +1,14 @@
+{
+  // Cloudflare Pages project config for OpenNext
+  "name": "homecastr",
+  "compatibility_flags": ["nodejs_compat"],
+  "pages_build_output_dir": ".open-next",
+
+  // R2 bucket binding (matches your existing R2 migration)
+  "r2_buckets": [
+    {
+      "binding": "R2_BUCKET",
+      "bucket_name": "homecastr-tiles"
+    }
+  ]
+}

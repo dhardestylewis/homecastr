@@ -191,6 +191,15 @@ export function ForecastMap({
     useEffect(() => { pinnedComparisonsRef.current = pinnedComparisons }, [pinnedComparisons])
     useEffect(() => { onPinnedCountChange?.(pinnedComparisons.length) }, [pinnedComparisons.length, onPinnedCountChange])
 
+    // Helper: re-index all pinned feature states so border colors match array position
+    const reindexPinnedFeatureStates = (map: maplibregl.Map, entries: PinnedEntry[]) => {
+        entries.forEach((pc, idx) => {
+            ;["forecast-a", "forecast-b"].forEach(s => {
+                try { map.setFeatureState({ source: s, sourceLayer: pc.sourceLayer, id: pc.id }, { pinnedIdx: idx + 1 }) } catch { }
+            })
+        })
+    }
+
     const router = useRouter()
     const searchParams = useSearchParams()
     const schema = searchParams.get("schema") || ""
@@ -1878,7 +1887,7 @@ export function ForecastMap({
                     // Clear all pinned comparisons
                     pinnedComparisonsRef.current.forEach(pc => {
                         ;["forecast-a", "forecast-b"].forEach(s => {
-                            try { map.setFeatureState({ source: s, sourceLayer: pc.sourceLayer, id: pc.id }, { pinned: false }) } catch { }
+                            try { map.setFeatureState({ source: s, sourceLayer: pc.sourceLayer, id: pc.id }, { pinnedIdx: 0 }) } catch { }
                         })
                     })
                     setPinnedComparisons([])
@@ -1892,9 +1901,14 @@ export function ForecastMap({
                     if (existingIdx !== -1) {
                         // Unpin
                         ;["forecast-a", "forecast-b"].forEach(s => {
-                            try { map.setFeatureState({ source: s, sourceLayer: effectiveSourceLayer, id }, { pinned: false }) } catch { }
+                            try { map.setFeatureState({ source: s, sourceLayer: effectiveSourceLayer, id }, { pinnedIdx: 0 }) } catch { }
                         })
-                        setPinnedComparisons(prev => prev.filter(p => p.id !== id))
+                        setPinnedComparisons(prev => {
+                            const updated = prev.filter(p => p.id !== id)
+                            // Re-index survivors so border colors stay in sync
+                            reindexPinnedFeatureStates(map, updated)
+                            return updated
+                        })
                     } else {
                         // Pin: fetch detail and add
                         const pinLevel = effectiveSourceLayer
@@ -1926,16 +1940,20 @@ export function ForecastMap({
                                 if (prev.length >= MAX_PINNED) {
                                     const removed = prev[0]
                                         ;["forecast-a", "forecast-b"].forEach(s => {
-                                            try { map.setFeatureState({ source: s, sourceLayer: removed.sourceLayer, id: removed.id }, { pinned: false }) } catch { }
+                                            try { map.setFeatureState({ source: s, sourceLayer: removed.sourceLayer, id: removed.id }, { pinnedIdx: 0 }) } catch { }
                                         })
-                                    return [...prev.slice(1), newPin]
+                                    const updated = [...prev.slice(1), newPin]
+                                    // Re-index all so border colors match new positions
+                                    reindexPinnedFeatureStates(map, updated)
+                                    return updated
                                 }
-                                return [...prev, newPin]
-                            })
-                                // Set MapLibre feature state
+                                const updated = [...prev, newPin]
+                                // Set MapLibre feature state for new pin with correct index
                                 ;["forecast-a", "forecast-b"].forEach(s => {
-                                    try { map.setFeatureState({ source: s, sourceLayer: effectiveSourceLayer, id }, { pinned: true }) } catch { }
+                                    try { map.setFeatureState({ source: s, sourceLayer: effectiveSourceLayer, id }, { pinnedIdx: updated.length }) } catch { }
                                 })
+                                return updated
+                            })
                         }
 
                         if (cached) {
@@ -1970,7 +1988,7 @@ export function ForecastMap({
                 // Clear all pinned comparisons when changing primary selection
                 pinnedComparisonsRef.current.forEach(pc => {
                     ;["forecast-a", "forecast-b"].forEach(s => {
-                        try { map.setFeatureState({ source: s, sourceLayer: pc.sourceLayer, id: pc.id }, { pinned: false }) } catch { }
+                        try { map.setFeatureState({ source: s, sourceLayer: pc.sourceLayer, id: pc.id }, { pinnedIdx: 0 }) } catch { }
                     })
                 })
                 setPinnedComparisons([])
@@ -2056,7 +2074,7 @@ export function ForecastMap({
                 const map2 = mapRef.current
                 pinnedComparisonsRef.current.forEach(pc => {
                     ;["forecast-a", "forecast-b"].forEach(s => {
-                        try { map2?.setFeatureState({ source: s, sourceLayer: pc.sourceLayer, id: pc.id }, { pinned: false }) } catch { }
+                        try { map2?.setFeatureState({ source: s, sourceLayer: pc.sourceLayer, id: pc.id }, { pinnedIdx: 0 }) } catch { }
                     })
                 })
                 setPinnedComparisons([])
@@ -2090,7 +2108,7 @@ export function ForecastMap({
             }
         }
 
-        // Update outline colors — add pinned state
+        // Update outline colors — add pinned state with per-index colors
         for (const suffix of ["a", "b"]) {
             for (const lvl of GEO_LEVELS) {
                 const layerId = `forecast-outline-${lvl.name}-${suffix}`
@@ -2100,8 +2118,14 @@ export function ForecastMap({
                         "case",
                         ["boolean", ["feature-state", "selected"], false],
                         "#fbbf24",   // amber — always for locked selection
-                        ["boolean", ["feature-state", "pinned"], false],
-                        "#a3e635",   // lime — pinned comparison areas
+                        [">", ["number", ["feature-state", "pinnedIdx"], 0], 0],
+                        ["match", ["number", ["feature-state", "pinnedIdx"], 0],
+                            1, "#a3e635",  // Lime (1st comp)
+                            2, "#38bdf8",  // Sky  (2nd comp)
+                            3, "#f472b6",  // Pink (3rd comp)
+                            4, "#facc15",  // Amber (4th comp)
+                            "#a3e635",     // fallback
+                        ],
                         ["boolean", ["feature-state", "hover"], false],
                         hoverColor,  // amber when previewing, lime when comparing
                         "rgba(0,0,0,0)",
@@ -2146,7 +2170,7 @@ export function ForecastMap({
                 pinnedComparisonsRef.current.forEach(pc => {
                     const map2 = mapRef.current
                         ;["forecast-a", "forecast-b"].forEach(s => {
-                            try { map2?.setFeatureState({ source: s, sourceLayer: pc.sourceLayer, id: pc.id }, { pinned: false }) } catch { }
+                            try { map2?.setFeatureState({ source: s, sourceLayer: pc.sourceLayer, id: pc.id }, { pinnedIdx: 0 }) } catch { }
                         })
                 })
                 setPinnedComparisons([])
@@ -2857,10 +2881,14 @@ export function ForecastMap({
                                                     const map = mapRef.current
                                                     if (map) {
                                                         ;["forecast-a", "forecast-b"].forEach(s => {
-                                                            try { map.setFeatureState({ source: s, sourceLayer: pc.sourceLayer, id: pc.id }, { pinned: false }) } catch { }
+                                                            try { map.setFeatureState({ source: s, sourceLayer: pc.sourceLayer, id: pc.id }, { pinnedIdx: 0 }) } catch { }
                                                         })
                                                     }
-                                                    setPinnedComparisons(prev => prev.filter(p => p.id !== pc.id))
+                                                    setPinnedComparisons(prev => {
+                                                        const updated = prev.filter(p => p.id !== pc.id)
+                                                        if (map) reindexPinnedFeatureStates(map, updated)
+                                                        return updated
+                                                    })
                                                 }}
                                                 className="px-1 py-0.5 text-[8px] font-semibold uppercase tracking-wider rounded flex items-center gap-0.5 hover:opacity-70 transition-opacity cursor-pointer inline-flex"
                                                 style={{ backgroundColor: `${PINNED_COLORS[idx % PINNED_COLORS.length]}20`, color: PINNED_COLORS[idx % PINNED_COLORS.length] }}
@@ -2952,10 +2980,14 @@ export function ForecastMap({
                                                     const map = mapRef.current
                                                     if (map) {
                                                         ;["forecast-a", "forecast-b"].forEach(s => {
-                                                            try { map.setFeatureState({ source: s, sourceLayer: pc.sourceLayer, id: pc.id }, { pinned: false }) } catch { }
+                                                            try { map.setFeatureState({ source: s, sourceLayer: pc.sourceLayer, id: pc.id }, { pinnedIdx: 0 }) } catch { }
                                                         })
                                                     }
-                                                    setPinnedComparisons(prev => prev.filter(p => p.id !== pc.id))
+                                                    setPinnedComparisons(prev => {
+                                                        const updated = prev.filter(p => p.id !== pc.id)
+                                                        if (map) reindexPinnedFeatureStates(map, updated)
+                                                        return updated
+                                                    })
                                                 }}
                                                 className="px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wider rounded flex items-center gap-1 hover:opacity-70 transition-opacity cursor-pointer"
                                                 style={{ backgroundColor: `${PINNED_COLORS[idx % PINNED_COLORS.length]}20`, color: PINNED_COLORS[idx % PINNED_COLORS.length] }}
