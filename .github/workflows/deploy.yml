@@ -51,4 +51,12 @@ jobs:
         run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Deploy Pre-built Output
-        run: vercel deploy --prebuilt --prod --archive=tgz --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          NODE_OPTIONS: "--max-old-space-size=4096"
+        run: |
+          for i in 1 2 3; do
+            echo "Deploy attempt $i..."
+            vercel deploy --prebuilt --prod --archive=tgz --force --token=${{ secrets.VERCEL_TOKEN }} && break
+            echo "Attempt $i failed, retrying in 10s..."
+            sleep 10
+          done

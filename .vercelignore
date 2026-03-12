@@ -1,0 +1,51 @@
+# Python scripts & inference (not needed at runtime)
+scripts/
+notebooks/
+_scratch/
+local_scratch/
+
+# Data & logs (local only)
+data/hcad/
+data/tiger_cache/
+logs/
+output/
+
+# Dev tooling & docs
+docs/
+pitch/
+sql/
+supabase/
+mcp-server/
+Prototyping_Urban_Tech/
+.meta/
+
+# Python artifacts
+__pycache__/
+*.pyc
+.venv/
+
+# Secrets & env
+.secrets/
+*.gcs-key.json
+
+# Debug logs
+*.log
+ts_errors*.txt
+ts_errors*.log
+tsc_*.log
+
+# Misc dev files
+find-brace.js
+patch.py
+test_nal.py
+nal_columns.txt
+TODO.md
+package-lock.json
+tsconfig.tsbuildinfo
+
+# Git & CI
+.git/
+.github/
+.gitattributes
+.claude/
+.agents/
