@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from "next/server"
 import crypto from "crypto"
-import { getGcsBucket, gcsPublicUrl } from "@/lib/gcs"
+import { r2ObjectExists, r2PutObject, r2PublicUrl } from "@/lib/r2"
 
 /**
  * GET /api/streetview-sign?lat=29.76&lng=-95.36&w=400&h=300
  *
- * GCS-only cache — no Supabase table needed.
- *   1. Check if gs://<bucket>/streetview/<lat5>,<lng5>_<w>x<h>.jpg exists
- *   2. HIT  → return public GCS URL (free)
- *   3. MISS → fetch from Google ($0.007), upload to GCS, return GCS URL
+ * R2-backed cache — no Supabase table needed.
+ *   1. Check if r2://streetview/<lat5>,<lng5>_<w>x<h>.jpg exists
+ *   2. HIT  → return public R2 URL (free egress)
+ *   3. MISS → fetch from Google ($0.007), upload to R2, return R2 URL
  *
- * If GCS_STREETVIEW_BUCKET is not set, falls back to direct Google URL (old behaviour).
+ * If R2_BUCKET is not set, falls back to direct Google URL (old behaviour).
  */
 export async function GET(req: NextRequest) {
     const { searchParams } = req.nextUrl
@@ -59,17 +59,16 @@ export async function GET(req: NextRequest) {
 
     const lat5 = parseFloat(lat).toFixed(5)
     const lng5 = parseFloat(lng).toFixed(5)
-    const bucketName = process.env.GCS_STREETVIEW_BUCKET
-    const gcsPath = `streetview/${lat5},${lng5}_${w}x${h}.jpg`
+    const bucketName = process.env.R2_BUCKET ?? process.env.GCS_STREETVIEW_BUCKET
+    const objectKey = `streetview/${lat5},${lng5}_${w}x${h}.jpg`
 
-    // ── 1. GCS cache lookup ──────────────────────────────────────────────────
+    // ── 1. R2 cache lookup ───────────────────────────────────────────────────
     if (bucketName) {
         try {
-            const bucket = getGcsBucket(bucketName)
-            const [exists] = await bucket.file(gcsPath).exists()
+            const exists = await r2ObjectExists(bucketName, objectKey)
             if (exists) {
-                console.log(`[SV-CACHE] HIT  ${gcsPath}`)
-                const cachedUrl = gcsPublicUrl(bucketName, gcsPath)
+                console.log(`[SV-CACHE] HIT  ${objectKey}`)
+                const cachedUrl = r2PublicUrl(bucketName, objectKey)
                 if (returnBase64) {
                     try {
                         const imgRes = await fetch(cachedUrl)
@@ -85,7 +84,7 @@ export async function GET(req: NextRequest) {
                 )
             }
         } catch (err) {
-            console.warn("[SV-CACHE] GCS lookup failed:", err)
+            console.warn("[SV-CACHE] R2 lookup failed:", err)
         }
     }
 
@@ -116,7 +115,7 @@ export async function GET(req: NextRequest) {
         googleUrl = `https://maps.googleapis.com${path}`
     }
 
-    // ── 3. No GCS configured — old behaviour ─────────────────────────────────
+    // ── 3. No R2 configured — old behaviour ──────────────────────────────────
     if (!bucketName) {
         if (returnBase64) {
             try {
@@ -130,8 +129,8 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ url: googleUrl })
     }
 
-    // ── 4. Cache miss — fetch from Google & upload to GCS ────────────────────
-    console.log(`[SV-CACHE] MISS ${gcsPath} — fetching from Google`)
+    // ── 4. Cache miss — fetch from Google & upload to R2 ─────────────────────
+    console.log(`[SV-CACHE] MISS ${objectKey} — fetching from Google`)
 
     let imageBytes: Buffer
     try {
@@ -147,19 +146,14 @@ export async function GET(req: NextRequest) {
     }
 
     try {
-        const bucket = getGcsBucket(bucketName)
-        await bucket.file(gcsPath).save(imageBytes, {
-            contentType: "image/jpeg",
-            predefinedAcl: "publicRead",
-            resumable: false,
-        })
-        console.log(`[SV-CACHE] Uploaded → gs://${bucketName}/${gcsPath}`)
+        await r2PutObject(bucketName, objectKey, imageBytes, "image/jpeg")
+        console.log(`[SV-CACHE] Uploaded → r2://${bucketName}/${objectKey}`)
     } catch (err) {
-        console.warn("[SV-CACHE] GCS upload failed:", err)
+        console.warn("[SV-CACHE] R2 upload failed:", err)
         return NextResponse.json({ url: googleUrl })
     }
 
-    const finalUrl = gcsPublicUrl(bucketName, gcsPath)
+    const finalUrl = r2PublicUrl(bucketName, objectKey)
     if (returnBase64) {
         return NextResponse.json({ dataUrl: `data:image/jpeg;base64,${imageBytes.toString("base64")}` })
     }
