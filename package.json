@@ -15,7 +15,6 @@
     "@aws-sdk/client-s3": "^3.1007.0",
     "@daily-co/daily-js": "^0.87.0",
     "@datadog/browser-rum": "^6.27.1",
-
     "@hookform/resolvers": "^3.10.0",
     "@radix-ui/react-accordion": "1.2.2",
     "@radix-ui/react-alert-dialog": "1.1.4",
@@ -46,14 +45,13 @@
     "@radix-ui/react-tooltip": "1.1.6",
     "@supabase/ssr": "0.8.0",
     "@supabase/supabase-js": "latest",
-
     "autoprefixer": "^10.4.20",
     "braintrust": "^3.1.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "1.0.4",
     "date-fns": "4.1.0",
-
+    "dd-trace": "^5.87.0",
     "dotenv": "17.2.3",
     "embla-carousel-react": "8.5.1",
     "h3-js": "4.4.0",
