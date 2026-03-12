@@ -1286,9 +1286,28 @@ export function ForecastMap({
                 const activeSuffix = (map as any)._activeSuffix || "a"
                 const fillLayerId = `forecast-fill-${sourceLayer}-${activeSuffix}`
 
-                const features = map.getLayer(fillLayerId)
+                let features = map.getLayer(fillLayerId)
                     ? map.queryRenderedFeatures(e.point, { layers: [fillLayerId] })
                     : []
+
+                // FALLBACK: if finest-grained layer has no features (tiles still loading
+                // or sparse tabblock data), try coarser layers that extend as fallback underlays
+                let effectiveSourceLayer = sourceLayer
+                if (features.length === 0) {
+                    for (let i = GEO_LEVELS.length - 1; i >= 0; i--) {
+                        const lvl = GEO_LEVELS[i]
+                        if (lvl.name === sourceLayer) continue
+                        if (zoom < lvl.minzoom || zoom > lvl.maxzoom) continue
+                        const fallbackLayerId = `forecast-fill-${lvl.name}-${activeSuffix}`
+                        if (!map.getLayer(fallbackLayerId)) continue
+                        const fallbackFeatures = map.queryRenderedFeatures(e.point, { layers: [fallbackLayerId] })
+                        if (fallbackFeatures.length > 0) {
+                            features = fallbackFeatures
+                            effectiveSourceLayer = lvl.name
+                            break
+                        }
+                    }
+                }
 
                 if (features.length === 0) {
                     // No MVT features — check student buildings layer
@@ -1364,7 +1383,7 @@ export function ForecastMap({
                     if (hoveredIdRef.current) {
                         ;["forecast-a", "forecast-b"].forEach((s) => {
                             try {
-                                map.removeFeatureState({ source: s, sourceLayer })
+                                map.removeFeatureState({ source: s, sourceLayer: effectiveSourceLayer })
                             } catch (err) {
                                 /* ignore */
                             }
@@ -1393,7 +1412,7 @@ export function ForecastMap({
                     ;["forecast-a", "forecast-b"].forEach((s) => {
                         try {
                             map.setFeatureState(
-                                { source: s, sourceLayer, id: hoveredIdRef.current! },
+                                { source: s, sourceLayer: effectiveSourceLayer, id: hoveredIdRef.current! },
                                 { hover: false }
                             )
                         } catch (err) {
@@ -1409,7 +1428,7 @@ export function ForecastMap({
                     ;["forecast-a", "forecast-b"].forEach((s) => {
                         try {
                             map.setFeatureState(
-                                { source: s, sourceLayer, id },
+                                { source: s, sourceLayer: effectiveSourceLayer, id },
                                 { hover: true }
                             )
                         } catch (err) {
@@ -1422,9 +1441,7 @@ export function ForecastMap({
                 if (!selectedIdRef.current && isNewFeature) {
                     if (hoverDetailTimerRef.current) clearTimeout(hoverDetailTimerRef.current)
                     hoverDetailTimerRef.current = setTimeout(() => {
-                        const hoverZoom = map.getZoom()
-                        const hoverLevel = getSourceLayer(hoverZoom)
-                        fetchForecastDetail(id, hoverLevel)
+                        fetchForecastDetail(id, effectiveSourceLayer)
                     }, 500)
 
                     // Street view dwell hover: 1.5s on same feature before loading images
@@ -1471,9 +1488,21 @@ export function ForecastMap({
                 const sourceLayer = getSourceLayer(zoom)
                 const activeSuffix = (map as any)._activeSuffix || "a"
                 const fillLayerId = `forecast-fill-${sourceLayer}-${activeSuffix}`
-                const features = map.getLayer(fillLayerId)
+                let features = map.getLayer(fillLayerId)
                     ? map.queryRenderedFeatures(point, { layers: [fillLayerId] })
                     : []
+                // FALLBACK: try coarser layers if finest has no features
+                if (features.length === 0) {
+                    for (let i = GEO_LEVELS.length - 1; i >= 0; i--) {
+                        const lvl = GEO_LEVELS[i]
+                        if (lvl.name === sourceLayer) continue
+                        if (zoom < lvl.minzoom || zoom > lvl.maxzoom) continue
+                        const fb = `forecast-fill-${lvl.name}-${activeSuffix}`
+                        if (!map.getLayer(fb)) continue
+                        const fbFeatures = map.queryRenderedFeatures(point, { layers: [fb] })
+                        if (fbFeatures.length > 0) { features = fbFeatures; break }
+                    }
+                }
                 if (features.length === 0) return
                 const feature = features[0]
                 const id = (feature.properties?.id || feature.id) as string
