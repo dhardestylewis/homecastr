@@ -3164,7 +3164,7 @@ export function ForecastMap({
                                         }
                                         if (pv.p10 == null && pv.p90 == null) return null
                                         return (
-                                            <div className="absolute top-5 right-4 text-[8px] leading-snug rounded px-1 py-0.5" style={{ textShadow: '0 0 3px var(--background), 0 0 3px var(--background)' }}>
+                                            <div className="absolute top-5 left-4 text-[8px] leading-snug rounded px-1 py-0.5" style={{ textShadow: '0 0 3px var(--background), 0 0 3px var(--background)' }}>
                                                 <div className="flex items-baseline gap-1">
                                                     <span className="font-medium text-[9px]">{formatValue(pv.p90)}</span>
                                                     <span className="text-muted-foreground/50">P90</span>
