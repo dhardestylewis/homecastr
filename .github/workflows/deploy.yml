@@ -34,6 +34,9 @@ jobs:
           node-version: 20
           cache: 'pnpm'
 
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+
       - name: Install Vercel CLI
         run: npm install -g vercel@latest
 
@@ -41,6 +44,8 @@ jobs:
         run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Build Project
+        env:
+          ENABLE_EXPERIMENTAL_COREPACK: "1"
         run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Deploy Pre-built Output
