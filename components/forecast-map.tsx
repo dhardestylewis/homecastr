@@ -2762,7 +2762,7 @@ export function ForecastMap({
                         <div className="absolute top-0 left-0 right-0 h-[50vh] z-40 bg-black/90 animate-in fade-in slide-in-from-top-4 duration-200">
                             <StreetViewCarousel
                                 h3Ids={[]}
-                                apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY}
+                                apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY || ""}
                                 coordinates={(selectedId ? selectedCoords : tooltipCoords)!}
                             />
                             <button
@@ -3116,7 +3116,7 @@ export function ForecastMap({
                             {false && !(isMobile && isKeyboardOpen) && process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY && (selectedId ? selectedCoords : (hoverDwell ? tooltipCoords : null)) && (
                                 <StreetViewCarousel
                                     h3Ids={[]}
-                                    apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY}
+                                    apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY || ""}
                                     coordinates={(selectedId ? selectedCoords : tooltipCoords)!}
                                 />
                             )}
