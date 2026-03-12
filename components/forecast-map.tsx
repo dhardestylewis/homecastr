@@ -1945,7 +1945,7 @@ export function ForecastMap({
 
                 // Shift+click OR Compare mode: PIN this area for persistent comparison
                 if ((e.originalEvent.shiftKey || compareModeRef.current) && selectedIdRef.current) {
-                    const existingIdx = pinnedComparisonsRef.current.findIndex(p => p.id === id)
+                    const existingIdx = pinnedComparisonsRef.current.findIndex(p => p.id === id && p.sourceLayer === effectiveSourceLayer)
                     if (existingIdx !== -1) {
                         // Unpin — clear only this feature, survivors keep their colorIdx
                         const pinEntry = pinnedComparisonsRef.current[existingIdx]
@@ -2215,6 +2215,7 @@ export function ForecastMap({
                                 const id = (feature.properties?.id || feature.id) as string
                                 if (id) {
                                     selectedIdRef.current = id
+                                    selectedSourceLayerRef.current = sourceLayer
                                     setSelectedId(id)
                                     setSelectedProps(feature.properties)
                                     setSelectedCoords([params.lat, params.lng])
@@ -2326,6 +2327,7 @@ export function ForecastMap({
                                 const id = (feature.properties?.id || feature.id) as string
                                 if (id) {
                                     selectedIdRef.current = id
+                                    selectedSourceLayerRef.current = sourceLayer
                                     setSelectedId(id)
                                     setSelectedProps(feature.properties)
                                     setSelectedCoords([newLat, newLng])
@@ -2377,11 +2379,10 @@ export function ForecastMap({
                             const id = (feature.properties?.id || feature.id) as string
                             if (id) {
                                 if (selectedIdRef.current) {
-                                    ;["forecast-a", "forecast-b"].forEach((s) => {
-                                        try { map.setFeatureState({ source: s, sourceLayer, id: selectedIdRef.current! }, { selected: false }) } catch { }
-                                    })
+                                    clearAllLocalMapState(map)
                                 }
                                 selectedIdRef.current = id
+                                selectedSourceLayerRef.current = sourceLayer
                                 setSelectedId(id)
                                 setSelectedProps(feature.properties)
                                 setSelectedCoords([lat, lng])
@@ -2817,6 +2818,9 @@ export function ForecastMap({
                                 if (onMobileClose) {
                                     onMobileClose()
                                 } else {
+                                    const map = mapRef.current
+                                    if (map) clearAllLocalMapState(map)
+                                    resetLocalState()
                                     onFeatureSelect(null)
                                 }
                             } else if (swipeDragOffset > 50) {
@@ -2841,12 +2845,9 @@ export function ForecastMap({
                                         if (onMobileClose) {
                                             onMobileClose();
                                         } else {
-                                            selectedIdRef.current = null;
-                                            setSelectedId(null);
-                                            hoveredIdRef.current = null;
-                                            setTooltipData(null);
-                                            setFixedTooltipPos(null);
-                                            setSelectedCoords(null);
+                                            const map = mapRef.current;
+                                            if (map) clearAllLocalMapState(map);
+                                            resetLocalState();
                                             onFeatureSelect(null);
                                         }
                                     }}
