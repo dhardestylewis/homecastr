@@ -391,7 +391,7 @@ export function ForecastMap({
         if (selId && srcLayer) {
             fetchForecastDetailRef.current(selId, srcLayer)
         }
-    }, [year])
+    }, [year, schema])
 
     // Mobile detection
     const [isMobile, setIsMobile] = useState(false)
@@ -449,7 +449,7 @@ export function ForecastMap({
         }
         const map = mapRef.current
         const zoom = map?.getZoom() || 10
-        const geoLevel = getSourceLayer(zoom)
+        const geoLevel = selectedSourceLayerRef.current || getSourceLayer(zoom)
 
         // At State scale, look up name from FIPS code
         if (geoLevel === "state") {
@@ -530,7 +530,7 @@ export function ForecastMap({
         }
         const map = mapRef.current
         const zoom = map?.getZoom() || 10
-        const geoLevel = getSourceLayer(zoom)
+        const geoLevel = hoveredSourceLayerRef.current || getSourceLayer(zoom)
 
         if (geoLevel === "state") {
             const fips = compId?.padStart(2, '0') || ''
@@ -953,7 +953,7 @@ export function ForecastMap({
             map.off("moveend", onMoveEnd)
             if (moveEndTimerRef.current) clearTimeout(moveEndTimerRef.current)
         }
-    }, [isLoaded, router])
+    }, [isLoaded, router, year, debugBuildings])
 
     // HORIZON OR ORIGIN YEAR CHANGED: refresh the vector tile URLs so map grabs correct data
     useEffect(() => {
@@ -1175,7 +1175,6 @@ export function ForecastMap({
             preserveDrawingBuffer: true, // Required for canvas.toDataURL() in PDF export
         })
 
-        // @ts-expect-error map.on 2-arg signature exists but TS gets confused with maplibregl's complex overloads
         map.on("load", () => {
             setIsLoaded(true)
 
@@ -1655,7 +1654,7 @@ export function ForecastMap({
             let animationFrameId: number;
             let startTime = Date.now();
             const animateSelectedLine = () => {
-                if (!mapRef.current || !isLoaded) return;
+                if (!mapRef.current) return;
                 const now = Date.now();
                 // Pulse between 0.4 and 1.0 using a sine wave (2.5-second period)
                 const phase = ((now - startTime) % 2500) / 2500;
@@ -1685,18 +1684,10 @@ export function ForecastMap({
                 animationFrameRef.current = animationFrameId;
             };
 
-            // Start animation loop once loaded
-            if (isLoaded) {
-                animateSelectedLine();
-            }
+            // Start animation loop immediately (map is loaded in this callback)
+            animateSelectedLine();
 
-            // On unmount
-            return () => {
-                if (hoverDetailTimerRef.current) clearTimeout(hoverDetailTimerRef.current)
-                if (hoverDwellTimerRef.current) clearTimeout(hoverDwellTimerRef.current)
-                if (animationFrameId) { cancelAnimationFrame(animationFrameId); animationFrameRef.current = null }
-            }
-        }, [isLoaded, debugBuildings])
+        })
 
         // MOUSELEAVE: clear tooltip when cursor exits the map (unless locked)
         map.getCanvas().addEventListener("mouseleave", () => {
@@ -2515,7 +2506,7 @@ export function ForecastMap({
             const selId = selectedIdRef.current
             if (selId) {
                 const zoom = map.getZoom()
-                const sourceLayer = getSourceLayer(zoom)
+                const sourceLayer = selectedSourceLayerRef.current || getSourceLayer(zoom)
                 const features = map.querySourceFeatures(`forecast-${nextSuffix}`, { sourceLayer })
                 const match = features.find(f => (f.properties?.id || f.id) === selId)
                 if (match?.properties) {
@@ -2753,8 +2744,8 @@ export function ForecastMap({
                 </div>
             )}
 
-            {/* Mobile: Floating StreetView button + overlay */}
-            {isMobile && process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY && (selectedId ? selectedCoords : (hoverDwell ? tooltipCoords : null)) && (
+            {/* Mobile: Floating StreetView button + overlay (DEACTIVATED) */}
+            {false && isMobile && process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY && (selectedId ? selectedCoords : (hoverDwell ? tooltipCoords : null)) && (
                 <>
                     {/* Floating button — bottom-left of map */}
                     <button
@@ -3121,8 +3112,8 @@ export function ForecastMap({
                         </>
                     ) : (
                         <>
-                            {/* Desktop: StreetView above chart */}
-                            {!(isMobile && isKeyboardOpen) && process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY && (selectedId ? selectedCoords : (hoverDwell ? tooltipCoords : null)) && (
+                            {/* Desktop: StreetView above chart (DEACTIVATED) */}
+                            {false && !(isMobile && isKeyboardOpen) && process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY && (selectedId ? selectedCoords : (hoverDwell ? tooltipCoords : null)) && (
                                 <StreetViewCarousel
                                     h3Ids={[]}
                                     apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY}
