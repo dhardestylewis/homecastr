@@ -2631,7 +2631,8 @@ export function ForecastMap({
                 return
             }
             try {
-                const res = await fetch(`/api/forecast-detail?level=${level}&id=${encodeURIComponent(hoveredId)}&originYear=${originYear}`)
+                const schemaParam = schema ? `&schema=${schema}` : ""
+                const res = await fetch(`/api/forecast-detail?level=${level}&id=${encodeURIComponent(hoveredId)}&originYear=${originYear}${schemaParam}`)
                 if (!res.ok) return
                 const json = await res.json()
                 const fanChart = json.years?.length > 0 ? (json as FanChartData) : null
@@ -2652,7 +2653,7 @@ export function ForecastMap({
         return () => {
             if (comparisonTimerRef.current) clearTimeout(comparisonTimerRef.current)
         }
-    }, [selectedId, tooltipData?.properties?.id, originYear, isShiftHeld])
+    }, [selectedId, tooltipData?.properties?.id, originYear, isShiftHeld, schema])
 
     // Viewport Y domain: compute from visible features on moveend + after initial tile load
     useEffect(() => {
