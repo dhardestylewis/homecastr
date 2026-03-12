@@ -622,7 +622,7 @@ export function ForecastMap({
     // Sync pinned comparisons to URL query params
     const prevPinnedIdsRef = useRef<string>("")
     useEffect(() => {
-        const sortedIds = pinnedComparisons.map(p => p.id).sort().join(",")
+        const sortedIds = pinnedComparisons.map(p => `${p.sourceLayer}:${p.id}`).sort().join(",")
         if (prevPinnedIdsRef.current === sortedIds) return
         prevPinnedIdsRef.current = sortedIds
 
@@ -706,7 +706,7 @@ export function ForecastMap({
             setPinnedComparisons(prev => {
                 const combined = [...prev]
                 for (const entry of restoredEntries) {
-                    if (combined.some(p => p.id === entry.id)) continue
+                    if (combined.some(p => p.id === entry.id && p.sourceLayer === entry.sourceLayer)) continue
                     if (combined.length >= MAX_PINNED) break
                     // Assign colorIdx based on combined state
                     entry.colorIdx = getNextColorSlot(combined)
@@ -1952,7 +1952,7 @@ export function ForecastMap({
                         ;["forecast-a", "forecast-b"].forEach(s => {
                             try { map.setFeatureState({ source: s, sourceLayer: pinEntry.sourceLayer, id }, { pinned: false, pinnedIdx: 0 }) } catch { }
                         })
-                        setPinnedComparisons(prev => prev.filter(p => p.id !== id))
+                        setPinnedComparisons(prev => prev.filter(p => !(p.id === id && p.sourceLayer === effectiveSourceLayer)))
                     } else {
                         // Pin: fetch detail and add
                         const pinLevel = effectiveSourceLayer
@@ -1966,7 +1966,7 @@ export function ForecastMap({
                             import("@/app/actions/geocode").then(mod => {
                                 mod.reverseGeocode(e.lngLat.lat, e.lngLat.lng, 18).then(name => {
                                     if (name) {
-                                        setPinnedComparisons(prev => prev.map(p => p.id === id ? { ...p, label: name } : p))
+                                        setPinnedComparisons(prev => prev.map(p => (p.id === id && p.sourceLayer === effectiveSourceLayer) ? { ...p, label: name } : p))
                                     }
                                 }).catch(() => { })
                             }).catch(() => { })
@@ -2380,6 +2380,7 @@ export function ForecastMap({
                             if (id) {
                                 if (selectedIdRef.current) {
                                     clearAllLocalMapState(map)
+                                    resetLocalState()
                                 }
                                 selectedIdRef.current = id
                                 selectedSourceLayerRef.current = sourceLayer
@@ -2816,6 +2817,9 @@ export function ForecastMap({
                             if (swipeDragOffset > 150) {
                                 // Dismiss completely
                                 if (onMobileClose) {
+                                    const map = mapRef.current
+                                    if (map) clearAllLocalMapState(map)
+                                    resetLocalState()
                                     onMobileClose()
                                 } else {
                                     const map = mapRef.current
@@ -2843,6 +2847,9 @@ export function ForecastMap({
                                         e.stopPropagation();
                                         e.preventDefault();
                                         if (onMobileClose) {
+                                            const map = mapRef.current;
+                                            if (map) clearAllLocalMapState(map);
+                                            resetLocalState();
                                             onMobileClose();
                                         } else {
                                             const map = mapRef.current;
@@ -2891,7 +2898,7 @@ export function ForecastMap({
                                                             try { map.setFeatureState({ source: s, sourceLayer: pc.sourceLayer, id: pc.id }, { pinned: false, pinnedIdx: 0 }) } catch { }
                                                         })
                                                     }
-                                                    setPinnedComparisons(prev => prev.filter(p => p.id !== pc.id))
+                                                    setPinnedComparisons(prev => prev.filter(p => !(p.id === pc.id && p.sourceLayer === pc.sourceLayer)))
                                                 }}
                                                 className="px-1 py-0.5 text-[8px] font-semibold uppercase tracking-wider rounded flex items-center gap-0.5 hover:opacity-70 transition-opacity cursor-pointer inline-flex"
                                                 style={{ backgroundColor: `${color}20`, color }}
@@ -2989,7 +2996,7 @@ export function ForecastMap({
                                                             try { map.setFeatureState({ source: s, sourceLayer: pc.sourceLayer, id: pc.id }, { pinned: false, pinnedIdx: 0 }) } catch { }
                                                         })
                                                     }
-                                                    setPinnedComparisons(prev => prev.filter(p => p.id !== pc.id))
+                                                    setPinnedComparisons(prev => prev.filter(p => !(p.id === pc.id && p.sourceLayer === pc.sourceLayer)))
                                                 }}
                                                 className="px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wider rounded flex items-center gap-1 hover:opacity-70 transition-opacity cursor-pointer"
                                                 style={{ backgroundColor: `${color}20`, color }}
