@@ -647,7 +647,7 @@ export function ForecastMap({
             p90: pc.data?.p90,
             years: pc.data?.years,
         }))
-            ; (window as any).__getPinnedIds = () => pinnedComparisons.map(pc => pc.id)
+            ; (window as any).__getPinnedIds = () => pinnedComparisons.map(pc => `${pc.sourceLayer}:${pc.id}`)
         return () => {
             delete (window as any).__getPinnedComparisons
             delete (window as any).__getPinnedIds
@@ -693,7 +693,7 @@ export function ForecastMap({
                 const entry: PinnedEntry = {
                     id,
                     data: fanChart,
-                    historicalValues: json.historical_values,
+                    historicalValues: json.historicalValues?.some((v: any) => v != null) ? json.historicalValues : undefined,
                     label: id,
                     coords: [0, 0],
                     sourceLayer,
@@ -1776,17 +1776,16 @@ export function ForecastMap({
 
                 // Toggle selection logic for student building
                 if (selectedIdRef.current === id) {
-                    selectedIdRef.current = null
-                    setSelectedId(null)
-                    setSelectedProps(null)
-                    setFixedTooltipPos(null)
-                    userDraggedRef.current = false
-                    setSelectedCoords(null)
-                    setComparisonData(null)
-                    setComparisonHistoricalValues(undefined)
-                    comparisonFetchRef.current = null
+                    clearAllLocalMapState(map)
+                    resetLocalState()
                     onFeatureSelect(null)
                     return
+                }
+
+                // Clear any existing MVT primary/pins before installing student selection
+                if (selectedIdRef.current) {
+                    clearAllLocalMapState(map)
+                    resetLocalState()
                 }
 
                 selectedIdRef.current = id
