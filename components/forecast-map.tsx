@@ -218,6 +218,7 @@ export function ForecastMap({
     const selectedIdRef = useRef<string | null>(null)
     const selectedSourceLayerRef = useRef<string | null>(null) // Track which sourceLayer the selection was made on
     const hoveredIdRef = useRef<string | null>(null)
+    const hoveredSourceLayerRef = useRef<string | null>(null) // Track which sourceLayer the hover was set on
 
     // Geographic coordinates for StreetView (from MapLibre events)
     const [tooltipCoords, setTooltipCoords] = useState<[number, number] | null>(null)
@@ -1385,24 +1386,21 @@ export function ForecastMap({
 
                         return
                     }
-                    // Clear hover
+                    // Clear hover — targeted per-feature clear (preserves pinnedIdx on other features)
                     if (hoveredIdRef.current) {
+                        const hoverSL = hoveredSourceLayerRef.current || effectiveSourceLayer
                         ;["forecast-a", "forecast-b"].forEach((s) => {
                             try {
-                                map.removeFeatureState({ source: s, sourceLayer: effectiveSourceLayer })
+                                map.setFeatureState(
+                                    { source: s, sourceLayer: hoverSL, id: hoveredIdRef.current! },
+                                    { hover: false }
+                                )
                             } catch (err) {
                                 /* ignore */
                             }
                         })
-                        // Re-apply pinned + selected states after blanket clear
-                        reindexPinnedFeatureStates(map, pinnedComparisonsRef.current)
-                        if (selectedIdRef.current) {
-                            const selSL = selectedSourceLayerRef.current || effectiveSourceLayer
-                            ;["forecast-a", "forecast-b"].forEach(s => {
-                                try { map.setFeatureState({ source: s, sourceLayer: selSL, id: selectedIdRef.current! }, { selected: true }) } catch { }
-                            })
-                        }
                         hoveredIdRef.current = null
+                        hoveredSourceLayerRef.current = null
                         if (!selectedIdRef.current) {
                             setTooltipData(null)
                         }
@@ -1423,10 +1421,11 @@ export function ForecastMap({
                 // Clear previous hover
                 const isNewFeature = hoveredIdRef.current !== id
                 if (hoveredIdRef.current && isNewFeature) {
+                    const prevHoverSL = hoveredSourceLayerRef.current || effectiveSourceLayer
                     ;["forecast-a", "forecast-b"].forEach((s) => {
                         try {
                             map.setFeatureState(
-                                { source: s, sourceLayer: effectiveSourceLayer, id: hoveredIdRef.current! },
+                                { source: s, sourceLayer: prevHoverSL, id: hoveredIdRef.current! },
                                 { hover: false }
                             )
                         } catch (err) {
@@ -1436,6 +1435,7 @@ export function ForecastMap({
                 }
 
                 hoveredIdRef.current = id
+                hoveredSourceLayerRef.current = effectiveSourceLayer
                 onFeatureHover(id)
 
                     // Set hover state
@@ -1866,22 +1866,19 @@ export function ForecastMap({
                 const id = (feature.properties?.id || feature.id) as string
                 if (!id) return
 
-                // Clear prev selection — use removeFeatureState for a blanket clear
-                // to prevent stale highlights when feature IDs don't match exactly
+                // Clear prev selection — targeted clear (preserves pinnedIdx on other features)
                 if (selectedIdRef.current) {
                     const prevLayer = selectedSourceLayerRef.current || effectiveSourceLayer
-                    const layersToClean = new Set([prevLayer, effectiveSourceLayer])
-                        ;["forecast-a", "forecast-b"].forEach((s) => {
-                            layersToClean.forEach((sl) => {
-                                try {
-                                    map.removeFeatureState({ source: s, sourceLayer: sl })
-                                } catch (err) {
-                                    /* ignore */
-                                }
-                            })
-                        })
-                    // Re-apply pinned states after blanket clear
-                    reindexPinnedFeatureStates(map, pinnedComparisonsRef.current)
+                    ;["forecast-a", "forecast-b"].forEach((s) => {
+                        try {
+                            map.setFeatureState(
+                                { source: s, sourceLayer: prevLayer, id: selectedIdRef.current! },
+                                { selected: false }
+                            )
+                        } catch (err) {
+                            /* ignore */
+                        }
+                    })
                 }
 
                 // Toggle selection
