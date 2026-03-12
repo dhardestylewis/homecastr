@@ -37,5 +37,5 @@ export async function fetchSeoNarrative(
 
         if (error || !data) return null
         return data.narrative_json as SeoNarrative
-    })
+    }, 3600) // 1 hour — high-cardinality key (~85k tracts)
 }

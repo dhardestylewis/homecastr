@@ -39,6 +39,16 @@
 >
 > So I put it on a map: homecastr.com
 
+## Hacker News (March 12, 2026)
+
+**Title:** Show HN: Homecastr – AI home price forecasts on a map
+
+**Text:**
+> I built homecastr.com because you can't easily see where home prices are headed, not even on Zillow.
+> I used an FT-Transformer & Schrödinger Bridge diffusion model, trained on 20+ years of ACS microdata & 8 FRED macro series.
+> This approach beats Zillow's baseline on 1-year held-out error, achieving 8.0% vs Zillow's 8.4%.
+> Happy to answer questions about the architecture or anything else!
+
 ---
 
 ## Why Reddit?

@@ -71,23 +71,18 @@ export interface AutocompleteResult {
 }
 
 /**
- * Fetches autocomplete suggestions from Nominatim, restricted to Harris County.
+ * Fetches autocomplete suggestions from Nominatim (US nationwide).
  */
 export async function getAutocompleteSuggestions(query: string): Promise<AutocompleteResult[]> {
     if (!query || query.trim().length < 3) return []
 
     try {
-        // Harris County Bounding Box (approximate)
-        // min_lon=-95.96, min_lat=29.50, max_lon=-94.90, max_lat=30.17
-        const viewbox = "-95.96,30.17,-94.90,29.50"
-
         const params = new URLSearchParams({
             q: query,
             format: "json",
             limit: "5",
             addressdetails: "1",
-            viewbox: viewbox,
-            bounded: "1"
+            countrycodes: "us"
         })
 
         const response = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`, {

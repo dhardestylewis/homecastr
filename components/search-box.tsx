@@ -162,9 +162,6 @@ export function SearchBox({ onSearch, placeholder = "Search address or ID...", v
               <span className="line-clamp-2">{item.displayName}</span>
             </button>
           ))}
-          <div className="px-2 py-1 flex items-center justify-end border-t border-border">
-            <span className="text-[10px] text-muted-foreground">Search restricted to Harris County</span>
-          </div>
         </div>
       )}
     </div>

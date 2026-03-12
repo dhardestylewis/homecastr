@@ -20,8 +20,8 @@ const TOOLTIP_HEIGHT = 620
 
 // Geography level definitions — zoom breakpoints must match the SQL router
 const GEO_LEVELS = [
-    { name: "state", minzoom: 0, maxzoom: 3.99, label: "State" },
-    { name: "zcta", minzoom: 4, maxzoom: 7.99, label: "ZIP Code" },
+    { name: "state", minzoom: 0, maxzoom: 4.99, label: "State" },
+    { name: "zcta", minzoom: 5, maxzoom: 7.99, label: "ZIP Code" },
     { name: "tract", minzoom: 8, maxzoom: 22, label: "Tract" },  // Extends to z22 as fallback underlay
     { name: "tabblock", minzoom: 12, maxzoom: 22, label: "Block" },
     { name: "parcel", minzoom: 17, maxzoom: 22, label: "Parcel" },
@@ -955,31 +955,51 @@ export function ForecastMap({
         }
     }, [isLoaded, router, year, debugBuildings])
 
-    // HORIZON OR ORIGIN YEAR CHANGED: refresh the vector tile URLs so map grabs correct data
+    // HORIZON OR ORIGIN YEAR CHANGED: refresh the HIDDEN source tile URL only.
+    // The visible source keeps its current tiles; the swap effect flips visibility
+    // once the hidden source finishes loading. This prevents duplicate fetching,
+    // cache thrashing, and visible tile disappearance during transitions.
+    const TILE_URL_VERSION = "8"
+    const buildTileUrl = useCallback((oYear: number, tHorizonM: number, sch: string) => {
+        const schemaParam = sch ? `&schema=${sch}` : ""
+        return `${window.location.origin}/api/forecast-tiles/{z}/{x}/{y}` +
+            `?originYear=${oYear}&horizonM=${tHorizonM}&v=${TILE_URL_VERSION}${schemaParam}`
+    }, [])
+
     useEffect(() => {
         if (!isLoaded || !mapRef.current) return
         const map = mapRef.current
-        const _v = "7" // bump: f_now baseline changed from h=12 to h=24 (2026)
 
         // For tile rendering, clamp horizonM to >=24 (2026 baseline).
         // Historical mode SQL uses INNER JOIN on history tables that lack data at
         // ZCTA/tract level, producing empty tiles. By staying in forecast mode,
         // tiles always render. The slider year only affects tooltip/chart display.
         const tileHorizonM = Math.max(horizonM, 24)
+        const url = buildTileUrl(originYear, tileHorizonM, schema)
 
-        const updateSource = (id: string) => {
-            const src = map.getSource(id) as maplibregl.VectorTileSource
-            if (src) {
-                // Maplibre doesn't have setUrl but it has setTiles
-                const schemaParam = schema ? `&schema=${schema}` : ""
-                src.setTiles([
-                    `${window.location.origin}/api/forecast-tiles/{z}/{x}/{y}?originYear=${originYear}&horizonM=${tileHorizonM}&v=${_v}${schemaParam}`,
-                ])
+        const isFirstMount = !(map as any)._activeSuffix
+        if (isFirstMount) {
+            // First mount: both sources have url="" — seed them both so the
+            // visible source actually renders tiles, and the hidden one is ready
+            // for the first swap.
+            const srcA = map.getSource("forecast-a") as maplibregl.VectorTileSource | undefined
+            const srcB = map.getSource("forecast-b") as maplibregl.VectorTileSource | undefined
+            srcA?.setTiles([url])
+            srcB?.setTiles([url])
+            ;(map as any)._activeSuffix = "a"
+        } else {
+            // Subsequent changes: only repoint the hidden (next) source —
+            // the visible one keeps its current tiles until the swap effect flips.
+            const currentSuffix = (map as any)._activeSuffix
+            const nextSuffix = currentSuffix === "a" ? "b" : "a"
+            const nextSourceId = `forecast-${nextSuffix}`
+
+            const nextSource = map.getSource(nextSourceId) as maplibregl.VectorTileSource | undefined
+            if (nextSource) {
+                nextSource.setTiles([url])
             }
         }
-        updateSource("forecast-a")
-        updateSource("forecast-b")
-    }, [year, originYear, horizonM, isLoaded, schema])
+    }, [year, originYear, horizonM, isLoaded, schema, buildTileUrl])
 
 
 
@@ -1170,9 +1190,9 @@ export function ForecastMap({
             ...(initialBounds ? { bounds: initialBounds, fitBoundsOptions: { padding: 50 } } : {}),
             maxZoom: 18,
             minZoom: 2,
-            maxTileCacheSize: 30, // Keep very low — forces MapLibre to prioritize visible tiles over off-viewport prefetch
-            // @ts-expect-error MapOptions Typescript definition doesn't include preserveDrawingBuffer but mapbox-gl and maplibre-gl both use it.
-            preserveDrawingBuffer: true, // Required for canvas.toDataURL() in PDF export
+            // Let MapLibre dynamically size per-source tile cache based on viewport.
+            // A hard cap of 30 with multiple sources + A/B swapping caused thrashing.
+            canvasContextAttributes: { preserveDrawingBuffer: true }, // Required for canvas.toDataURL() in PDF export
         })
 
         map.on("load", () => {
@@ -1359,18 +1379,30 @@ export function ForecastMap({
                 },
             })
 
-            // Suppress MapLibre tile loading error events (e.g. transient 500s from Supabase)
+            // Throttled tile/source error logging — one message per unique error per 5s window.
+            // Previous handler silently swallowed all tile errors, hiding backend 500s/429s.
+            const tileErrorSeen: Record<string, number> = {}
             map.on("error", (e: any) => {
-                const rawMsg = e?.error?.message || e?.message || (typeof e === 'string' ? e : "Unknown MapLibre error")
-                if (typeof rawMsg === "string" && (
-                    rawMsg.includes("status") ||
-                    rawMsg.includes("AJAXError") ||
-                    rawMsg.includes("Cannot read properties of undefined")
-                )) {
-                    // Silently ignore tile fetch errors — the retry + empty tile fallback handles these
-                    return
+                const rawMsg = String(
+                    e?.error?.message || e?.message || "Unknown MapLibre error"
+                )
+                const now = Date.now()
+                if (now - (tileErrorSeen[rawMsg] || 0) > 5000) {
+                    tileErrorSeen[rawMsg] = now
+                    console.warn("[MapLibre tile/source error]", rawMsg, e)
                 }
-                console.error("[MapLibre] Error:", rawMsg)
+            })
+
+            // Temporary diagnostic: observe whether hidden source reaches loaded state
+            map.on("sourcedata", (e: any) => {
+                if (e.sourceId === "forecast-a" || e.sourceId === "forecast-b") {
+                    console.debug("[sourcedata]", {
+                        sourceId: e.sourceId,
+                        isSourceLoaded: e.isSourceLoaded,
+                        activeSuffix: (map as any)._activeSuffix,
+                        targetYear: (map as any)._targetYear,
+                    })
+                }
             })
 
             // HOVER handling
@@ -2514,11 +2546,9 @@ export function ForecastMap({
                 }
             }
 
-            // Clear the old source's tile cache to free memory
-            const oldSource = map.getSource(currentSource)
-            if (oldSource && typeof (oldSource as any).clearTiles === "function") {
-                (oldSource as any).clearTiles()
-            }
+            // Old source's tiles are intentionally kept — clearTiles() is not part of
+            // MapLibre's public VectorTileSource API and nuking tiles immediately causes
+            // extra reload churn if the user swaps back. The adaptive cache handles eviction.
         }
 
         const onSourceData = (e: any) => {

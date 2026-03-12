@@ -513,13 +513,22 @@ export default function AboutPage() {
                                 Access our complete database of probabilistic home price forecasts across the United States. Available by state, metro area, county, and neighborhood.
                             </p>
                         </div>
-                        <Link
-                            href="/forecasts"
-                            className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-background border border-border/50 text-foreground font-medium hover:bg-muted/30 transition-colors shadow-sm whitespace-nowrap"
-                        >
-                            <Map className="w-4 h-4 text-primary" />
-                            Browse Markets
-                        </Link>
+                        <div className="flex gap-3 shrink-0">
+                            <Link
+                                href="/app"
+                                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20 whitespace-nowrap"
+                            >
+                                Explore the Forecast Map
+                                <ArrowRight className="w-4 h-4" />
+                            </Link>
+                            <Link
+                                href="/forecasts"
+                                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-background border border-border/50 text-foreground font-medium hover:bg-muted/30 transition-colors shadow-sm whitespace-nowrap"
+                            >
+                                <Map className="w-4 h-4 text-primary" />
+                                View Market Rankings
+                            </Link>
+                        </div>
                     </div>
                 </section>
 
