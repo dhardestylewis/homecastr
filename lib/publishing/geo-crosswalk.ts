@@ -629,8 +629,9 @@ export async function batchEnrichTracts(
         if (label && label.s) {
             const zcta = TRACT_ZCTA[tractId] || ""
             let name = label.s
-            // Check if a more specific curated ZIP name should override a cousub label
-            if (label.t === "cousub" && zcta && ZIP_OVERRIDES[zcta]) {
+            // Check if a more specific curated ZIP name should override a broad label
+            // (cousub = county subdivision, place = Census Place like "New York" for all of NYC)
+            if ((label.t === "cousub" || label.t === "place") && zcta && ZIP_OVERRIDES[zcta]) {
                 name = ZIP_OVERRIDES[zcta]
             }
             
@@ -841,8 +842,9 @@ export async function enrichWithNeighborhood(geo: GeoInfo): Promise<GeoInfo> {
     const label = TRACT_LABELS[geo.tractGeoid]
     if (label && label.s) {
         const zcta = TRACT_ZCTA[geo.tractGeoid] || geo.zcta5 || null
-        // Cousub labels are too broad — prefer curated ZIP name if available
-        if (label.t === "cousub" && zcta && ZIP_OVERRIDES[zcta]) {
+        // Cousub / Place labels are too broad — prefer curated ZIP name if available
+        // (e.g. "New York" place label → "Chelsea" from ZIP_OVERRIDES)
+        if ((label.t === "cousub" || label.t === "place") && zcta && ZIP_OVERRIDES[zcta]) {
             const curatedName = ZIP_OVERRIDES[zcta]
             
             const mappedGeo = {
