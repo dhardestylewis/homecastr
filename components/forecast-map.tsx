@@ -20,8 +20,8 @@ const TOOLTIP_HEIGHT = 620
 
 // Geography level definitions — zoom breakpoints must match the SQL router
 const GEO_LEVELS = [
-    { name: "state", minzoom: 0, maxzoom: 4.99, label: "State" },
-    { name: "zcta", minzoom: 5, maxzoom: 7.99, label: "ZIP Code" },
+    { name: "state", minzoom: 0, maxzoom: 3.99, label: "State" },
+    { name: "zcta", minzoom: 4, maxzoom: 7.99, label: "ZIP Code" },
     { name: "tract", minzoom: 8, maxzoom: 22, label: "Tract" },  // Extends to z22 as fallback underlay
     { name: "tabblock", minzoom: 12, maxzoom: 22, label: "Block" },
     { name: "parcel", minzoom: 17, maxzoom: 22, label: "Parcel" },
@@ -377,7 +377,7 @@ export function ForecastMap({
         }, 1500)
 
         // Fetch forecast detail data for the selected feature
-        fetchForecastDetail(id, sourceLayer)
+        fetchForecastDetailRef.current(id, sourceLayer)
 
         // Set map center coords so geocoding works
         const center = map.getCenter()
@@ -389,7 +389,7 @@ export function ForecastMap({
         const selId = selectedIdRef.current
         const srcLayer = selectedSourceLayerRef.current
         if (selId && srcLayer) {
-            fetchForecastDetail(selId, srcLayer)
+            fetchForecastDetailRef.current(selId, srcLayer)
         }
     }, [year])
 
@@ -821,6 +821,13 @@ export function ForecastMap({
             setIsLoadingDetail(false)
         }
     }, [originYear, schema])
+
+    // Ref so closures in the init [] effect always call the latest version
+    const fetchForecastDetailRef = useRef(fetchForecastDetail)
+    useEffect(() => { fetchForecastDetailRef.current = fetchForecastDetail }, [fetchForecastDetail])
+
+    // Ref for animation frame cleanup (set inside map.on('load'), cleaned up in init effect return)
+    const animationFrameRef = useRef<number | null>(null)
 
     // VIEW SYNC: Update URL and Origin State when map moves
     // IMPORTANT: Read current params from window.location instead of searchParams
@@ -1538,7 +1545,7 @@ export function ForecastMap({
                 if (!selectedIdRef.current && isNewFeature) {
                     if (hoverDetailTimerRef.current) clearTimeout(hoverDetailTimerRef.current)
                     hoverDetailTimerRef.current = setTimeout(() => {
-                        fetchForecastDetail(id, effectiveSourceLayer)
+                        fetchForecastDetailRef.current(id, effectiveSourceLayer)
                     }, 500)
 
                     // Street view dwell hover: 1.5s on same feature before loading images
@@ -1675,6 +1682,7 @@ export function ForecastMap({
                     }
                 }
                 animationFrameId = requestAnimationFrame(animateSelectedLine);
+                animationFrameRef.current = animationFrameId;
             };
 
             // Start animation loop once loaded
@@ -1686,7 +1694,7 @@ export function ForecastMap({
             return () => {
                 if (hoverDetailTimerRef.current) clearTimeout(hoverDetailTimerRef.current)
                 if (hoverDwellTimerRef.current) clearTimeout(hoverDwellTimerRef.current)
-                if (animationFrameId) cancelAnimationFrame(animationFrameId)
+                if (animationFrameId) { cancelAnimationFrame(animationFrameId); animationFrameRef.current = null }
             }
         }, [isLoaded, debugBuildings])
 
@@ -2069,7 +2077,7 @@ export function ForecastMap({
                 onFeatureSelect(id)
 
                 // Fetch fan chart detail for newly selected area (critical on mobile where hover doesn't fire)
-                fetchForecastDetail(id, effectiveSourceLayer)
+                fetchForecastDetailRef.current(id, effectiveSourceLayer)
 
                     // Set selected state
                     ;["forecast-a", "forecast-b"].forEach((s) => {
@@ -2111,6 +2119,13 @@ export function ForecastMap({
         mapRef.current = map
 
         return () => {
+            if (hoverDetailTimerRef.current) { clearTimeout(hoverDetailTimerRef.current); hoverDetailTimerRef.current = null }
+            if (hoverDwellTimerRef.current) { clearTimeout(hoverDwellTimerRef.current); hoverDwellTimerRef.current = null }
+            if (comparisonTimerRef.current) { clearTimeout(comparisonTimerRef.current); comparisonTimerRef.current = null }
+            if (moveEndTimerRef.current) { clearTimeout(moveEndTimerRef.current); moveEndTimerRef.current = null }
+            if (studentFetchRef.current) { clearTimeout(studentFetchRef.current); studentFetchRef.current = null }
+            if (studentAbortRef.current) { studentAbortRef.current.abort(); studentAbortRef.current = null }
+            if (animationFrameRef.current) { cancelAnimationFrame(animationFrameRef.current); animationFrameRef.current = null }
             map.remove()
         }
     }, []) // Init once
@@ -2231,7 +2246,7 @@ export function ForecastMap({
                                         ;["forecast-a", "forecast-b"].forEach((s) => {
                                             try { map.setFeatureState({ source: s, sourceLayer, id }, { selected: true }) } catch { }
                                         })
-                                    fetchForecastDetail(id, sourceLayer)
+                                    fetchForecastDetailRef.current(id, sourceLayer)
                                 }
                             } else if (retries > 0) {
                                 console.log(`[ForecastMap] fly_to_location: No features at center, retrying... (${retries} left)`)
@@ -2343,7 +2358,7 @@ export function ForecastMap({
                                         ;["forecast-a", "forecast-b"].forEach((s) => {
                                             try { map.setFeatureState({ source: s, sourceLayer, id }, { selected: true }) } catch { }
                                         })
-                                    fetchForecastDetail(id, sourceLayer)
+                                    fetchForecastDetailRef.current(id, sourceLayer)
                                 }
                             } else if (retries > 0) {
                                 setTimeout(() => attemptFirst(retries - 1), 800)
@@ -2402,7 +2417,7 @@ export function ForecastMap({
                                     ;["forecast-a", "forecast-b"].forEach((s) => {
                                         try { map.setFeatureState({ source: s, sourceLayer, id }, { selected: true }) } catch { }
                                     })
-                                fetchForecastDetail(id, sourceLayer)
+                                fetchForecastDetailRef.current(id, sourceLayer)
                             }
                         } else if (retries > 0) {
                             console.log(`[ForecastMap] location_to_area: No features at center, retrying... (${retries} left)`)
@@ -2533,6 +2548,10 @@ export function ForecastMap({
 
             ; (map as any)._targetYear = year
         map.on("sourcedata", onSourceData)
+
+        return () => {
+            map.off("sourcedata", onSourceData)
+        }
     }, [year, isLoaded, filters.colorMode])
 
     // SYNC VIEWPORT
