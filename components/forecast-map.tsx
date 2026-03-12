@@ -261,6 +261,8 @@ export function ForecastMap({
             setComparisonHistoricalValues(undefined)
             comparisonFetchRef.current = null
             detailFetchRef.current = null
+            // Clear pinned comparisons — removeFeatureState above already wiped map state
+            setPinnedComparisons([])
             onFeatureSelect(null)
         }
     }, [mapState.selectedId])
@@ -613,8 +615,14 @@ export function ForecastMap({
         const ids = compareParam.split(",").filter(Boolean).slice(0, MAX_PINNED)
         if (!ids.length) return
 
+        const map = mapRef.current
+        // Derive sourceLayer from current zoom instead of hardcoding
+        const zoom = map?.getZoom() || 10
+        const restoredSourceLayer = getSourceLayer(zoom)
+
         // Fetch and pin each comparison
-        ids.forEach(async (id) => {
+        const restoredEntries: PinnedEntry[] = []
+        Promise.all(ids.map(async (id) => {
             try {
                 const res = await fetch(`/api/forecast-detail?id=${id}&yr=${year}${schema ? `&schema=${schema}` : ""}`)
                 if (!res.ok) return
@@ -632,14 +640,25 @@ export function ForecastMap({
                     historicalValues: json.historical_values,
                     label: id, // Use GEOID as label for URL-restored comparisons
                     coords: [0, 0],
-                    sourceLayer: "zcta",
+                    sourceLayer: restoredSourceLayer,
                 }
-                setPinnedComparisons(prev => {
-                    if (prev.some(p => p.id === id)) return prev
-                    if (prev.length >= MAX_PINNED) return prev
-                    return [...prev, entry]
-                })
+                restoredEntries.push(entry)
             } catch { /* skip silently */ }
+        })).then(() => {
+            if (!restoredEntries.length) return
+            setPinnedComparisons(prev => {
+                const combined = [...prev]
+                for (const entry of restoredEntries) {
+                    if (combined.some(p => p.id === entry.id)) continue
+                    if (combined.length >= MAX_PINNED) break
+                    combined.push(entry)
+                }
+                // Apply feature-state to map after tiles have had time to load
+                if (map) {
+                    setTimeout(() => reindexPinnedFeatureStates(map, combined), 1500)
+                }
+                return combined
+            })
         })
     }, [isLoaded, searchParams, year, schema])
     const [hoverDwell, setHoverDwell] = useState(false)
@@ -1620,17 +1639,17 @@ export function ForecastMap({
                 detailFetchRef.current = null // allow re-fetch on re-hover
             }
             if (hoveredIdRef.current) {
-                const zoom = map.getZoom()
-                const sourceLayer = getSourceLayer(zoom)
+                const hoverSL = hoveredSourceLayerRef.current || getSourceLayer(map.getZoom())
                     ;["forecast-a", "forecast-b"].forEach((s) => {
                         try {
                             map.setFeatureState(
-                                { source: s, sourceLayer, id: hoveredIdRef.current! },
+                                { source: s, sourceLayer: hoverSL, id: hoveredIdRef.current! },
                                 { hover: false }
                             )
                         } catch { }
                     })
                 hoveredIdRef.current = null
+                hoveredSourceLayerRef.current = null
                 onFeatureHover(null)
                 // Clear comparison data when mouse leaves (locked mode)
                 if (selectedIdRef.current) {
@@ -1862,6 +1881,8 @@ export function ForecastMap({
                     setComparisonData(null)
                     setComparisonHistoricalValues(undefined)
                     comparisonFetchRef.current = null
+                    // Clear pinned comparisons — removeFeatureState above already wiped map state
+                    setPinnedComparisons([])
                     onFeatureSelect(null)
                 }
                 return
