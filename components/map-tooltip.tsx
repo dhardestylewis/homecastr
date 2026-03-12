@@ -136,7 +136,7 @@ export function MapTooltip({
                     ? "fixed bottom-0 left-0 right-0 w-full rounded-t-xl rounded-b-none border-t border-x-0 border-b-0 pointer-events-auto transition-transform duration-300 ease-out touch-none overflow-hidden"
                     // Embedded layouts
                     : isEmbedded
-                        ? "fixed right-4 top-4 bottom-4 w-[320px] rounded-xl pointer-events-auto overflow-y-auto"
+                        ? "fixed right-4 top-4 w-[320px] max-h-[calc(100vh-2rem)] rounded-xl pointer-events-auto overflow-y-auto"
                         // Default floating desktop layout
                         : "fixed rounded-xl w-[320px] overflow-hidden",
                 lockedMode && !isMobile && !isEmbedded ? "pointer-events-auto cursor-move" : "pointer-events-none",

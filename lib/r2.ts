@@ -80,9 +80,10 @@ export function r2PublicUrl(bucket: string, objectPath: string): string {
     if (customDomain) {
         return `https://${customDomain}/${objectPath}`
     }
-    // Fallback: use the R2 public dev URL (must be enabled in dashboard)
-    const accountId = process.env.R2_ACCOUNT_ID
-    return `https://${bucket}.${accountId}.r2.dev/${objectPath}`
+    // Use the R2 public dev URL (enabled in Cloudflare dashboard)
+    // Default: pub-39721dc9e38544f189f40e3e41e59019.r2.dev
+    const devUrl = process.env.R2_PUBLIC_DEV_URL ?? "pub-39721dc9e38544f189f40e3e41e59019.r2.dev"
+    return `https://${devUrl}/${objectPath}`
 }
 
 // ── Backwards-compatible GCS aliases ─────────────────────────────────────────
