@@ -1394,6 +1394,14 @@ export function ForecastMap({
                                 /* ignore */
                             }
                         })
+                        // Re-apply pinned + selected states after blanket clear
+                        reindexPinnedFeatureStates(map, pinnedComparisonsRef.current)
+                        if (selectedIdRef.current) {
+                            const selSL = selectedSourceLayerRef.current || effectiveSourceLayer
+                            ;["forecast-a", "forecast-b"].forEach(s => {
+                                try { map.setFeatureState({ source: s, sourceLayer: selSL, id: selectedIdRef.current! }, { selected: true }) } catch { }
+                            })
+                        }
                         hoveredIdRef.current = null
                         if (!selectedIdRef.current) {
                             setTooltipData(null)
@@ -1872,6 +1880,8 @@ export function ForecastMap({
                                 }
                             })
                         })
+                    // Re-apply pinned states after blanket clear
+                    reindexPinnedFeatureStates(map, pinnedComparisonsRef.current)
                 }
 
                 // Toggle selection
