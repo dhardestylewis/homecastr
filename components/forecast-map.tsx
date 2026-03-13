@@ -1231,11 +1231,19 @@ export function ForecastMap({
 
             const fillColor = buildFillColor()
 
-            // Add A/B sources
+            // Add A/B sources — seed with the real tile URL immediately.
+            // Previously tiles:[] caused MapLibre to crash with
+            // "Cannot read properties of undefined (reading 'length')"
+            // when its internal parser tried to iterate the empty array.
+            const tileHorizonM = Math.max(horizonM, 24)
+            const schemaParam = schema ? `&schema=${schema}` : ""
+            const initialTileUrl = `${window.location.origin}/api/forecast-tiles/{z}/{x}/{y}` +
+                `?originYear=${originYear}&horizonM=${tileHorizonM}&v=${TILE_URL_VERSION}${schemaParam}`
+
             const addSource = (id: string) => {
                 map.addSource(id, {
                     type: "vector",
-                    tiles: [], // The tiles array is populated dynamically in the useEffect hook 
+                    tiles: [initialTileUrl],
                     minzoom: 0,
                     maxzoom: 18,
                     promoteId: "id",
@@ -1244,6 +1252,7 @@ export function ForecastMap({
 
             addSource("forecast-a")
             addSource("forecast-b")
+            ;(map as any)._activeSuffix = "a" // Mark as initialized so URL useEffect skips first-mount path
 
             // For each A/B source, create fill + outline layers for EACH geography level
             // with proper minzoom/maxzoom so MapLibre automatically shows the right one
@@ -1405,17 +1414,6 @@ export function ForecastMap({
                 }
             })
 
-            // Temporary diagnostic: observe whether hidden source reaches loaded state
-            map.on("sourcedata", (e: any) => {
-                if (e.sourceId === "forecast-a" || e.sourceId === "forecast-b") {
-                    console.debug("[sourcedata]", {
-                        sourceId: e.sourceId,
-                        isSourceLoaded: e.isSourceLoaded,
-                        activeSuffix: (map as any)._activeSuffix,
-                        targetYear: (map as any)._targetYear,
-                    })
-                }
-            })
 
             // HOVER handling
             map.on("mousemove", (e: maplibregl.MapMouseEvent) => {
