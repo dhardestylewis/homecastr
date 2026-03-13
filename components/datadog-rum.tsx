@@ -17,7 +17,7 @@ export function DatadogRum() {
       service: "homecastr-frontend",
       env: process.env.NEXT_PUBLIC_DD_ENV || process.env.NODE_ENV || "development",
       sessionSampleRate: 100,
-      sessionReplaySampleRate: 0,
+      sessionReplaySampleRate: 20,
     })
     datadogRum.startSessionReplayRecording()
   }, [])

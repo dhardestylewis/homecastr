@@ -286,7 +286,7 @@ export default function AboutPage() {
                         <p className="text-lg text-muted-foreground leading-relaxed max-w-2xl">
                             Homecastr&apos;s foundation model generates probabilistic price bands for every
                             residential property in the market. Access lot-level and neighborhood-level
-                            forecasts via REST API or downloadable PDF reports, with accuracy as strong as 14% annual compounding error (MdAPE).
+                            forecasts via REST API or downloadable PDF reports, with accuracy as strong as 8% annual compounding error (MdAPE).
                         </p>
                     </div>
                 </section>
@@ -364,7 +364,7 @@ export default function AboutPage() {
                             <h2 className="text-3xl font-bold tracking-tight mb-6">Accuracy you can audit</h2>
                             <p className="text-muted-foreground leading-relaxed mb-4">
                                 Forecast accuracy is measured using industry-standard MdAPE
-                                (Median Absolute Percentage Error), with results as strong as 14% annual
+                                (Median Absolute Percentage Error), with results as strong as 8% annual
                                 compounding error. Metrics are available by geography and forecast horizon.
                             </p>
                             <p className="text-muted-foreground leading-relaxed">

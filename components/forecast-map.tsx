@@ -1195,6 +1195,18 @@ export function ForecastMap({
             canvasContextAttributes: { preserveDrawingBuffer: true }, // Required for canvas.toDataURL() in PDF export
         })
 
+        // Add Geolocate control for user-initiated location
+        map.addControl(
+            new maplibregl.GeolocateControl({
+                positionOptions: {
+                    enableHighAccuracy: true
+                },
+                trackUserLocation: true,
+                showUserHeading: true
+            }),
+            'bottom-right'
+        )
+
         map.on("load", () => {
             setIsLoaded(true)
 
