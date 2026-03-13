@@ -7,10 +7,10 @@ const TILE_HEADERS = {
     "Access-Control-Allow-Origin": "*",
 } as const
 
-/** Return an empty 204 so MapLibre silently skips this tile instead of throwing AJAXError */
+/** Return an empty MVT tile (0 bytes) so MapLibre parses it as empty instead of throwing errors on 204 */
 function emptyTile() {
-    return new NextResponse(null, {
-        status: 204,
+    return new NextResponse(new Uint8Array(0), {
+        status: 200,
         headers: {
             ...TILE_HEADERS,
             "Cache-Control": "no-store",  // Don't cache failures — retry on next pan
@@ -107,6 +107,10 @@ export async function GET(
                 }
             } else {
                 buffer = Buffer.from(data)
+            }
+
+            if (buffer.length === 0) {
+                return emptyTile()
             }
 
             return new NextResponse(new Uint8Array(buffer), {

@@ -106,6 +106,10 @@ export async function GET(
             buffer = Buffer.from(data)
         }
 
+        if (buffer.length === 0) {
+            return new NextResponse(null, { status: 204 })
+        }
+
         return new NextResponse(new Uint8Array(buffer), {
             status: 200,
             headers: {
