@@ -117,7 +117,7 @@ export default function AboutPage() {
                         </nav>
                         <div className="flex items-center gap-4">
                             <Link href="/app" className="text-sm font-bold px-5 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-sm">
-                                Open App
+                                Explore the Forecast Map
                             </Link>
                         </div>
                     </div>
@@ -149,7 +149,7 @@ export default function AboutPage() {
                                 href="/app"
                                 className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20"
                             >
-                                Look up my home
+                                Explore the Forecast Map
                                 <ArrowRight className="w-4 h-4" />
                             </Link>
                         </div>
@@ -160,7 +160,7 @@ export default function AboutPage() {
                                 Live Interactive Forecasts
                             </div>
                             <Link href="/app" className="absolute top-4 right-4 z-10 bg-primary/90 hover:bg-primary backdrop-blur-md px-4 py-2 rounded-full text-sm font-bold text-primary-foreground shadow-sm border border-border flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                                Open Map
+                                Explore Map
                                 <ArrowRight className="w-4 h-4" />
                             </Link>
                             {/* We load a simplified MapView */}
@@ -261,7 +261,7 @@ export default function AboutPage() {
                             href="/app"
                             className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20"
                         >
-                            Open Dashboard
+                            Explore the Forecast Map
                             <ArrowRight className="w-4 h-4" />
                         </Link>
                     </div>
