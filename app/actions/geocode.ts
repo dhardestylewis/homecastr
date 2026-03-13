@@ -96,12 +96,26 @@ export async function getAutocompleteSuggestions(query: string): Promise<Autocom
         const data = await response.json()
 
         if (Array.isArray(data)) {
-            return data.map((item: any) => ({
-                lat: Number.parseFloat(item.lat),
-                lng: Number.parseFloat(item.lon),
-                displayName: item.display_name,
-                address: item.address || {}
-            }))
+            return data.map((item: any) => {
+                const addr = item.address || {}
+                let displayName = item.display_name
+                
+                // Nominatim often formats as "123, Main Street, Neighborhood, City..."
+                // We want to remove the comma between the house number and street if both exist.
+                if (addr.house_number && (addr.road || addr.street || addr.pedestrian)) {
+                    const street = addr.road || addr.street || addr.pedestrian
+                    // Replace "123, Main Street" with "123 Main Street" at the start of the string
+                    const commaPattern = new RegExp(`^${addr.house_number},\\s*${street}`, 'i')
+                    displayName = displayName.replace(commaPattern, `${addr.house_number} ${street}`)
+                }
+
+                return {
+                    lat: Number.parseFloat(item.lat),
+                    lng: Number.parseFloat(item.lon),
+                    displayName: displayName,
+                    address: addr
+                }
+            })
         }
 
         return []
