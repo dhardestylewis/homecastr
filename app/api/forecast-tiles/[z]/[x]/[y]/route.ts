@@ -7,13 +7,13 @@ const TILE_HEADERS = {
     "Access-Control-Allow-Origin": "*",
 } as const
 
-/** Return an empty MVT tile (0 bytes) so MapLibre parses it as empty instead of throwing errors on 204 */
+/** Return an empty MVT tile (204 No Content) which is the MapLibre standard for empty tiles */
 function emptyTile() {
-    return new NextResponse(new Uint8Array(0), {
-        status: 200,
+    return new NextResponse(null, {
+        status: 204,
         headers: {
-            ...TILE_HEADERS,
-            "Cache-Control": "no-store",  // Don't cache failures — retry on next pan
+            "Access-Control-Allow-Origin": "*",
+            "Cache-Control": "public, max-age=300",  // Safe to cache empty geometry regions
         },
     })
 }
