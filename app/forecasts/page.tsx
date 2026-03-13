@@ -169,7 +169,7 @@ async function getStateOutlooksFast(stateFips: string) {
             medianAppreciation: appreciations[Math.floor(appreciations.length / 2)],
             highestUpside: appreciations[p99Idx],
         }
-    })
+    }, 7200) // 2 hours — per-state aggregate, ~50 keys
 }
 
 const fmtPct = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`

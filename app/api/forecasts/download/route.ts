@@ -119,7 +119,7 @@ async function getStateOutlook(stateFips: string) {
             medianAppreciation: appreciations[Math.floor(appreciations.length / 2)],
             highestUpside: appreciations[Math.floor(appreciations.length * 0.99)],
         }
-    })
+    }, 7200)
 }
 
 /** County-level outlook (mirrors /forecasts/[state]/page.tsx getCountyOutlooks) */
@@ -170,7 +170,7 @@ async function getCountyOutlooks(stateFips: string) {
             }
         }
         return result
-    })
+    }, 7200)
 }
 
 // ---------------------------------------------------------------------------

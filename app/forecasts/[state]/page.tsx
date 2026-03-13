@@ -162,7 +162,7 @@ async function getCountyOutlooks(stateFips: string) {
         }
 
         return result
-    })
+    }, 7200) // 2 hours — per-state county aggregate, ~50 keys
 }
 
 const fmtPct = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`

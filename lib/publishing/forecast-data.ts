@@ -193,7 +193,7 @@ export async function fetchForecastPageData(
             rankings,
             uniqueDataTokens,
         }
-    }, 14400) // 4 hours — heavy payload, high-cardinality key (~85k tracts)
+    }, 3600) // 1 hour — heavy payload, high-cardinality key (~85k tracts)
 }
 
 // ---------------------------------------------------------------------------

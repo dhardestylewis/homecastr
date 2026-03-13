@@ -1103,7 +1103,7 @@ export async function resolveSlugToTract(
             }
 
             return slugToTract
-        })
+        }, 3600)
 
         const slugMap = new Map<string, string>(mapping as [string, string][])
         const fromSlugMap = slugMap.get(neighborhoodSlug)
@@ -1202,7 +1202,7 @@ export async function getTractsForCity(
         // Deduplicate
         const uniqueTracts = [...new Set(data.map((d: any) => d.tract_geoid20))]
         return uniqueTracts.map(t => parseTractGeoid(t))
-    })
+    }, 3600)
 }
 
 /**
@@ -1329,7 +1329,7 @@ export async function getCitiesForState(
         }
 
         return cities.sort((a, b) => b.tractCount - a.tractCount)
-    })
+    }, 3600)
 }
 
 /**
@@ -1368,7 +1368,7 @@ export async function getStatesWithData(
         }
 
         return states.sort((a, b) => a.stateName.localeCompare(b.stateName))
-    })
+    }, 3600)
 }
 
 // ---------------------------------------------------------------------------
@@ -1400,7 +1400,7 @@ export async function getLatestOriginYear(
             .maybeSingle()
 
         return (data as any)?.origin_year ?? 2025
-    })
+    }, 3600)
 }
 
 // ---------------------------------------------------------------------------

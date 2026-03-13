@@ -2,7 +2,7 @@ import type React from "react"
 import type { Metadata, Viewport } from "next"
 import { Geist, Geist_Mono } from "next/font/google"
 import { Toaster } from "@/components/ui/toaster"
-import { DatadogRum } from "@/components/datadog-rum"
+import { DatadogInit } from "@/components/datadog-init"
 import { CSPostHogProvider } from "@/components/posthog-provider"
 import "./globals.css"
 
@@ -101,7 +101,7 @@ export default function RootLayout({
       <body className={`font-sans antialiased overflow-hidden`} suppressHydrationWarning>
         <CSPostHogProvider>
           {children}
-          <DatadogRum />
+          <DatadogInit />
           <Toaster />
           <script src="https://assets.calendly.com/assets/external/widget.js" async />
         </CSPostHogProvider>

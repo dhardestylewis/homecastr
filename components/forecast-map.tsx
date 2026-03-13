@@ -1235,7 +1235,7 @@ export function ForecastMap({
             const addSource = (id: string) => {
                 map.addSource(id, {
                     type: "vector",
-                    url: "", // The URL is set dynamically in the useEffect hook based on originYear
+                    tiles: [], // The tiles array is populated dynamically in the useEffect hook 
                     minzoom: 0,
                     maxzoom: 18,
                     promoteId: "id",

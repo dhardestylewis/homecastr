@@ -25,10 +25,10 @@ if (redis && !globalForRedis.redis) {
  * 
  * @param key The unique Redis key for this value
  * @param fetcher The async function to compute the value on cache miss
- * @param ttlSeconds Seconds to keep the value in cache (default 24h)
+ * @param ttlSeconds Seconds to keep the value in cache (default 2h)
  * @returns The cached or freshly computed value
  */
-export async function withRedisCache<T>(key: string, fetcher: () => Promise<T>, ttlSeconds = 86400): Promise<T> {
+export async function withRedisCache<T>(key: string, fetcher: () => Promise<T>, ttlSeconds = 7200): Promise<T> {
     if (!redis) {
         return fetcher()
     }
