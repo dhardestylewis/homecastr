@@ -111,7 +111,6 @@ export default function AboutPage() {
                         </Link>
                         <nav className="hidden md:flex items-center gap-6">
                             <Link href="/methodology" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Methodology</Link>
-                            <Link href="/coverage/houston" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Coverage</Link>
                             <Link href="/forecasts" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5"><Map className="w-4 h-4" /> Browse Markets</Link>
                             <Link href="/faq" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">FAQ</Link>
                         </nav>
