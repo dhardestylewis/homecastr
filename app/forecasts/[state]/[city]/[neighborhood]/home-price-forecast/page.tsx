@@ -173,8 +173,11 @@ export default async function NeighborhoodForecastPage({ params, searchParams }:
                     <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-foreground text-balance">
                         {geo.neighborhoodName} Home Price Forecast
                     </h1>
-                    <p className="text-base text-muted-foreground">
-                        {geo.city}, {geo.stateAbbr} · {minForecastYear}–{maxForecastYear} outlook
+                    <p className="text-sm text-muted-foreground">
+                        {geo.city}, {geo.stateAbbr}
+                        {geo.zcta5 && <> · ZIP {geo.zcta5}</>}
+                        {' '}· Census Tract {geo.tractGeoid}
+                        {' '}· {minForecastYear}–{maxForecastYear} outlook
                     </p>
                     {/* AI market summary when available */}
                     {narrative?.market_summary && !isOutlier && (
@@ -250,32 +253,9 @@ export default async function NeighborhoodForecastPage({ params, searchParams }:
                     maxForecastYear={maxForecastYear}
                 />
 
-                {/* ===== 9. BREADCRUMBS & INTERNAL LINKING - At bottom for SEO ===== */}
-                <nav className="pt-4 border-t border-border space-y-4">
-                    {/* Breadcrumbs */}
-                    <div className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
-                        <Link href="/forecasts" className="hover:text-foreground transition-colors">Forecasts</Link>
-                        <span>/</span>
-                        <Link href={`/forecasts/${state}`} className="hover:text-foreground transition-colors">
-                            {geo.stateName}
-                        </Link>
-                        <span>/</span>
-                        <Link href={`/forecasts/${state}/${city}`} className="hover:text-foreground transition-colors">
-                            {geo.city}
-                        </Link>
-                        <span>/</span>
-                        <span className="text-foreground/70">{geo.neighborhoodName}</span>
-                    </div>
-                    
-                    {/* Geography metadata - secondary, for SEO */}
-                    <div className="text-xs text-muted-foreground">
-                        Census Tract {geo.tractGeoid}
-                        {data.rankings.metroRank > 0 && data.rankings.metroTotal > 1 && (
-                            <span className="ml-3">#{data.rankings.metroRank} of {data.rankings.metroTotal} in metro</span>
-                        )}
-                    </div>
-                    
-                    {/* Explore links */}
+                {/* ===== 9. EXPLORE MORE - Simplified footer ===== */}
+                <nav className="pt-6 border-t border-border space-y-4">
+                    <p className="text-sm font-medium text-foreground">Explore More</p>
                     <div className="flex flex-wrap gap-2">
                         <Link
                             href={`/forecasts/${state}/${city}`}

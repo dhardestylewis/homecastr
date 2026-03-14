@@ -39,15 +39,8 @@ export function KeyTakeaway({ horizons, baselineP50, neighborhoodName, city, sta
   else if (spreadPct > 120) rangeWidth = "wide"
   else if (spreadPct > 150) rangeWidth = "very wide"
 
-  // Build the takeaway sentence
-  let takeaway = ""
-  if (baseCaseChange > 5) {
-    takeaway = `The model expects ${neighborhoodName} to appreciate ${fmtPct(baseCaseChange)} by 2030 (base case), with upside potential to ${fmtPct(upsideChange)} and downside risk to ${fmtPct(downsideChange)}.`
-  } else if (baseCaseChange < -5) {
-    takeaway = `The model expects ${neighborhoodName} to decline ${fmtPct(Math.abs(baseCaseChange))} by 2030 (base case), with downside risk to ${fmtPct(downsideChange)} but potential recovery to ${fmtPct(upsideChange)}.`
-  } else {
-    takeaway = `The model expects ${neighborhoodName} to remain roughly flat through 2030 (${fmtPct(baseCaseChange)} base case), with a range from ${fmtPct(downsideChange)} downside to ${fmtPct(upsideChange)} upside.`
-  }
+  // Build the takeaway - one sentence only
+  const takeaway = `Base case: ${fmtPct(baseCaseChange)} by 2030, with a forecast range from ${fmtPct(downsideChange)} to ${fmtPct(upsideChange)}. Uncertainty is ${rangeWidth} relative to similar ${city} markets.`
 
   return (
     <section className="relative">
@@ -55,9 +48,8 @@ export function KeyTakeaway({ horizons, baselineP50, neighborhoodName, city, sta
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         {/* Current value */}
         <div className="p-5 rounded-xl bg-card border border-border">
-          <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Current Value</p>
+          <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Current modeled value</p>
           <p className="text-2xl font-bold tracking-tight">{fmtVal(baselineP50)}</p>
-          <p className="text-xs text-muted-foreground mt-1">Modeled estimate</p>
         </div>
         
         {/* Downside */}
@@ -82,17 +74,11 @@ export function KeyTakeaway({ horizons, baselineP50, neighborhoodName, city, sta
         </div>
       </div>
       
-      {/* Key takeaway paragraph */}
-      <div className="p-5 rounded-xl bg-card border border-border">
-        <div className="flex items-start gap-3">
-          <div className="w-1 h-full min-h-[3rem] bg-primary/40 rounded-full shrink-0" />
-          <div className="space-y-2">
-            <p className="text-sm font-medium text-foreground">Key Takeaway</p>
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              {takeaway} The forecast range is {rangeWidth} for this market.
-            </p>
-          </div>
-        </div>
+      {/* Key takeaway - one sentence */}
+      <div className="p-4 rounded-xl bg-primary/5 border border-primary/20">
+        <p className="text-sm font-medium text-foreground leading-relaxed">
+          {takeaway}
+        </p>
       </div>
     </section>
   )

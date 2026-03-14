@@ -43,31 +43,38 @@ export function InterpretationSection({ horizons, neighborhoodName, city, stateA
         locationText = `${neighborhoodName} in ${city}, ${stateAbbr}`
     }
 
+    // Build interpretation focused on mechanism + timing (not redundant with Key Takeaway)
     const sentences: string[] = []
-
-    if (appreciation5 > 3) {
-        sentences.push(`${locationText} is forecast to appreciate ${appreciation5.toFixed(1)}% over five years, with a ${dispersion} confidence range.`)
+    
+    // Timing pattern
+    if (h1.appreciation > 2 && appreciation5 > h1.appreciation * 3) {
+        sentences.push("The forecast implies steady near-term growth accelerating over the longer horizon.")
+    } else if (h1.appreciation < -2 && appreciation5 > 0) {
+        sentences.push("The forecast implies mild near-term softness followed by longer-term recovery.")
+    } else if (h1.appreciation > 0 && appreciation5 < 0) {
+        sentences.push("Near-term values look stable, but the model expects gradual softening over the longer horizon.")
+    } else if (Math.abs(h1.appreciation) < 2 && Math.abs(appreciation5) < 5) {
+        sentences.push("The forecast implies relatively stable values through the full horizon, with modest movements in either direction.")
+    }
+    
+    // Mechanism / drivers
+    if (appreciation5 > 10) {
+        sentences.push("The base case is supported by strong local demand signals and a positive medium-term appreciation path.")
+    } else if (appreciation5 > 3) {
+        sentences.push("The base case is supported by stable local demand and a moderate medium-term appreciation path.")
+    } else if (appreciation5 < -10) {
+        sentences.push("The downside reflects broader macro sensitivity and local demand softening.")
     } else if (appreciation5 < -3) {
-        sentences.push(`${locationText} is forecast to decline ${Math.abs(appreciation5).toFixed(1)}% over five years, with a ${dispersion} confidence range.`)
-    } else {
-        sentences.push(`${locationText} is forecast to remain roughly flat over five years (${appreciation5 > 0 ? "+" : ""}${appreciation5.toFixed(1)}%), with a ${dispersion} confidence range.`)
+        sentences.push("The model sees some downside pressure from rate sensitivity and local supply dynamics.")
     }
-
-    if (h1.appreciation > 0 && appreciation5 < 0) {
-        sentences.push("Near-term values look stable, but the model expects softening over the longer haul — worth watching.")
-    } else if (h1.appreciation < 0 && appreciation5 > 0) {
-        sentences.push("Values may dip near-term, but the longer-term trend is positive — the model sees a potential rebound ahead.")
-    }
-
+    
+    // Uncertainty explanation
     if (spread5Pct > 150) {
-        sentences.push("The forecast range is very wide, meaning outcomes could vary significantly. This can happen in areas with limited sales history or rapid neighborhood change.")
+        sentences.push("The wide range reflects limited transaction history or rapid neighborhood change — outcomes could vary significantly.")
     } else if (spread5Pct > 120) {
-        sentences.push("There's more uncertainty than usual here. The gap between the optimistic and pessimistic scenarios is wider than average — consider both sides before deciding.")
-    }
-
-    const downside1 = h1.p50 > 0 ? ((h1.p10 / h1.p50) - 1) * 100 : 0
-    if (downside1 < -10) {
-        sentences.push(`In the downside scenario (p10), the model sees a potential ${Math.abs(downside1).toFixed(0)}% decline within one year.`)
+        sentences.push("The wider-than-average range suggests more uncertainty about the trajectory — consider both upside and downside scenarios.")
+    } else if (spread5Pct < 60) {
+        sentences.push("The narrow range suggests relatively high model confidence for this market.")
     }
 
     const fmtPct = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`

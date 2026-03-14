@@ -13,6 +13,9 @@ interface Props {
     aiComparableNarrative?: string | null
 }
 
+// Filter out anomalous values that would damage trust (e.g., $10K homes in NYC)
+const MIN_PLAUSIBLE_VALUE = 50000
+
 export function ComparablesTable({
     similar,
     higherUpside,
@@ -22,6 +25,13 @@ export function ComparablesTable({
     citySlug,
     aiComparableNarrative,
 }: Props) {
+    // Filter out implausible values
+    const filterPlausible = (tracts: ComparableTract[]) => 
+        tracts.filter(t => t.p50_12m >= MIN_PLAUSIBLE_VALUE && t.p50_60m >= MIN_PLAUSIBLE_VALUE)
+    
+    const filteredSimilar = filterPlausible(similar)
+    const filteredHigherUpside = filterPlausible(higherUpside)
+    const filteredLowerRisk = filterPlausible(lowerRisk)
     const fmtVal = (v: number) => {
         if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(2)}M`
         if (v >= 1_000) return `$${(v / 1_000).toFixed(0)}K`
@@ -99,11 +109,16 @@ export function ComparablesTable({
         )
     }
 
-    const isEmpty = similar.length === 0 && higherUpside.length === 0 && lowerRisk.length === 0
+    const isEmpty = filteredSimilar.length === 0 && filteredHigherUpside.length === 0 && filteredLowerRisk.length === 0
 
     return (
         <section id="comparables" className="space-y-6">
-            <h2 className="text-xl font-semibold text-foreground">Comparable Alternatives</h2>
+            <div className="space-y-2">
+                <h2 className="text-xl font-semibold text-foreground">Comparable Alternatives</h2>
+                <p className="text-sm text-muted-foreground">
+                    Use these nearby areas to compare price level, upside potential, and forecast risk.
+                </p>
+            </div>
 
             {isEmpty ? (
                 <div className="glass-panel rounded-xl p-5">
@@ -116,19 +131,19 @@ export function ComparablesTable({
                     <TableSection
                         title="Most Similar Neighborhoods"
                         subtitle="Areas with the most similar current median values"
-                        tracts={similar}
+                        tracts={filteredSimilar}
                         highlightCol="appreciation"
                     />
                     <TableSection
                         title="Stronger Appreciation Potential"
                         subtitle="Nearby areas where the model expects higher 5-year price growth"
-                        tracts={higherUpside}
+                        tracts={filteredHigherUpside}
                         highlightCol="appreciation"
                     />
                     <TableSection
                         title="Lower Risk Alternatives"
                         subtitle="Nearby areas with narrower forecast ranges (less uncertainty)"
-                        tracts={lowerRisk}
+                        tracts={filteredLowerRisk}
                         highlightCol="spread"
                     />
                 </div>

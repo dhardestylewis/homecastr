@@ -19,22 +19,32 @@ export function UncertaintyBand({ horizons }: Props) {
     let barColor: string
     let uncertaintyText: string
 
+    // Determine how uncertainty evolves over time
+    const spreadWidens = spreadPct > spreadPct1 * 1.5
+    const spreadNarrows = spreadPct < spreadPct1 * 0.8
+    
     if (spreadPct < 60) {
         barWidth = "w-[20%]"
         barColor = "bg-chart-high"
-        uncertaintyText = "Low uncertainty. The model is relatively confident in this forecast range."
+        uncertaintyText = "The forecast range is narrow for this market. Near-term outcomes are relatively tight" + 
+            (spreadWidens ? ", though uncertainty widens modestly by 2030." : " and remain tight through the full horizon.")
     } else if (spreadPct < 120) {
         barWidth = "w-[45%]"
         barColor = "bg-chart-mid"
-        uncertaintyText = "Moderate uncertainty, typical for this area and time horizon."
+        uncertaintyText = "The forecast range is moderate for this market over this horizon. " +
+            (spreadWidens ? "Near-term outcomes are relatively tight, but uncertainty widens meaningfully by 2030." : 
+             spreadNarrows ? "Uncertainty actually narrows over time as the model gains confidence." :
+             "The range stays consistent through the forecast period.")
     } else if (spreadPct < 150) {
         barWidth = "w-[70%]"
         barColor = "bg-warning"
-        uncertaintyText = "Higher uncertainty than usual. The range of possible outcomes is wide — likely due to limited nearby sales data, recent market volatility, or ongoing neighborhood change."
+        uncertaintyText = "The forecast range is wider than average for this market. " +
+            (spreadWidens ? "Uncertainty is moderate near-term but expands significantly by 2030 — outcomes could vary meaningfully." :
+             "This typically reflects limited transaction history or rapid neighborhood change.")
     } else {
         barWidth = "w-[90%]"
         barColor = "bg-chart-negative"
-        uncertaintyText = "Very high uncertainty. The gap between the optimistic and pessimistic scenarios is unusually large. Treat any single number here with caution."
+        uncertaintyText = "The forecast range is very wide. The gap between upside and downside scenarios is unusually large — treat any single-point estimate with caution. This often reflects sparse local data or significant market volatility."
     }
 
     const fmtVal = (v: number) => {
