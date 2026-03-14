@@ -28,10 +28,10 @@ export async function GET(request: Request) {
             // growth_pct = (p50_at_horizon - p50_at_h12) / p50_at_h12 * 100
             // Levels match tile zoom routing: z<=4.99→state, z<=7→zcta, z<=11→tract, z<=16→tabblock
             const levels = [
-                { name: "state", table: "metrics_state_forecast", key: "state_fips" },
-                { name: "zcta", table: "metrics_zcta_forecast", key: "zcta5" },
-                { name: "tract", table: "metrics_tract_forecast", key: "tract_geoid20" },
-                { name: "tabblock", table: "metrics_tabblock_forecast", key: "tabblock_geoid20" },
+                { name: "state", table: "metrics_state_forecast", key: "state_fips", yearCol: "forecast_year" },
+                { name: "zcta", table: "metrics_zcta_forecast", key: "zcta5", yearCol: "origin_year" },
+                { name: "tract", table: "metrics_tract_forecast", key: "tract_geoid20", yearCol: "origin_year" },
+                { name: "tabblock", table: "metrics_tabblock_forecast", key: "tabblock_geoid20", yearCol: "origin_year" },
             ]
 
             const result: Record<string, any> = {}
@@ -62,7 +62,7 @@ export async function GET(request: Request) {
                         .schema(schemaName as any)
                         .from(level.table)
                         .select(`${level.key}, p50`)
-                        .eq("origin_year", originYear)
+                        .eq(level.yearCol, originYear)
                         .eq("horizon_m", horizonQuery)
                         .eq("series_kind", "forecast")
                         .not("p50", "is", null)
@@ -75,7 +75,7 @@ export async function GET(request: Request) {
                         .schema(schemaName as any)
                         .from(level.table)
                         .select(`${level.key}, p50`)
-                        .eq("origin_year", originYear)
+                        .eq(level.yearCol, originYear)
                         .eq("horizon_m", baselineH)
                         .eq("series_kind", "forecast")
                         .not("p50", "is", null)
