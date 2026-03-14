@@ -1,21 +1,21 @@
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
+import Link from "next/link"
 
 import { resolveSlugToTract, parseTractGeoid, enrichWithNeighborhood, batchEnrichTracts, buildDisplayNameForTract } from "@/lib/publishing/geo-crosswalk"
 import { fetchForecastPageData, isForecastOutlier } from "@/lib/publishing/forecast-data"
 import { fetchSeoNarrative } from "@/lib/publishing/seo-narratives"
 
-import { ForecastSummaryCard } from "@/components/publishing/ForecastSummaryCard"
+import { KeyTakeaway } from "@/components/publishing/KeyTakeaway"
+import { HistoryForecastChart } from "@/components/publishing/HistoryForecastChart"
 import { UncertaintyBand } from "@/components/publishing/UncertaintyBand"
 import { InterpretationSection } from "@/components/publishing/InterpretationSection"
 import { ComparablesTable } from "@/components/publishing/ComparablesTable"
-import { HistoryForecastChart } from "@/components/publishing/HistoryForecastChart"
 import { MethodCaveat } from "@/components/publishing/MethodCaveat"
 import { ForecastMapEmbed } from "@/components/publishing/ForecastMapEmbed"
 import { RequestAnalysisModal } from "@/components/request-analysis-modal"
 import { getCenterForCity } from "@/lib/publishing/geo-centroids"
 import { getDynamicBounds } from "@/lib/publishing/geo-bounds"
-import Link from "next/link"
 
 // ISR: revalidate every hour so pages auto-update when ACS forecasts change
 export const revalidate = 3600
@@ -44,13 +44,12 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     const h5 = data?.forecast.horizons.find(h => h.horizon_m === 60)
     const appreciation = (h5 && !isOutlier) ? `${h5.appreciation > 0 ? "+" : ""}${h5.appreciation.toFixed(1)}%` : ""
 
-    // Outlook = consistent 2027–2030 range regardless of origin vintage
     const minForecastYear = 2027
     const maxForecastYear = 2030
-    const title = `${geo.neighborhoodName} Home Price Forecast, ${minForecastYear}–${maxForecastYear}`
+    const title = `${geo.neighborhoodName} Home Price Forecast`
     const description = isOutlier
         ? `Detailed housing market modeling and outlook for ${geo.neighborhoodName} (${geo.city}, ${geo.stateAbbr}). Data access available by request.`
-        : `Homecastr forecasts ${geo.neighborhoodName} (${geo.city}, ${geo.stateAbbr}) home prices ${appreciation ? `to change ${appreciation}` : ""} by ${maxForecastYear} (p50). See upside, downside, comparables, and housing market uncertainty.`
+        : `${geo.neighborhoodName} home prices are forecast ${appreciation ? `to change ${appreciation}` : ""} by ${maxForecastYear}. See downside, base case, upside scenarios, and market drivers.`
     return {
         title,
         description,
@@ -78,14 +77,11 @@ export default async function NeighborhoodForecastPage({ params, searchParams }:
 
     // Resolve URL slug → tract GeoID
     const tractGeoid = await resolveSlugToTract(state, city, neighborhood, schema)
-    console.log(`[forecast-page] resolve: state=${state} city=${city} neighborhood=${neighborhood} → tractGeoid=${tractGeoid}`)
     if (!tractGeoid) notFound()
 
     // Get geo info
     let geo = parseTractGeoid(tractGeoid)
     geo = await enrichWithNeighborhood(geo)
-
-    // Ensure the page respects the disambiguated name for the URL slug
     geo.neighborhoodSlug = neighborhood
     geo.neighborhoodName = buildDisplayNameForTract(geo)
 
@@ -97,24 +93,16 @@ export default async function NeighborhoodForecastPage({ params, searchParams }:
         Promise.resolve(getCenterForCity(countyFips, state)),
         getDynamicBounds("tract", tractGeoid),
     ])
-    console.log(`[forecast-page] data for ${tractGeoid}: exists=${!!data} tokens=${data?.uniqueDataTokens} narrative=${!!narrative}`)
     if (!data) notFound()
 
-    // Determine outlier status and scrub data for the DOM if necessary
+    // Determine outlier status
     const isOutlier = isForecastOutlier(data)
     if (isOutlier) {
-        console.log(`[forecast-page] tract ${tractGeoid} is defined as an outlier: baselineP50=${data.forecast.baselineP50}`)
-        // Redact data to ensure extreme numbers don't show up in SEO or source code while keeping enough shape for the blur.
         data.forecast.baselineP50 = 500000;
         data.forecast.horizons = data.forecast.horizons.map(h => ({
             ...h,
-            p10: 450000,
-            p25: 480000,
-            p50: 520000,
-            p75: 560000,
-            p90: 600000,
-            appreciation: 4,
-            spread: 150000
+            p10: 450000, p25: 480000, p50: 520000, p75: 560000, p90: 600000,
+            appreciation: 4, spread: 150000
         }))
         data.history = data.history.map(h => ({ ...h, value: Math.max(100000, h.value) }))
         data.comparables.similar = []
@@ -123,12 +111,10 @@ export default async function NeighborhoodForecastPage({ params, searchParams }:
     }
 
     const h5 = data.forecast.horizons.find(h => h.horizon_m === 60)
-
-    // Outlook = consistent 2027–2030 range regardless of origin vintage
     const minForecastYear = 2027
     const maxForecastYear = 2030
 
-    // Enrich comparable tract names using crosswalks
+    // Enrich comparable tract names
     const allCompIds = [
         ...data.comparables.similar,
         ...data.comparables.higherUpside,
@@ -144,7 +130,7 @@ export default async function NeighborhoodForecastPage({ params, searchParams }:
         }
     }
 
-    // Build JSON-LD structured data
+    // JSON-LD structured data
     const jsonLd = {
         "@context": "https://schema.org",
         "@type": "FAQPage",
@@ -154,7 +140,7 @@ export default async function NeighborhoodForecastPage({ params, searchParams }:
                 name: `What is the home price forecast for ${geo.neighborhoodName}?`,
                 acceptedAnswer: {
                     "@type": "Answer",
-                    text: `Homecastr's model forecasts ${geo.neighborhoodName} median home values at $${Math.round(data.forecast.baselineP50).toLocaleString()} currently, with a 5-year expected change of ${h5 ? `${h5.appreciation.toFixed(1)}%` : "N/A"}.`,
+                    text: `Homecastr forecasts ${geo.neighborhoodName} median home values at $${Math.round(data.forecast.baselineP50).toLocaleString()} currently, with a 5-year expected change of ${h5 ? `${h5.appreciation.toFixed(1)}%` : "N/A"}.`,
                 },
             },
             {
@@ -171,9 +157,9 @@ export default async function NeighborhoodForecastPage({ params, searchParams }:
     }
 
     return (
-        <div className="relative">
+        <div className="relative max-w-4xl mx-auto">
             {isOutlier && <RequestAnalysisModal neighborhoodName={geo.neighborhoodName} />}
-            <div className={`space-y-10 ${isOutlier ? "pointer-events-none blur-sm select-none opacity-80 overflow-hidden max-h-screen" : ""}`}>
+            <div className={`space-y-8 ${isOutlier ? "pointer-events-none blur-sm select-none opacity-80 overflow-hidden max-h-screen" : ""}`}>
                 {/* JSON-LD */}
                 {!isOutlier && (
                     <script
@@ -182,80 +168,48 @@ export default async function NeighborhoodForecastPage({ params, searchParams }:
                     />
                 )}
 
-                {/* Map embed */}
-                <ForecastMapEmbed
-                    lat={mapCenter.lat}
-                    lng={mapCenter.lng}
-                    zoom={12}
-                    bbox={tractBounds}
-                    label={`${geo.neighborhoodName} Forecast Map`}
-                    height={350}
-                />
-
-                {/* Breadcrumbs */}
-                <nav aria-label="Breadcrumb" className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
-                    <Link href="/forecasts" className="hover:text-foreground transition-colors">Forecasts</Link>
-                    <span>/</span>
-                    <Link href={`/forecasts/${state}`} className="hover:text-foreground transition-colors">
-                        {geo.stateName}
-                    </Link>
-                    <span>/</span>
-                    <Link href={`/forecasts/${state}/${city}`} className="hover:text-foreground transition-colors">
-                        {geo.city}
-                    </Link>
-                    <span>/</span>
-                    <span className="text-foreground/70">{geo.neighborhoodName}</span>
-                </nav>
-
-                {/* Page title */}
-                <header className="space-y-3">
-                    <h1 className="text-3xl font-bold tracking-tight sm:text-4xl text-foreground">
+                {/* ===== 1. TITLE HERO - Human name first, geography metadata secondary ===== */}
+                <header className="space-y-3 pt-6">
+                    <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-foreground text-balance">
                         {geo.neighborhoodName} Home Price Forecast
                     </h1>
                     <p className="text-base text-muted-foreground">
-                        {geo.city}, {geo.stateAbbr} · {minForecastYear}–{maxForecastYear} outlook · Census Tract {geo.tractGeoid}
+                        {geo.city}, {geo.stateAbbr} · {minForecastYear}–{maxForecastYear} outlook
                     </p>
-                    {/* AI market summary (when available) */}
+                    {/* AI market summary when available */}
                     {narrative?.market_summary && !isOutlier && (
-                        <p className="text-sm text-muted-foreground leading-relaxed mt-2">
+                        <p className="text-sm text-muted-foreground leading-relaxed max-w-2xl">
                             {narrative.market_summary}
                         </p>
                     )}
-                    <div className="flex items-center gap-3">
-                        {data.rankings.metroRank > 0 && data.rankings.metroTotal > 1 && (
-                            <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary border border-primary/20">
-                                #{data.rankings.metroRank} of {data.rankings.metroTotal} in metro
-                            </span>
-                        )}
-                        {data.rankings.nationalPercentile > 0 && (() => {
-                            const topPct = 100 - data.rankings.nationalPercentile
-                            const rounded = topPct <= 5 ? 5 : Math.ceil(topPct / 5) * 5
-                            return (
-                                <span className="inline-flex items-center gap-1.5 rounded-full bg-accent px-3 py-1 text-xs font-medium text-accent-foreground border border-border">
-                                    Top {rounded}% nationally
-                                </span>
-                            )
-                        })()}
-                    </div>
                 </header>
 
-                {/* 1. Historical Trend & Forecast (visual first) */}
-                <HistoryForecastChart
-                    history={data.history}
-                    horizons={data.forecast.horizons}
-                    originYear={data.forecast.originYear}
-                    suppressConfidence={data.forecast.originYear >= 2026}
-                />
-
-                {/* 2. Forecast Summary */}
-                <ForecastSummaryCard
+                {/* ===== 2. KEY TAKEAWAY HERO - Forecast summary cards + one-paragraph insight ===== */}
+                <KeyTakeaway
                     horizons={data.forecast.horizons}
                     baselineP50={data.forecast.baselineP50}
                     neighborhoodName={geo.neighborhoodName}
-                    suppressConfidence={data.forecast.originYear >= 2026}
+                    city={geo.city}
+                    stateAbbr={geo.stateAbbr}
                 />
 
-                {/* 3. Interpretation */}
+                {/* ===== 3. FAN CHART - Visual forecast first ===== */}
+                <section className="space-y-3">
+                    <h2 className="text-lg font-semibold text-foreground">Forecast Timeline</h2>
+                    <HistoryForecastChart
+                        history={data.history}
+                        horizons={data.forecast.horizons}
+                        originYear={data.forecast.originYear}
+                        suppressConfidence={data.forecast.originYear >= 2026}
+                    />
+                </section>
+
+                {/* ===== 4. UNCERTAINTY - Why this range is wide/narrow ===== */}
+                {data.forecast.originYear < 2026 && (
+                    <UncertaintyBand horizons={data.forecast.horizons} />
+                )}
+
+                {/* ===== 5. INTERPRETATION - What this means ===== */}
                 <InterpretationSection
                     horizons={data.forecast.horizons}
                     neighborhoodName={geo.neighborhoodName}
@@ -264,12 +218,7 @@ export default async function NeighborhoodForecastPage({ params, searchParams }:
                     aiNarrative={isOutlier ? null : narrative}
                 />
 
-                {/* 4. Uncertainty Band */}
-                {data.forecast.originYear < 2026 && (
-                    <UncertaintyBand horizons={data.forecast.horizons} />
-                )}
-
-                {/* 5. Comparable Alternatives */}
+                {/* ===== 6. COMPARABLES - Nearby context ===== */}
                 <ComparablesTable
                     similar={data.comparables.similar}
                     higherUpside={data.comparables.higherUpside}
@@ -280,7 +229,20 @@ export default async function NeighborhoodForecastPage({ params, searchParams }:
                     aiComparableNarrative={isOutlier ? null : narrative?.comparable_narrative}
                 />
 
-                {/* 6. Method / Caveat */}
+                {/* ===== 7. MAP - Moved down from top, now contextual ===== */}
+                <section className="space-y-3">
+                    <h2 className="text-lg font-semibold text-foreground">Location</h2>
+                    <ForecastMapEmbed
+                        lat={mapCenter.lat}
+                        lng={mapCenter.lng}
+                        zoom={12}
+                        bbox={tractBounds}
+                        label={`${geo.neighborhoodName} on map`}
+                        height={280}
+                    />
+                </section>
+
+                {/* ===== 8. METHODOLOGY - Collapsed/secondary ===== */}
                 <MethodCaveat
                     schemaVersion={SCHEMA}
                     originYear={data.forecast.originYear}
@@ -288,27 +250,50 @@ export default async function NeighborhoodForecastPage({ params, searchParams }:
                     maxForecastYear={maxForecastYear}
                 />
 
-                {/* Internal linking */}
-                <nav className="glass-panel rounded-xl p-5 space-y-3">
-                    <h2 className="text-sm font-medium text-muted-foreground">Explore More Forecasts</h2>
+                {/* ===== 9. BREADCRUMBS & INTERNAL LINKING - At bottom for SEO ===== */}
+                <nav className="pt-4 border-t border-border space-y-4">
+                    {/* Breadcrumbs */}
+                    <div className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap">
+                        <Link href="/forecasts" className="hover:text-foreground transition-colors">Forecasts</Link>
+                        <span>/</span>
+                        <Link href={`/forecasts/${state}`} className="hover:text-foreground transition-colors">
+                            {geo.stateName}
+                        </Link>
+                        <span>/</span>
+                        <Link href={`/forecasts/${state}/${city}`} className="hover:text-foreground transition-colors">
+                            {geo.city}
+                        </Link>
+                        <span>/</span>
+                        <span className="text-foreground/70">{geo.neighborhoodName}</span>
+                    </div>
+                    
+                    {/* Geography metadata - secondary, for SEO */}
+                    <div className="text-xs text-muted-foreground">
+                        Census Tract {geo.tractGeoid}
+                        {data.rankings.metroRank > 0 && data.rankings.metroTotal > 1 && (
+                            <span className="ml-3">#{data.rankings.metroRank} of {data.rankings.metroTotal} in metro</span>
+                        )}
+                    </div>
+                    
+                    {/* Explore links */}
                     <div className="flex flex-wrap gap-2">
                         <Link
                             href={`/forecasts/${state}/${city}`}
                             className="text-xs px-3 py-1.5 rounded-lg bg-secondary hover:bg-accent text-muted-foreground hover:text-foreground border border-border transition-all"
                         >
-                            All {geo.city} neighborhoods →
+                            All {geo.city} neighborhoods
                         </Link>
                         <Link
                             href={`/forecasts/${state}`}
                             className="text-xs px-3 py-1.5 rounded-lg bg-secondary hover:bg-accent text-muted-foreground hover:text-foreground border border-border transition-all"
                         >
-                            All {geo.stateName} cities →
+                            All {geo.stateName} cities
                         </Link>
                         <Link
                             href="/"
                             className="text-xs px-3 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 transition-all"
                         >
-                            Explore interactive map →
+                            Explore map
                         </Link>
                     </div>
                 </nav>
