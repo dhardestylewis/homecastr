@@ -190,24 +190,24 @@ export function Legend({ className, colorMode = "growth", onColorModeChange, yea
             className="h-3 w-full rounded-sm"
             style={{ background: colorMode === "value" ? VALUE_GRADIENT : colorMode === "growth_dollar" ? currentGrowthDollarGradient : currentGrowthGradient }}
           />
-          <div className="flex justify-between text-[9px] text-muted-foreground font-mono px-0.5">
+          <div className="relative h-3 w-full text-[9px] text-muted-foreground font-mono px-0.5 mt-0.5">
             {colorMode === "value" ? (
               <>
-                <span>{VALUE_LABELS[0]}</span>
-                <span>{VALUE_LABELS[1]}</span>
-                <span>{VALUE_LABELS[2]}</span>
+                <span className="absolute left-0">{VALUE_LABELS[0]}</span>
+                <span className="absolute left-1/2 -translate-x-1/2">{VALUE_LABELS[1]}</span>
+                <span className="absolute right-0">{VALUE_LABELS[2]}</span>
               </>
             ) : colorMode === "growth_dollar" ? (
               <>
-                <span>{currentGrowthDollarLabels[0]}</span>
-                <span>{currentGrowthDollarLabels[1]}</span>
-                <span>{currentGrowthDollarLabels[2]}</span>
+                <span className="absolute left-0">{currentGrowthDollarLabels[0]}</span>
+                <span className="absolute -translate-x-1/2" style={{ left: `${zeroPct}%` }}>{currentGrowthDollarLabels[1]}</span>
+                <span className="absolute right-0">{currentGrowthDollarLabels[2]}</span>
               </>
             ) : (
               <>
-                <span>{currentGrowthLabels[0]}</span>
-                <span>{currentGrowthLabels[1]}</span>
-                <span>{currentGrowthLabels[2]}</span>
+                <span className="absolute left-0">{currentGrowthLabels[0]}</span>
+                <span className="absolute left-1/2 -translate-x-1/2">{currentGrowthLabels[1]}</span>
+                <span className="absolute right-0">{currentGrowthLabels[2]}</span>
               </>
             )}
           </div>
