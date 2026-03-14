@@ -143,8 +143,9 @@ function MiniFanChart({
   // Build combined data like HistoryForecastChart does
   const bridgeYear = originYear + 1
   
-  // Get last 5 years of history for a cleaner chart
-  const recentHistory = history.filter(h => h.year >= originYear - 4).slice(-5)
+  // Get last 5 years of history for a cleaner chart (guard against undefined)
+  const safeHistory = history || []
+  const recentHistory = safeHistory.filter(h => h.year >= originYear - 4).slice(-5)
   
   // Combine history + forecast into one timeline
   const allYears: number[] = []
