@@ -4,7 +4,9 @@ import { getSupabaseServerClient } from "@/lib/supabase/server"
 
 interface AddressToForecastResult {
   success: boolean
+  routeType?: "city_hub" | "tract_detail" | "fallback"
   forecastUrl?: string
+  cityHubUrl?: string
   tractGeoid?: string
   neighborhoodName?: string
   city?: string
@@ -16,8 +18,15 @@ interface AddressToForecastResult {
  * Takes lat/lng coordinates and returns the forecast page URL for that location.
  * Uses the tract_slug_lookup table to find the pre-computed URL slugs for the tract.
  * Falls back to PostGIS point-in-polygon query if no slug exists.
+ *
+ * If `geocode` details are provided, it can intelligently route City/State level searches
+ * to the appropriate City Hub page instead of a random central tract.
  */
-export async function addressToForecast(lat: number, lng: number): Promise<AddressToForecastResult> {
+export async function addressToForecast(
+  lat: number, 
+  lng: number, 
+  geocode?: { resultType: string; resultClass: string; displayName?: string }
+): Promise<AddressToForecastResult> {
   try {
     const supabase = await getSupabaseServerClient()
     
@@ -53,6 +62,7 @@ export async function addressToForecast(lat: number, lng: number): Promise<Addre
       console.error("[addressToForecast] No tract found at coordinates:", lat, lng)
       return {
         success: false,
+        routeType: "fallback",
         error: "Could not find forecast data for this location. Try a different address.",
       }
     }
@@ -68,12 +78,42 @@ export async function addressToForecast(lat: number, lng: number): Promise<Addre
       console.error("[addressToForecast] No slug found for tract:", tractGeoid, slugError)
       return {
         success: false,
+        routeType: "fallback",
         error: "This area does not have forecast data available yet.",
       }
     }
     
+    // Smart Routing Logic: Determine if this was a broad search (City/State/County)
+    // Nominatim 'resultType' values for broad areas often include: 
+    // "city", "administrative", "municipality", "town", "county", "state"
+    const isCityLevelSearch = geocode?.resultType && [
+      "city", "administrative", "municipality", "town", "county"
+    ].includes(geocode.resultType.toLowerCase());
+
+    const isStateLevelSearch = geocode?.resultType === "state";
+    
+    if (isCityLevelSearch) {
+      return {
+        success: true,
+        routeType: "city_hub",
+        cityHubUrl: `/forecasts/${slugData.state_slug}/${slugData.city_slug}`,
+        tractGeoid, // Even for city hubs, return the central geoid for map centering if needed
+      }
+    }
+
+    if (isStateLevelSearch) {
+       return {
+         success: true,
+         routeType: "city_hub", // We don't have a state hub yet, so route to city hub of the capital/center
+         cityHubUrl: `/forecasts/${slugData.state_slug}/${slugData.city_slug}`,
+         tractGeoid, 
+       }
+    }
+    
+    // Default to specific property/tract detail page
     return {
       success: true,
+      routeType: "tract_detail",
       forecastUrl: `/forecasts/${slugData.state_slug}/${slugData.city_slug}/${slugData.neighborhood_slug}/home-price-forecast`,
       tractGeoid,
     }
@@ -81,6 +121,7 @@ export async function addressToForecast(lat: number, lng: number): Promise<Addre
     console.error("[addressToForecast] Error:", error)
     return {
       success: false,
+      routeType: "fallback",
       error: "An error occurred while looking up this address",
     }
   }

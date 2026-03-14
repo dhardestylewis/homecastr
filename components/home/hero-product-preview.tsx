@@ -115,8 +115,14 @@ export function HeroForecastBar() {
       // Look up the tract from lat/lng and get the forecast URL
       const result = await addressToForecast(suggestion.lat, suggestion.lng)
       
-      if (result.success && result.forecastUrl) {
-        router.push(result.forecastUrl)
+      if (result.success) {
+        if (result.routeType === "city_hub" && result.cityHubUrl) {
+          router.push(result.cityHubUrl)
+        } else if (result.routeType === "tract_detail" && result.forecastUrl) {
+          router.push(result.forecastUrl)
+        } else {
+          router.push(`/app?q=${encodeURIComponent(suggestion.displayName)}`)
+        }
       } else {
         // Show error toast if area isn't covered yet
         toast.error(result.error || "This area does not have forecast data available yet.")
@@ -150,12 +156,25 @@ export function HeroForecastBar() {
       try {
         const geocodeResult = await geocodeAddress(trimmedQuery)
         if (geocodeResult) {
-          const forecastResult = await addressToForecast(geocodeResult.lat, geocodeResult.lng)
-          if (forecastResult.success && forecastResult.forecastUrl) {
-            router.push(forecastResult.forecastUrl)
-            return
+          const forecastResult = await addressToForecast(
+            geocodeResult.lat, 
+            geocodeResult.lng,
+            { resultType: geocodeResult.resultType, resultClass: geocodeResult.resultClass, displayName: geocodeResult.displayName }
+          )
+          
+          if (forecastResult.success) {
+            if (forecastResult.routeType === "city_hub" && forecastResult.cityHubUrl) {
+              router.push(forecastResult.cityHubUrl)
+              return
+            } else if (forecastResult.routeType === "tract_detail" && forecastResult.forecastUrl) {
+              router.push(forecastResult.forecastUrl)
+              return
+            } else {
+              router.push(`/app?q=${encodeURIComponent(trimmedQuery)}`)
+              return
+            }
           } else {
-            toast.error(forecastResult.error || "This area does not have forecast data available yet.")
+            router.push(`/app?q=${encodeURIComponent(trimmedQuery)}`)
             return
           }
         } else {
