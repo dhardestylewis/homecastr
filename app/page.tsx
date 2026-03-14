@@ -8,12 +8,13 @@ import { TrustSection } from "@/components/home/trust-section"
 import { EnterpriseSection } from "@/components/home/enterprise-section"
 import { FooterSection } from "@/components/home/footer-section"
 
-// Featured forecast page to embed - a real working forecast route
+// Featured forecast page to embed - Downtown Flushing, Queens (NYC metro)
+// High-demand market with unlocked forecast data
 const FEATURED_FORECAST = {
-  path: "/forecasts/tx/houston/acres-homes-north-tr-222200/home-price-forecast",
-  neighborhood: "Acres Homes North",
-  city: "Houston",
-  state: "TX"
+  path: "/forecasts/ny/queens/downtown-flushing-tr-086500/home-price-forecast",
+  neighborhood: "Downtown Flushing",
+  city: "Queens",
+  state: "NY"
 }
 
 export default function HomePage() {
