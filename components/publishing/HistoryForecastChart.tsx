@@ -187,11 +187,16 @@ export function HistoryForecastChart({ history, horizons, originYear, suppressCo
                 </div>
             </div>
 
-            {/* Unified Timeline Table: Historical → Forecast */}
+            {/* Unified Timeline Table: Historical → Forecast - Collapsed by default */}
             {(history.length > 0 || horizons.length > 0) && (
-                <div className="glass-panel rounded-xl p-5">
-                    <h3 className="text-sm font-medium text-muted-foreground mb-3">Value Timeline</h3>
-                    <div className="overflow-x-auto">
+                <details className="glass-panel rounded-xl">
+                    <summary className="p-4 cursor-pointer text-sm font-medium text-muted-foreground hover:text-foreground transition-colors flex items-center gap-2">
+                        <svg className="w-4 h-4 transition-transform details-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                        View detailed timeline
+                    </summary>
+                    <div className="px-5 pb-5 overflow-x-auto">
                         <table className="w-full text-sm">
                             <thead>
                                 <tr className="text-xs uppercase tracking-wider border-b border-border">
@@ -294,8 +299,7 @@ export function HistoryForecastChart({ history, horizons, originYear, suppressCo
                             </tbody>
                         </table>
                     </div>
-
-                </div>
+                </details>
             )}
         </section>
     )
