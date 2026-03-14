@@ -55,7 +55,7 @@ export function Legend({ className, colorMode = "growth", onColorModeChange, yea
 
   useEffect(() => {
     // Note: Do not clear old data explicitly to prevent flashing; let the new data override when fetched.
-    if ((colorMode !== "growth" && colorMode !== "growth_dollar") || horizonM === 0) return
+    if (colorMode !== "growth" || horizonM === 0) return
     fetch(`/api/forecast-stats?mode=${colorMode}&originYear=${originYear}&horizonM=${horizonM}`)
       .then(r => r.ok ? r.json() : null)
       .then(json => {
@@ -79,25 +79,6 @@ export function Legend({ className, colorMode = "growth", onColorModeChange, yea
             setApiGrowthGradient(
               `linear-gradient(to right, #2563eb 0%, #93c5fd 30%, #f8f8f8 50%, #f59e0b 70%, #dc2626 100%)`
             )
-          } else if (colorMode === "growth_dollar") {
-            const fmt = (n: number) => {
-              const v = Math.round(n / 1000)
-              return v >= 0 ? `+$${v}k` : `-$${Math.abs(v)}k`
-            }
-            setApiGrowthDollarLabels([
-              fmt(s.p5),
-              "$0",
-              fmt(s.p95),
-            ])
-            const range = (s.p95 ?? 0) - (s.p5 ?? 0)
-            if (range > 0) {
-              // Map uses blue → white → amber → red with 0 at white
-              const zeroPctCalc = s.p5 < 0 && s.p95 > 0 ? Math.round(((0 - s.p5) / range) * 100) : (s.p95 <= 0 ? 100 : 0)
-              const midPosPct = Math.round(zeroPctCalc + (100 - zeroPctCalc) * 0.4)
-              setApiGrowthDollarGradient(
-                `linear-gradient(to right, #2563eb, #93c5fd ${Math.round(zeroPctCalc * 0.6)}%, #f8f8f8 ${zeroPctCalc}%, #f59e0b ${midPosPct}%, #dc2626)`
-              )
-            }
           }
         }
       })
