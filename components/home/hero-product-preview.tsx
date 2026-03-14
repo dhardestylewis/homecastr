@@ -6,6 +6,7 @@ import { Search, ArrowRight, MapPin, MessageSquare } from "lucide-react"
 import { getAutocompleteSuggestions, type AutocompleteResult, geocodeAddress } from "@/app/actions/geocode"
 import { addressToForecast } from "@/app/actions/address-to-forecast"
 import { useDebounce } from "@/hooks/use-debounce"
+import { toast } from "sonner"
 
 // Animated placeholder examples - mix of addresses and questions
 const EXAMPLE_PROMPTS = [
@@ -117,13 +118,12 @@ export function HeroForecastBar() {
       if (result.success && result.forecastUrl) {
         router.push(result.forecastUrl)
       } else {
-        // Fallback to featured forecast with error message
-        console.error("[handleSelectSuggestion]", result.error)
-        router.push(`${FEATURED_FORECAST}?q=${encodeURIComponent(suggestion.displayName)}`)
+        // Show error toast if area isn't covered yet
+        toast.error(result.error || "This area does not have forecast data available yet.")
       }
     } catch (error) {
       console.error("[handleSelectSuggestion] Error:", error)
-      router.push(`${FEATURED_FORECAST}?q=${encodeURIComponent(suggestion.displayName)}`)
+      toast.error("An error occurred while looking up this address")
     } finally {
       setIsLoading(false)
     }
@@ -141,7 +141,6 @@ export function HeroForecastBar() {
     
     const trimmedQuery = query.trim()
     if (!trimmedQuery) {
-      router.push(FEATURED_FORECAST)
       return
     }
     
@@ -155,10 +154,18 @@ export function HeroForecastBar() {
           if (forecastResult.success && forecastResult.forecastUrl) {
             router.push(forecastResult.forecastUrl)
             return
+          } else {
+            toast.error(forecastResult.error || "This area does not have forecast data available yet.")
+            return
           }
+        } else {
+          toast.error("Could not find this address.")
+          return
         }
       } catch (error) {
         console.error("[handleSubmit] Geocode error:", error)
+        toast.error("An error occurred while looking up this address")
+        return
       } finally {
         setIsLoading(false)
       }
