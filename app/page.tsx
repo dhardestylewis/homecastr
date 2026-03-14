@@ -34,11 +34,8 @@ export default function HomePage() {
             <Link href="/forecasts" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
               Markets
             </Link>
-            <Link href="/api-docs" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-              API
-            </Link>
-            <Link href="/faq" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-              FAQ
+            <Link href="/about" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+              Company
             </Link>
           </nav>
 
