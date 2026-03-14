@@ -1,49 +1,22 @@
 import Link from "next/link"
 import { ArrowRight } from "lucide-react"
 import { HomecastrLogo } from "@/components/homecastr-logo"
-import { HeroForecastBar, MockForecastCard } from "@/components/home/hero-product-preview"
+import { HeroForecastBar } from "@/components/home/hero-product-preview"
 import { ProofStrip } from "@/components/home/proof-strip"
 import { FeatureGrid } from "@/components/home/feature-grid"
 import { TrustSection } from "@/components/home/trust-section"
 import { EnterpriseSection } from "@/components/home/enterprise-section"
 import { FooterSection } from "@/components/home/footer-section"
-import { fetchFeaturedForecast, type FeaturedForecastData } from "@/lib/publishing/featured-forecast"
 
-// Fallback data in case DB fetch fails
-const FALLBACK_DATA: FeaturedForecastData = {
-  tract: {
-    geoid: "48201312300",
-    neighborhoodSlug: "third-ward",
-    citySlug: "houston",
-    stateSlug: "texas",
-  },
-  location: {
-    neighborhood: "Third Ward",
-    city: "Houston",
-    state: "TX",
-    zip: "77003",
-  },
-  currentValue: 455000,
-  horizons: [
-    { year: 2026, p10: 432250, p50: 480886, p90: 529574 },
-    { year: 2027, p10: 431999, p50: 507999, p90: 583999 },
-    { year: 2028, p10: 429566, p50: 536708, p90: 643850 },
-    { year: 2029, p10: 425325, p50: 567100, p90: 708875 },
-    { year: 2030, p10: 419388, p50: 599268, p90: 779148 },
-    { year: 2031, p10: 411503, p50: 633313, p90: 855073 },
-  ],
+// Featured forecast page to embed - a real working forecast route
+const FEATURED_FORECAST = {
+  path: "/forecasts/tx/houston/acres-homes-north-tr-222200/home-price-forecast",
+  neighborhood: "Acres Homes North",
+  city: "Houston",
+  state: "TX"
 }
 
-export default async function HomePage() {
-  // Fetch real forecast data from Supabase - use fallback if fetch fails
-  let forecastData: FeaturedForecastData
-  try {
-    const data = await fetchFeaturedForecast()
-    forecastData = data || FALLBACK_DATA
-  } catch {
-    forecastData = FALLBACK_DATA
-  }
-
+export default function HomePage() {
   return (
     <div className="min-h-screen bg-background text-foreground overflow-auto">
       {/* Navigation - minimal, sticky */}
@@ -110,12 +83,54 @@ export default async function HomePage() {
             </div>
           </div>
 
-          {/* Mock forecast card - shows what the user will get, powered by real data */}
+          {/* Real forecast page embed - shows the actual product */}
           <div className="mt-4">
             <div className="text-center mb-6">
               <span className="text-sm font-medium text-muted-foreground">A property forecast, not just a number</span>
             </div>
-            <MockForecastCard data={forecastData} />
+            
+            <div className="max-w-5xl mx-auto px-6 pb-16">
+              {/* Browser chrome wrapper */}
+              <div className="rounded-xl border border-border bg-card overflow-hidden shadow-xl shadow-black/5">
+                {/* Browser chrome */}
+                <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-muted/30">
+                  <div className="flex gap-1.5">
+                    <div className="w-3 h-3 rounded-full bg-border" />
+                    <div className="w-3 h-3 rounded-full bg-border" />
+                    <div className="w-3 h-3 rounded-full bg-border" />
+                  </div>
+                  <div className="flex-1 flex justify-center">
+                    <div className="px-4 py-1 rounded-md bg-muted text-xs text-muted-foreground font-mono">
+                      homecastr.com{FEATURED_FORECAST.path}
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Embedded forecast page */}
+                <div className="relative bg-background">
+                  <iframe
+                    src={FEATURED_FORECAST.path}
+                    title={`${FEATURED_FORECAST.neighborhood} Forecast - ${FEATURED_FORECAST.city}, ${FEATURED_FORECAST.state}`}
+                    className="w-full h-[600px] md:h-[700px] border-0"
+                    loading="lazy"
+                  />
+                  
+                  {/* Gradient fade at bottom to hint there's more */}
+                  <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-card to-transparent pointer-events-none" />
+                </div>
+                
+                {/* CTA to view full page */}
+                <div className="p-4 border-t border-border bg-muted/30 text-center">
+                  <Link
+                    href={FEATURED_FORECAST.path}
+                    className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline underline-offset-4"
+                  >
+                    View full forecast for {FEATURED_FORECAST.neighborhood}
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                </div>
+              </div>
+            </div>
           </div>
         </section>
 
