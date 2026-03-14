@@ -11,9 +11,9 @@ const DEMO_P50 = [295000, 305000, 318000, 330000, 345000]
 const DEMO_P90 = [310000, 338000, 365000, 395000, 425000]
 
 const EXAMPLE_CHIPS = [
-  { label: "Find my home forecast", query: "" },
   { label: "What could my house be worth in 2030?", query: "What could my house be worth in 2030?" },
-  { label: "Show my neighborhood outlook", query: "Show my neighborhood outlook" },
+  { label: "Show downside vs upside", query: "Show downside vs upside" },
+  { label: "How is my neighborhood expected to perform?", query: "How is my neighborhood expected to perform?" },
 ]
 
 function MiniFanChart() {
@@ -148,7 +148,7 @@ export function HeroForecastBar() {
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Enter your address or ask about a home"
+            placeholder="Enter an address to get a forecast"
             className="w-full pl-12 pr-32 py-4 text-base bg-card border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition-all placeholder:text-muted-foreground"
           />
           <button
@@ -209,7 +209,7 @@ export function MockForecastCard() {
             </div>
             <div className="flex items-baseline gap-2 md:text-right">
               <span className="text-3xl md:text-4xl font-bold tracking-tight">$295,000</span>
-              <span className="text-sm text-muted-foreground">current estimate</span>
+              <span className="text-sm text-muted-foreground">current modeled value</span>
             </div>
           </div>
 
@@ -265,8 +265,8 @@ export function MockForecastCard() {
           <div className="mt-8 p-4 rounded-lg bg-muted/30 border border-border">
             <div className="text-sm font-medium mb-2">Key Takeaway</div>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              This property shows a wide forecast range reflecting uncertainty in regional employment trends and rate sensitivity. 
-              The base case suggests 17% appreciation over five years, but outcomes could range from a 9% decline (P10) to a 44% gain (P90).
+              This forecast range is wide because the property is sensitive to regional employment conditions and interest-rate shifts.
+              The base case suggests 17% appreciation over five years, with outcomes ranging from a 9% decline to a 44% gain.
             </p>
           </div>
         </div>

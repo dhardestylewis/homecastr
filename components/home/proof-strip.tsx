@@ -15,8 +15,8 @@ export function ProofStrip() {
           </div>
           
           <div className="text-center md:text-left">
-            <div className="text-3xl md:text-4xl font-bold tracking-tight">Backtested</div>
-            <div className="text-sm text-muted-foreground mt-1">Accuracy Reporting</div>
+            <div className="text-3xl md:text-4xl font-bold tracking-tight">Published</div>
+            <div className="text-sm text-muted-foreground mt-1">Accuracy Metrics</div>
           </div>
           
           <div className="text-center md:text-left">

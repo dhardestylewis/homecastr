@@ -6,58 +6,7 @@ export function EnterpriseSection() {
     <section className="py-20 md:py-28">
       <div className="max-w-6xl mx-auto px-6">
         <div className="grid md:grid-cols-2 gap-12 md:gap-16 items-start">
-          {/* Left: API messaging */}
-          <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-muted text-xs font-medium uppercase tracking-wider mb-6">
-              <Terminal className="w-3 h-3" />
-              API Access
-            </div>
-            
-            <h2 className="text-2xl md:text-3xl font-bold tracking-tight mb-4">
-              The same forecasts, via API.
-            </h2>
-            <p className="text-muted-foreground leading-relaxed mb-6">
-              Access lot-level and neighborhood-level forecasts programmatically. 
-              JSON responses, API key auth, sub-second latency.
-            </p>
-
-            {/* Code sample */}
-            <div className="terminal-block mb-8">
-              <div className="px-4 py-2 border-b border-border text-xs text-muted-foreground">
-                GET /api/v1/forecast
-              </div>
-              <pre className="p-4 text-xs leading-relaxed overflow-x-auto">
-                <code className="text-foreground">{`{
-  "address": "123 Main St, Houston, TX",
-  "current_value": 295000,
-  "forecasts": {
-    "p10": 268000,
-    "p50": 345000,
-    "p90": 425000
-  },
-  "horizon_years": 5
-}`}</code>
-              </pre>
-            </div>
-
-            <div className="flex flex-col sm:flex-row gap-3">
-              <Link
-                href="/api-docs#get-key"
-                className="inline-flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-medium bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
-              >
-                Get Free API Key
-                <ArrowRight className="w-4 h-4" />
-              </Link>
-              <Link
-                href="/api-docs"
-                className="inline-flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-medium text-foreground border border-border rounded-md hover:bg-muted/50 transition-colors"
-              >
-                API Documentation
-              </Link>
-            </div>
-          </div>
-
-          {/* Right: Use cases - broader audience */}
+          {/* Left: Audience - broader consumer focus first */}
           <div>
             <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-6">
               Built for people making housing decisions
@@ -111,6 +60,57 @@ export function EnterpriseSection() {
                   </p>
                 </div>
               </div>
+            </div>
+          </div>
+
+          {/* Right: API messaging - monetization expansion */}
+          <div>
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-muted text-xs font-medium uppercase tracking-wider mb-6">
+              <Terminal className="w-3 h-3" />
+              API Access
+            </div>
+            
+            <h2 className="text-2xl md:text-3xl font-bold tracking-tight mb-4">
+              The same forecasts, via API.
+            </h2>
+            <p className="text-muted-foreground leading-relaxed mb-6">
+              Access lot-level and neighborhood-level forecasts programmatically. 
+              JSON responses, API key auth, sub-second latency.
+            </p>
+
+            {/* Code sample */}
+            <div className="terminal-block mb-8">
+              <div className="px-4 py-2 border-b border-border text-xs text-muted-foreground">
+                GET /api/v1/forecast
+              </div>
+              <pre className="p-4 text-xs leading-relaxed overflow-x-auto">
+                <code className="text-foreground">{`{
+  "address": "123 Main St, Houston, TX",
+  "current_value": 295000,
+  "forecasts": {
+    "p10": 268000,
+    "p50": 345000,
+    "p90": 425000
+  },
+  "horizon_years": 5
+}`}</code>
+              </pre>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Link
+                href="/api-docs#get-key"
+                className="inline-flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-medium bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+              >
+                Get Free API Key
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+              <Link
+                href="/api-docs"
+                className="inline-flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-medium text-foreground border border-border rounded-md hover:bg-muted/50 transition-colors"
+              >
+                API Documentation
+              </Link>
             </div>
           </div>
         </div>

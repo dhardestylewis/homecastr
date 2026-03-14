@@ -67,9 +67,10 @@ export default function HomePage() {
             <div className="flex justify-center mt-8">
               <Link
                 href="/forecasts"
-                className="text-sm text-muted-foreground hover:text-foreground transition-colors underline underline-offset-4"
+                className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
               >
-                Or browse markets by state and city
+                Browse markets by state and city
+                <span aria-hidden="true">→</span>
               </Link>
             </div>
           </div>
@@ -77,7 +78,7 @@ export default function HomePage() {
           {/* Mock forecast card - shows what the user will get */}
           <div className="mt-4">
             <div className="text-center mb-6">
-              <span className="text-xs uppercase tracking-wider text-muted-foreground">What you&apos;ll see</span>
+              <span className="text-sm font-medium text-muted-foreground">A property forecast, not just a number</span>
             </div>
             <MockForecastCard />
           </div>
