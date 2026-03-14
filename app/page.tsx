@@ -1,7 +1,7 @@
 import Link from "next/link"
-import { ArrowRight, ChevronRight, Terminal, BarChart3, Map, Shield, Zap, Building2, Users, TrendingUp } from "lucide-react"
+import { ArrowRight } from "lucide-react"
 import { HomecastrLogo } from "@/components/homecastr-logo"
-import { HeroProductPreview } from "@/components/home/hero-product-preview"
+import { HeroForecastBar, MockForecastCard } from "@/components/home/hero-product-preview"
 import { ProofStrip } from "@/components/home/proof-strip"
 import { FeatureGrid } from "@/components/home/feature-grid"
 import { TrustSection } from "@/components/home/trust-section"
@@ -44,43 +44,43 @@ export default function HomePage() {
       </header>
 
       <main>
-        {/* Hero Section - Single dominant promise */}
+        {/* Hero Section - Query-first with guided forecast bar */}
         <section className="relative">
           <div className="hero-gradient absolute inset-0 pointer-events-none" />
           
-          <div className="max-w-6xl mx-auto px-6 pt-20 pb-16 md:pt-28 md:pb-24">
-            <div className="max-w-3xl">
-              {/* No badge - lead with the promise directly */}
+          <div className="max-w-6xl mx-auto px-6 pt-20 pb-12 md:pt-28 md:pb-16">
+            <div className="text-center max-w-3xl mx-auto mb-10">
+              {/* Lead with the promise */}
               <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight leading-[1.1] text-balance mb-6">
-                See where a home&apos;s value is headed.
+                See where your home&apos;s value is headed.
               </h1>
               
-              <p className="text-lg md:text-xl text-muted-foreground leading-relaxed max-w-2xl mb-10">
-                Property-level home value forecasts with calibrated probability bands. View downside, base-case, and upside scenarios over the next five years.
+              <p className="text-lg md:text-xl text-muted-foreground leading-relaxed mb-10">
+                Get a property-level forecast with downside, base-case, and upside scenarios over the next five years.
               </p>
 
-              {/* Primary CTA with secondary browse option */}
-              <div className="flex flex-col sm:flex-row gap-4">
-                <Link
-                  href="/app"
-                  className="inline-flex items-center justify-center gap-2 px-6 py-3 text-base font-medium bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
-                >
-                  Explore the Forecast Map
-                  <ArrowRight className="w-4 h-4" />
-                </Link>
-                <Link
-                  href="/forecasts"
-                  className="inline-flex items-center justify-center gap-2 px-6 py-3 text-base font-medium text-foreground border border-border rounded-md hover:bg-muted/50 transition-colors"
-                >
-                  Browse Markets
-                  <ChevronRight className="w-4 h-4" />
-                </Link>
-              </div>
+              {/* Guided forecast bar */}
+              <HeroForecastBar />
+            </div>
+
+            {/* Secondary CTA */}
+            <div className="flex justify-center mt-8">
+              <Link
+                href="/forecasts"
+                className="text-sm text-muted-foreground hover:text-foreground transition-colors underline underline-offset-4"
+              >
+                Or browse markets by state and city
+              </Link>
             </div>
           </div>
 
-          {/* Product Preview - Immediate visual surface */}
-          <HeroProductPreview />
+          {/* Mock forecast card - shows what the user will get */}
+          <div className="mt-4">
+            <div className="text-center mb-6">
+              <span className="text-xs uppercase tracking-wider text-muted-foreground">What you&apos;ll see</span>
+            </div>
+            <MockForecastCard />
+          </div>
         </section>
 
         {/* Proof Strip - Trust before sell */}
