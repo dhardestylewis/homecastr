@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
 import { withRedisBinaryCache } from "@/lib/redis"
+import crypto from "crypto"
 
 const TILE_HEADERS = {
     "Content-Type": "application/vnd.mapbox-vector-tile",
-    "Cache-Control": "public, max-age=300, s-maxage=86400, stale-while-revalidate=86400",  // 5 min browser cache, 24 hr CDN cache
+    "Cache-Control": "public, max-age=3600, s-maxage=86400, stale-while-revalidate=86400",  // 1 hr browser cache, 24 hr CDN cache
     "Access-Control-Allow-Origin": "*",
 } as const
 
@@ -14,7 +15,7 @@ function emptyTile() {
         status: 204,
         headers: {
             "Access-Control-Allow-Origin": "*",
-            "Cache-Control": "public, max-age=300",  // Safe to cache empty geometry regions
+            "Cache-Control": "public, max-age=3600",  // 1 hr browser cache for empty regions
         },
     })
 }
@@ -135,17 +136,33 @@ export async function GET(
         14400,  // 4 hour TTL
     )
 
-    if (fromCache) {
-        console.log(`[TILE-CACHE] HIT ${z}/${x}/${y}`)
-    }
-
     if (!cachedBuffer) {
         return emptyTile()
     }
 
+    // Generate ETag from the cache key to allow 304 Not Modified responses
+    // if the user pans away and back
+    const etag = `"${crypto.createHash('md5').update(cacheKey).digest('hex')}"`;
+    
+    // Check if the client already has this version
+    const ifNoneMatch = request.headers.get("if-none-match");
+    if (ifNoneMatch === etag) {
+        return new NextResponse(null, {
+            status: 304,
+            headers: {
+                "Access-Control-Allow-Origin": "*",
+                "Cache-Control": TILE_HEADERS["Cache-Control"],
+                "ETag": etag,
+            }
+        });
+    }
+
     return new NextResponse(new Uint8Array(cachedBuffer), {
         status: 200,
-        headers: TILE_HEADERS,
+        headers: {
+            ...TILE_HEADERS,
+            "ETag": etag,
+        },
     })
 }
 

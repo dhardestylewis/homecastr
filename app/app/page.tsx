@@ -189,13 +189,12 @@ function DashboardContent() {
       return
     }
 
-    // Use area_id for forecast mode, select_hex_id for H3 mode
-    const selectedId = action.area_id || action.select_hex_id || undefined
+    // Use area_id for selection
+    const selectedId = action.area_id || undefined
     setMapState({
       center: [action.lng, action.lat],
       zoom: action.zoom,
       ...(selectedId ? { selectedId } : {}),
-      ...(action.highlighted_hex_ids ? { highlightedIds: action.highlighted_hex_ids } : {}),
     })
 
     // Always dispatch tavus-map-action so the forecast map auto-selects on idle
@@ -236,101 +235,13 @@ function DashboardContent() {
 
       if (action === "fly_to_location") {
         setMapState(prev => {
-          // If we have highlightedIds (e.g. from location_to_hex), preserve them unless new ones are provided.
-          const nextHighlightedIds = params.selected_hex_ids || prev.highlightedIds
-
-          // ZOOM SAFETY: If we have highlighted IDs (neighborhood mode), don't let AI force a zoom that hides them (e.g. Zoom 12 is too far out for Res 9 hexes? No, Res 9 needs ~13. Zoom 12 might be okay but let's check).
-          // Actually, Res 9 hexes are rendered at Zoom 12?
-          // getZoomForRes(9) -> 13.2.
-          // If AI says Zoom 12, and we have Res 9 hexes, we should probably prefer 13.
-          // Let's rely on the AI's zoom mostly, but if we have IDs and no specific selection, ensure we can see them.
-          let nextZoom = params.zoom || 12
-          if (nextHighlightedIds && nextHighlightedIds.length > 0 && nextZoom < 13) {
-            nextZoom = 13 // Force at least 13 if we are highlighting things
-          }
-
           return {
             center: [params.lng, params.lat],
-            zoom: nextZoom,
-            selectedId: params.select_hex_id || prev.selectedId, // Preserve selectedId if not overwriting
-            highlightedIds: nextHighlightedIds
+            zoom: params.zoom || 12,
+            selectedId: prev.selectedId,
           }
         })
         toast({ title: "Homecastr Agent", description: "Moving map..." })
-      } else if (action === "inspect_location") {
-        setMapState({
-          center: [params.lng, params.lat],
-          zoom: params.zoom || 15,
-          selectedId: params.h3_id
-        })
-        toast({ title: "Homecastr Agent", description: "Inspecting property..." })
-      } else if (action === "inspect_neighborhood") {
-        setMapState(prev => {
-          // If we already have a selectedId and it's in the new set, keep it.
-          // Otherwise, default to the first one to ensure tooltip appears.
-          const newHighlights = params.h3_ids || []
-          const keepSelected = prev.selectedId && newHighlights.includes(prev.selectedId)
-
-          return {
-            ...prev,
-            center: [params.lng, params.lat],
-            zoom: params.zoom || 13,
-            highlightedIds: newHighlights,
-            selectedId: keepSelected ? prev.selectedId : (newHighlights[0] || null)
-          }
-        })
-        toast({ title: "Homecastr Agent", description: "Inspecting neighborhood..." })
-      } else if (action === "location_to_hex") {
-        if (result?.h3?.h3_id) {
-          const isNeighborhood = result.h3.context === "neighborhood_average" || (result.h3.neighbors && result.h3.neighbors.length > 1)
-          const targetRes = result.h3.h3_res || 9
-          const targetZoom = getZoomForRes(targetRes)
-
-          setMapState(prev => ({
-            ...prev,
-            center: [result.chosen.lng, result.chosen.lat],
-            zoom: targetZoom,
-            selectedId: result.h3.h3_id,
-            // If we have neighbors (neighborhood context), highlight them all
-            highlightedIds: result.h3.neighbors || undefined
-          }))
-          toast({ title: "Homecastr Agent", description: `Found ${result.chosen.label}` })
-        }
-      } else if (action === "add_location_to_selection") {
-        const resultIds = result?.h3?.h3_ids || (result?.h3?.h3_id ? [result.h3.h3_id] : [])
-        // Fallback for neighborhood context from resolveLocationToHex
-        const neighborIds = result?.h3?.neighbors || []
-
-        const idsToAdd = [...resultIds, ...neighborIds]
-
-        if (idsToAdd.length > 0) {
-          // If we have a single new location with lat/lng, maybe zoom/pan? 
-          // But for "Compare top 3", we likely just want to highlight them.
-          // Let's decide zoom based on the FIRST added item if we don't have a bounding box.
-
-          setMapState(prev => {
-            const currentHighlights = prev.highlightedIds || (prev.selectedId ? [prev.selectedId] : [])
-            const combined = Array.from(new Set([...currentHighlights, ...idsToAdd]))
-
-            // If we have an H3 ID but no explicit lat/lng (e.g. adding by ID), derive it
-            let targetCenter = result.chosen?.lat ? [result.chosen.lng, result.chosen.lat] : undefined
-            if (!targetCenter && result.h3?.h3_id) {
-              const [lat, lng] = cellToLatLng(result.h3.h3_id)
-              targetCenter = [lng, lat]
-            }
-
-            return {
-              ...prev,
-              highlightedIds: combined,
-              ...(targetCenter && result.h3?.h3_id ? {
-                center: targetCenter as [number, number],
-                zoom: getZoomForRes(result.h3.h3_res || 9),
-                selectedId: result.h3.h3_id // Select the new location so the tooltip appears!
-              } : {})
-            }
-          })
-          toast({ title: "Homecastr Agent", description: `Added ${result.chosen?.label || idsToAdd.length + " locations"} to comparison` })
-        }
       } else if (action === "clear_selection") {
         console.log("[PAGE] clear_selection fired")
         setMapState(prev => ({
@@ -339,17 +250,6 @@ function DashboardContent() {
           highlightedIds: undefined
         }))
         toast({ title: "Homecastr Agent", description: "Selection cleared" })
-      } else if (action === "rank_h3_hexes") {
-        if (result?.hexes?.length > 0) {
-          const topHex = result.hexes[0]
-          setMapState({
-            center: [topHex.location.lng, topHex.location.lat],
-            zoom: 12,
-            highlightedIds: result.hexes.map((h: any) => h.h3_id),
-            selectedId: topHex.h3_id
-          })
-          toast({ title: "Homecastr Agent", description: "Ranking locations..." })
-        }
       }
       // ── Forecast-map geography-level actions ──
       else if (action === "location_to_area" || action === "get_forecast_area") {
@@ -377,37 +277,12 @@ function DashboardContent() {
   // Click coordinates from ForecastMap (actual feature location, not viewport center)
   const [clickCoords, setClickCoords] = useState<[number, number] | null>(null)
 
-  // Reverse Geocode Effect — only for non-forecast-map modes
-  // In forecast map mode, ForecastMap's onGeocodedName callback sets the search bar directly
+  // Reverse geocode is handled by ForecastMap's onGeocodedName callback
   useEffect(() => {
     if (!mapState.selectedId) {
       setSearchBarValue("")
-      return
     }
-
-    // In forecast map mode, the search bar is set by onGeocodedName callback
-    if (filters.useForecastMap) return
-
-    // Do NOT show raw ID. Show "..." or nothing while loading.
-    setSearchBarValue("Loading location...")
-
-    const fetchAddress = async () => {
-      try {
-        const [lat, lng] = cellToLatLng(mapState.selectedId!)
-        const address = await reverseGeocode(lat, lng, 18)
-        if (address) {
-          setSearchBarValue(address)
-        } else {
-          setSearchBarValue("")
-        }
-      } catch (e) {
-        console.error("Reverse geocode failed", e)
-        setSearchBarValue("")
-      }
-    }
-    fetchAddress()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mapState.selectedId, filters.useForecastMap])
+  }, [mapState.selectedId])
 
   const handleSearchError = useCallback(
     (error: string) => {
@@ -575,30 +450,17 @@ function DashboardContent() {
       let opportunityScore: number | null = null
       let capRate: number | null = null
 
-      if (filters.useForecastMap) {
-        // Forecast map mode: query forecast-detail API if we have a selectedId
-        if (mapState.selectedId) {
-          try {
-            const res = await fetch(`/api/forecast-detail?level=zcta&id=${encodeURIComponent(mapState.selectedId)}&originYear=${pageOriginYear}`)
-            if (res.ok) {
-              const json = await res.json()
-              if (json.p50 && json.p50.length > 0) {
-                predictedValue = json.p50[json.p50.length - 1] // Last horizon
-              }
+      // Query forecast-detail API if we have a selectedId
+      if (mapState.selectedId) {
+        try {
+          const res = await fetch(`/api/forecast-detail?level=zcta&id=${encodeURIComponent(mapState.selectedId)}&originYear=${pageOriginYear}`)
+          if (res.ok) {
+            const json = await res.json()
+            if (json.p50 && json.p50.length > 0) {
+              predictedValue = json.p50[json.p50.length - 1] // Last horizon
             }
-          } catch { }
-        }
-      } else {
-        // Classic H3 mode
-        let h3Id = mapState.selectedId
-        if (!h3Id) {
-          const [lng, lat] = mapState.center
-          h3Id = latLngToCell(lat, lng, 8)
-        }
-        const details = await getH3CellDetails(h3Id, currentYear)
-        predictedValue = details?.proforma?.predicted_value ?? null
-        opportunityScore = details?.opportunity?.value ?? null
-        capRate = details?.proforma?.cap_rate ?? null
+          }
+        } catch { }
       }
 
       const result = await createTavusConversation({
@@ -817,48 +679,7 @@ function DashboardContent() {
               />
             ) : undefined}
           />
-        ) : filters.useVectorMap ? (
-          <VectorMap
-            filters={filters}
-            mapState={mapState}
-            onFeatureSelect={(id) => {
-              if (mobileFiltersOpen) setMobileFiltersOpen(false)
-              selectFeature(id)
-            }}
-            onFeatureHover={(id) => {
-              if (id && mobileFiltersOpen) setMobileFiltersOpen(false)
-              hoverFeature(id)
-            }}
-            year={currentYear}
-            className="absolute inset-0 z-0"
-            onConsultAI={handleConsultAI}
-            isEmbedded={searchParams.has("embedded")}
-          />
-        ) : filters.usePMTiles ? (
-          <div className="absolute inset-0 z-0">
-            <H3Map year={currentYear} colorMode={filters.colorMode} mapState={mapState} />
-          </div>
-        ) : (
-          <MapView
-            filters={filters}
-            mapState={mapState}
-            onFeatureSelect={(id) => {
-              if (mobileFiltersOpen) setMobileFiltersOpen(false)
-              selectFeature(id)
-            }}
-            onFeatureHover={(id) => {
-              if (id && mobileFiltersOpen) setMobileFiltersOpen(false)
-              hoverFeature(id)
-            }}
-            year={currentYear}
-            onMockDataDetected={handleMockDataDetected}
-            onYearChange={setCurrentYear}
-            mobileSelectionMode={mobileSelectionMode}
-            onMobileSelectionModeChange={setMobileSelectionMode}
-            onConsultAI={handleConsultAI}
-            isEmbedded={searchParams.has("embedded")}
-          />
-        )}
+        ) : null}
 
         {/* Chat Panel Overlay — desktop only (on mobile, chat is embedded in unified bottom sheet) */}
         {!isMobileViewport && (

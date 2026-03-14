@@ -830,6 +830,8 @@ export function ForecastMap({
 
     // Ref for animation frame cleanup (set inside map.on('load'), cleaned up in init effect return)
     const animationFrameRef = useRef<number | null>(null)
+    const isAnimatingRef = useRef(false)
+
 
     // VIEW SYNC: Update URL and Origin State when map moves
     // IMPORTANT: Read current params from window.location instead of searchParams
@@ -845,7 +847,12 @@ export function ForecastMap({
             const zoom = map.getZoom()
 
             // Spatial check for dynamic origin year
-            setMapCenter({ lat: center.lat, lng: center.lng })
+            // Only update state if center changed by more than 0.001 to avoid unnecessary re-renders
+            setMapCenter(prev => {
+                if (!prev) return { lat: center.lat, lng: center.lng }
+                if (Math.abs(prev.lat - center.lat) < 0.001 && Math.abs(prev.lng - center.lng) < 0.001) return prev
+                return { lat: center.lat, lng: center.lng }
+            })
 
             // Debounce URL updates to coalesce rapid map moves
             if (moveEndTimerRef.current) clearTimeout(moveEndTimerRef.current)
@@ -1696,30 +1703,51 @@ export function ForecastMap({
             // Undulating animation loop for selected boundaries
             let animationFrameId: number;
             let startTime = Date.now();
+            let lastFrameTime = 0;
             const animateSelectedLine = () => {
-                if (!mapRef.current) return;
+                if (!mapRef.current) {
+                    isAnimatingRef.current = false;
+                    return;
+                }
+                
+                // Only animate if there's actually a selection or pin to animate to save CPU/GPU
+                const hasSelection = mapState.selectedId || selectedIdRef.current || pinnedComparisonsRef.current.length > 0;
+                if (!hasSelection) {
+                    isAnimatingRef.current = false;
+                    return; // Pause animation loop completely when idle
+                }
+
                 const now = Date.now();
+                
+                // Throttle to ~20fps (50ms). Visual sine wave is so slow (2.5s) that 60fps is wasted GPU.
+                if (now - lastFrameTime < 50) {
+                    animationFrameId = requestAnimationFrame(animateSelectedLine);
+                    animationFrameRef.current = animationFrameId;
+                    return;
+                }
+                lastFrameTime = now;
+
                 // Pulse between 0.4 and 1.0 using a sine wave (2.5-second period)
                 const phase = ((now - startTime) % 2500) / 2500;
                 const opacity = 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(phase * Math.PI * 2));
 
                 const mapInstance = mapRef.current;
                 if (mapInstance.getStyle()) {
+                    // Only update the active style to halve the setPaintProperty calls
+                    const activeSuffix = (mapInstance as any)._activeSuffix || "a";
                     for (const lvl of GEO_LEVELS) {
-                        for (const suffix of ["a", "b"]) {
-                            const layerId = `forecast-outline-${lvl.name}-${suffix}`;
-                            if (mapInstance.getLayer(layerId)) {
-                                mapInstance.setPaintProperty(layerId, "line-opacity", [
-                                    "case",
-                                    ["boolean", ["feature-state", "selected"], false],
-                                    opacity,
-                                    ["boolean", ["feature-state", "hover"], false],
-                                    1.0,
-                                    [">", ["number", ["feature-state", "pinnedIdx"], 0], 0],
-                                    1.0,
-                                    0
-                                ]);
-                            }
+                        const layerId = `forecast-outline-${lvl.name}-${activeSuffix}`;
+                        if (mapInstance.getLayer(layerId)) {
+                            mapInstance.setPaintProperty(layerId, "line-opacity", [
+                                "case",
+                                ["boolean", ["feature-state", "selected"], false],
+                                opacity,
+                                ["boolean", ["feature-state", "hover"], false],
+                                1.0,
+                                [">", ["number", ["feature-state", "pinnedIdx"], 0], 0],
+                                1.0,
+                                0
+                            ]);
                         }
                     }
                 }
@@ -1727,7 +1755,14 @@ export function ForecastMap({
                 animationFrameRef.current = animationFrameId;
             };
 
-            // Start animation loop immediately (map is loaded in this callback)
+            // Start animation loop immediately (map is loaded in this callback, effectively pausing immediately if no selection)
+            isAnimatingRef.current = true;
+            (map as any)._restartAnimation = () => {
+                if (!isAnimatingRef.current) {
+                    isAnimatingRef.current = true;
+                    animateSelectedLine();
+                }
+            };
             animateSelectedLine();
 
         })
@@ -2136,6 +2171,21 @@ export function ForecastMap({
                         }
                     })
 
+                // Restart animation loop if it was paused
+                if (!isAnimatingRef.current) {
+                    isAnimatingRef.current = true;
+                    if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+                    
+                    // We need to redefine the animateSelectedLine closure inside the click handler to capture the current refs,
+                    // but we can just trigger a React re-render or call a method on the map instance to kick it off.
+                    // Doing setPaintProperty directly here for the first frame is enough, but to get it looping again 
+                    // without duplicating the whole loop function, we just set the flag and rely on the fact that 
+                    // the loop never actually terminated, it just returned early. 
+                    // OH WAIT: The old loop terminated (returned without requestAnimationFrame) if !hasSelection.
+                    // Let's create a global Map method to restart it.
+                    if ((map as any)._restartAnimation) (map as any)._restartAnimation();
+                }
+
                 // Fix tooltip position
                 const smartPos = getSmartTooltipPos(
                     e.originalEvent.clientX,
@@ -2538,6 +2588,11 @@ export function ForecastMap({
 
             // Show next, hide current — for all geo levels
             if (!map.getStyle?.()) return // guard against hot-reload race
+            
+            // Batch visibility layout updates
+            let styleUpdates = { ...map.getStyle() };
+            let needsUpdate = false;
+            
             for (const lvl of GEO_LEVELS) {
                 const fillNext = `forecast-fill-${lvl.name}-${nextSuffix}`
                 const outlineNext = `forecast-outline-${lvl.name}-${nextSuffix}`
