@@ -4,20 +4,25 @@ import type React from "react"
 
 import { useState, useCallback, useEffect, useRef } from "react"
 import Link from 'next/link'
-import { Search, X, MapPin } from "lucide-react"
+import { Search, X, MapPin, MessageSquare, Mic } from "lucide-react"
 import { HomecastrLogo } from "./homecastr-logo"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { getAutocompleteSuggestions, type AutocompleteResult } from "@/app/actions/geocode"
 import { useDebounce } from "@/hooks/use-debounce"
+import { cn } from "@/lib/utils"
 
 interface SearchBoxProps {
   onSearch: (query: string) => void
   placeholder?: string
   value?: string
+  isChatOpen?: boolean
+  onToggleChat?: () => void
+  onMicClick?: () => void
+  showMic?: boolean
 }
 
-export function SearchBox({ onSearch, placeholder = "Search address or ID...", value }: SearchBoxProps) {
+export function SearchBox({ onSearch, placeholder = "Search address or ID...", value, isChatOpen, onToggleChat, onMicClick, showMic }: SearchBoxProps) {
   const [query, setQuery] = useState("")
   const [suggestions, setSuggestions] = useState<AutocompleteResult[]>([])
   const [isOpen, setIsOpen] = useState(false)
@@ -109,38 +114,64 @@ export function SearchBox({ onSearch, placeholder = "Search address or ID...", v
     <div className="relative w-full" ref={dropdownRef}>
       <form onSubmit={handleSubmit} className="relative">
         {/* Main Glass Panel with Branding + Search */}
-        <div className="glass-panel shadow-lg h-10 flex items-center px-3 gap-3 rounded-md w-full md:focus-within:w-[480px] transition-all duration-300 ease-in-out">
+        <div className={cn("glass-panel shadow-lg h-10 flex items-center px-3 gap-3 rounded-md w-full md:focus-within:w-[480px] transition-all duration-300 ease-in-out border", isChatOpen ? "bg-muted/30 border-primary/30" : "border-transparent")}>
           {/* Branding */}
           <Link href="/app" className="flex items-center gap-2 text-primary shrink-0 border-r border-border pr-3 hover:opacity-80 transition-opacity">
             <HomecastrLogo variant="horizontal" size={20} />
           </Link>
 
           {/* Search Input Area */}
-          <div className="relative flex-1 flex items-center">
-            <Search className="h-4 w-4 text-muted-foreground mr-2 shrink-0" />
+          <div className="relative flex-1 flex items-center gap-2">
+            {isChatOpen ? (
+              <MessageSquare className="h-4 w-4 text-primary shrink-0" />
+            ) : (
+              <Search className="h-4 w-4 text-muted-foreground shrink-0" />
+            )}
+            
             <Input
               ref={inputRef}
               id="search-box"
               name="search-box"
-              type="search"
+              type="text"
               value={query}
               onChange={(e) => {
                 shouldFetchRef.current = true // Allow fetch
                 setQuery(e.target.value)
-                if (!isOpen && e.target.value.length >= 3) setIsOpen(true)
+                if (!isOpen && !isChatOpen && e.target.value.length >= 3) setIsOpen(true)
               }}
-              placeholder={placeholder}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && isChatOpen) {
+                  e.preventDefault()
+                  if (query.trim()) {
+                    onSearch(query.trim())
+                    setQuery("")
+                  }
+                }
+              }}
+              placeholder={isChatOpen ? "Ask about this area..." : placeholder}
               className="h-9 border-none bg-transparent shadow-none focus-visible:ring-0 px-0 text-sm placeholder:text-muted-foreground/70 [&::-webkit-search-cancel-button]:appearance-none [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-decoration]:hidden"
               aria-label="Search"
               autoComplete="off"
             />
 
-            {query && (
+            {showMic && !isChatOpen && onMicClick && (
+              <button type="button" onClick={onMicClick} className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center hover:bg-muted/50 active:scale-90 transition-transform text-muted-foreground" aria-label="Voice agent">
+                <Mic size={14} />
+              </button>
+            )}
+
+            {isChatOpen && onToggleChat && (
+              <button type="button" onClick={onToggleChat} className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center hover:bg-muted/50 text-muted-foreground" aria-label="Close Chat">
+                <X size={14} />
+              </button>
+            )}
+
+            {query && !isChatOpen && (
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6 ml-1 hover:bg-muted/50 rounded-full"
+                className="h-6 w-6 shrink-0 hover:bg-muted/50 rounded-full"
                 onClick={handleClear}
                 aria-label="Clear search"
               >

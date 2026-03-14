@@ -85,7 +85,27 @@ function DashboardContent() {
     if (params.has("compare")) {
       setCompareMode(true)
     }
-  }, [])
+    
+    // Auto-process initial query search parameter (e.g. from hero page)
+    const initQ = params.get("q")
+    if (initQ && !window.__qProcessed) {
+      window.__qProcessed = true // Prevent double fire in strict mode
+      setTimeout(() => {
+        const text = initQ.trim()
+        const isShortPhrase = text.split(/\s+/).length <= 4;
+        const isConversational = /^(hi|hello|hey|what|why|how|who|where|when|can|could|would|please|show|tell|explain)\b/i.test(text);
+        const isExplicitAddress = /^\d/.test(text) || /^\d{5}(-\d{4})?$/.test(text) || /,\s*[A-Z]{2}\b/i.test(text);
+        const isSearch = isExplicitAddress || (isShortPhrase && !isConversational);
+
+        if (isSearch) {
+          handleSearch(text)
+        } else {
+          setIsChatOpen(true)
+          setTimeout(() => chatPanelRef.current?.sendExternalMessage(text), 300)
+        }
+      }, 500) // Wait for map to initialize
+    }
+  }, [handleSearch])
 
   // Sync currentYear to URL
   const prevYearRef = useRef(currentYear)
@@ -685,6 +705,7 @@ function DashboardContent() {
         {/* Chat Panel Overlay — desktop only (on mobile, chat is embedded in unified bottom sheet) */}
         {!isMobileViewport && (
           <ChatPanel
+            ref={chatPanelRef}
             isOpen={isChatOpen}
             onClose={() => setIsChatOpen(false)}
             onMapAction={handleChatMapAction}
@@ -701,6 +722,10 @@ function DashboardContent() {
             {/* Search Row */}
             <div className="flex items-center gap-2 w-full">
               <SearchBox
+                isChatOpen={isChatOpen}
+                onToggleChat={() => setIsChatOpen(false)}
+                showMic={!tavusConversationUrl && !isTavusLoading}
+                onMicClick={handleFloatingConsultAI}
                 onSearch={(text) => {
                   const isShortPhrase = text.split(/\s+/).length <= 4;
                   const isConversational = /^(hi|hello|hey|what|why|how|who|where|when|can|could|would|please|show|tell|explain)\b/i.test(text);
@@ -711,7 +736,7 @@ function DashboardContent() {
                     handleSearch(text)
                   } else {
                     if (!isChatOpen) setIsChatOpen(true)
-                    setTimeout(() => chatPanelRef.current?.sendExternalMessage(text), isChatOpen ? 0 : 100)
+                    setTimeout(() => chatPanelRef.current?.sendExternalMessage(text), isChatOpen ? 0 : 300)
                   }
                 }}
                 placeholder="Search or ask a question..."
