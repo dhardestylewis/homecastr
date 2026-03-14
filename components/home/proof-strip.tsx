@@ -1,7 +1,7 @@
 export function ProofStrip() {
   return (
-    <section className="border-y border-border bg-muted/30">
-      <div className="max-w-6xl mx-auto px-6 py-10">
+    <section className="border-y border-border bg-muted/30 overflow-hidden">
+      <div className="max-w-6xl mx-auto px-4 md:px-6 py-10">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-12">
           {/* Quantified proof points - safer claims */}
           <div className="text-center md:text-left">

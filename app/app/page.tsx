@@ -635,6 +635,7 @@ function DashboardContent() {
             onCoordsChange={setClickCoords}
             onGeocodedName={(name) => setSearchBarValue(name || "")}
             year={currentYear}
+            onYearChange={setCurrentYear}
             className="absolute inset-0 z-0"
             onConsultAI={handleConsultAI}
             isChatOpen={isChatOpen}

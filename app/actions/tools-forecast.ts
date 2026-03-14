@@ -224,19 +224,21 @@ export async function executeTopLevelForecastTool(
                     location: { lat, lng, level },
                 }
 
-                // If we have a specific area_id, fetch metrics
-                if (args.area_id) {
-                    const metricsResult = await executeTopLevelForecastTool("get_forecast_area", {
-                        level,
-                        id: args.area_id,
-                        forecast_year: forecastYear,
-                        lat,
-                        lng,
-                    })
-                    const parsed = JSON.parse(metricsResult)
-                    if (parsed.area) {
-                        result.metrics = parsed.area.metrics
-                    }
+                // Always attempt to fetch metrics (using id or lat/lng fallback)
+                const metricsResult = await executeTopLevelForecastTool("get_forecast_area", {
+                    level,
+                    id: args.area_id || "",
+                    forecast_year: forecastYear,
+                    lat,
+                    lng,
+                })
+                const parsed = JSON.parse(metricsResult)
+                if (parsed.area) {
+                    result.metrics = parsed.area.metrics
+                    if (parsed.area.id) result.location.area_id = parsed.area.id
+                } else if (!parsed.area && parsed.error) {
+                    // Explicitly tell the AI that the place was found, but data is missing
+                    result.coverage_error = "Place resolved correctly, but NO FORECAST DATA was found at this location. Inform the user per Rule 11."
                 }
 
                 return JSON.stringify(result)

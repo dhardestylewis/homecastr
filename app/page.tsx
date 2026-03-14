@@ -64,7 +64,7 @@ export default async function HomePage() {
             <div className="text-center max-w-3xl mx-auto mb-10">
               {/* Lead with the promise */}
               <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight leading-[1.1] text-balance mb-6">
-                See where your home&apos;s value is headed.
+                See where home values are headed.
               </h1>
               
               <p className="text-lg md:text-xl text-muted-foreground leading-relaxed mb-10">

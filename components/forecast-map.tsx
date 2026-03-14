@@ -135,6 +135,7 @@ interface ForecastMapProps {
     onCoordsChange?: (coords: [number, number] | null) => void
     onGeocodedName?: (name: string | null) => void
     year: number
+    onYearChange?: (year: number) => void
     className?: string
     onConsultAI?: (details: {
         predictedValue: number | null
@@ -167,6 +168,7 @@ export function ForecastMap({
     filters,
     mapState,
     year,
+    onYearChange,
     onFeatureSelect,
     onFeatureHover,
     onCoordsChange,
@@ -305,6 +307,48 @@ export function ForecastMap({
     const [selectedCoords, setSelectedCoords] = useState<[number, number] | null>(null)
     const selectedCoordsRef = useRef<[number, number] | null>(null)
     useEffect(() => { selectedCoordsRef.current = selectedCoords }, [selectedCoords])
+    
+    // Primary Selection Marker
+    const markerRef = useRef<maplibregl.Marker | null>(null)
+    useEffect(() => {
+        if (!mapRef.current) return
+        
+        if (selectedCoords) {
+            if (!markerRef.current) {
+                const el = document.createElement('div');
+                el.className = 'custom-map-pin z-50 transition-transform hover:scale-110';
+                el.innerHTML = `
+                  <svg width="28" height="40" viewBox="0 0 24 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 0C5.37258 0 0 5.37258 0 12C0 21 12 34 12 34C12 34 24 21 24 12C24 5.37258 18.6274 0 12 0Z" fill="#ef4444"/>
+                    <circle cx="12" cy="12" r="5" fill="white"/>
+                  </svg>
+                `;
+                el.style.filter = 'drop-shadow(0px 6px 8px rgba(0,0,0,0.3)) drop-shadow(0px 2px 4px rgba(0,0,0,0.2))';
+                el.style.cursor = 'pointer';
+                el.style.marginTop = '-2px'; // optical adjustment for bottom anchor shadow
+                
+                markerRef.current = new maplibregl.Marker({
+                    element: el,
+                    anchor: 'bottom',
+                    pitchAlignment: 'map'
+                }).addTo(mapRef.current)
+            }
+            markerRef.current.setLngLat([selectedCoords[1], selectedCoords[0]])
+        } else {
+            if (markerRef.current) {
+                markerRef.current.remove()
+                markerRef.current = null
+            }
+        }
+        
+        // Cleanup marker on unmount
+        return () => {
+            if (markerRef.current) {
+                markerRef.current.remove()
+                markerRef.current = null
+            }
+        }
+    }, [selectedCoords, isLoaded])
 
     // Notify parent of coordinate changes (for search bar geocoding)
     useEffect(() => { onCoordsChange?.(selectedCoords) }, [selectedCoords, onCoordsChange])
@@ -3117,7 +3161,7 @@ export function ForecastMap({
                                             {/* Chart — takes remaining space */}
                                             <div className="flex-1 min-w-0 h-full">
                                                 {fanChartData ? (
-                                                    <FanChart data={fanChartData} currentYear={year} height={200} historicalValues={historicalValues} childLines={debugBuildings ? studentChildLines : undefined} comparisonData={comparisonData} comparisonHistoricalValues={comparisonHistoricalValues} pinnedComparisons={pinnedComparisons.map(pc => ({ data: pc.data, historicalValues: pc.historicalValues, label: pc.label, colorIdx: pc.colorIdx }))} yDomain={effectiveYDomain} />
+                                                    <FanChart data={fanChartData} currentYear={year} height={200} historicalValues={historicalValues} childLines={debugBuildings ? studentChildLines : undefined} comparisonData={comparisonData} comparisonHistoricalValues={comparisonHistoricalValues} pinnedComparisons={pinnedComparisons.map(pc => ({ data: pc.data, historicalValues: pc.historicalValues, label: pc.label, colorIdx: pc.colorIdx }))} yDomain={effectiveYDomain} onYearChange={onYearChange} />
                                                 ) : isLoadingDetail ? (
                                                     <div className="h-full flex items-center justify-center">
                                                         <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
@@ -3238,6 +3282,7 @@ export function ForecastMap({
                                             comparisonHistoricalValues={comparisonHistoricalValues}
                                             pinnedComparisons={pinnedComparisons.map(pc => ({ data: pc.data, historicalValues: pc.historicalValues, label: pc.label, colorIdx: pc.colorIdx }))}
                                             yDomain={effectiveYDomain}
+                                            onYearChange={onYearChange}
                                         />
                                     ) : isLoadingDetail ? (
                                         <div className="h-full flex items-center justify-center">
