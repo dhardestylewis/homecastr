@@ -23,11 +23,12 @@ export async function GET(request: Request) {
     const supabase = getSupabaseAdmin()
 
     try {
-        if (mode === "growth") {
+        if (mode === "growth" || mode === "growth_dollar") {
             // Compute growth_pct percentiles per geo level
             // growth_pct = (p50_at_horizon - p50_at_h12) / p50_at_h12 * 100
-            // Levels match tile zoom routing: z<=7→zcta, z<=11→tract, z<=16→tabblock
+            // Levels match tile zoom routing: z<=4.99→state, z<=7→zcta, z<=11→tract, z<=16→tabblock
             const levels = [
+                { name: "state", table: "metrics_state_forecast", key: "state_fips" },
                 { name: "zcta", table: "metrics_zcta_forecast", key: "zcta5" },
                 { name: "tract", table: "metrics_tract_forecast", key: "tract_geoid20" },
                 { name: "tabblock", table: "metrics_tabblock_forecast", key: "tabblock_geoid20" },
@@ -111,16 +112,28 @@ export async function GET(request: Request) {
                         const bVal = baselineMap.get(key)
                         if (bVal && bVal > 0 && hVal && hVal > 0) {
                             let growth: number
-                            if (isHistorical) {
-                                // Historical: how much did it grow FROM hVal TO bVal (2026)
-                                growth = ((bVal - hVal) / hVal) * 100
+                            if (mode === "growth_dollar") {
+                                if (isHistorical) {
+                                    growth = (bVal - hVal)
+                                } else {
+                                    growth = (hVal - bVal)
+                                }
+                                // Clip extreme dollar outliers
+                                if (growth >= -1000000 && growth <= 2000000) {
+                                    growthValues.push(Math.round(growth))
+                                }
                             } else {
-                                // Forecast: how much will it grow FROM bVal (2026) TO hVal
-                                growth = ((hVal - bVal) / bVal) * 100
-                            }
-                            // Clip extreme outliers
-                            if (growth >= -100 && growth <= 500) {
-                                growthValues.push(Math.round(growth * 10) / 10)
+                                if (isHistorical) {
+                                    // Historical: how much did it grow FROM hVal TO bVal (2026)
+                                    growth = ((bVal - hVal) / hVal) * 100
+                                } else {
+                                    // Forecast: how much will it grow FROM bVal (2026) TO hVal
+                                    growth = ((hVal - bVal) / bVal) * 100
+                                }
+                                // Clip extreme outliers
+                                if (growth >= -100 && growth <= 500) {
+                                    growthValues.push(Math.round(growth * 10) / 10)
+                                }
                             }
                         }
                     }
@@ -146,7 +159,7 @@ export async function GET(request: Request) {
             }
 
             return NextResponse.json(
-                { levels: result, originYear, horizonM, mode: "growth" },
+                { levels: result, originYear, horizonM, mode },
                 { headers: { "Cache-Control": "public, max-age=86400, s-maxage=86400, stale-while-revalidate=43200" } }
             )
         }
