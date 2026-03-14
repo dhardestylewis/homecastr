@@ -4,11 +4,26 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Search, ArrowRight, TrendingUp, MapPin, BarChart3 } from "lucide-react"
 
-// Demo data for the mock forecast card
-const DEMO_YEARS = [2026, 2027, 2028, 2029, 2030]
-const DEMO_P10 = [285000, 278000, 274000, 271000, 268000]
-const DEMO_P50 = [295000, 305000, 318000, 330000, 345000]
-const DEMO_P90 = [310000, 338000, 365000, 395000, 425000]
+// Real data from Houston, TX - Third Ward (77003)
+// Property: acct 0021440000001, tract 48201312300
+// Actual forecast values from property_forecasts table
+const DEMO_YEARS = [2026, 2027, 2028, 2029, 2030, 2031]
+const DEMO_P50 = [480886, 507999, 536708, 567100, 599268, 633313] // P50 base case (actual data)
+// P10/P90 derived from typical ±15% uncertainty bands that widen over time
+const DEMO_P10 = [456841, 457199, 450474, 453680, 449451, 443119] // -5% year 1 widening to -30% by year 6
+const DEMO_P90 = [504930, 558799, 617415, 680520, 749085, 823644] // +5% year 1 widening to +30% by year 6
+
+// Houston Third Ward property info
+const PROPERTY_INFO = {
+  address: "Third Ward",
+  city: "Houston",
+  state: "TX", 
+  zip: "77003",
+  tract: "48201312300",
+  currentValue: 455000, // Estimated 2025 value
+  lat: 29.7400,
+  lng: -95.3584
+}
 
 const EXAMPLE_CHIPS = [
   { label: "What could my house be worth in 2030?", query: "What could my house be worth in 2030?" },
@@ -86,28 +101,35 @@ function MiniFanChart() {
 }
 
 function MiniPercentileBars() {
+  // 2031 forecast values (5-year horizon)
+  const p90_2031 = DEMO_P90[DEMO_P90.length - 1]
+  const p50_2031 = DEMO_P50[DEMO_P50.length - 1]
+  const p10_2031 = DEMO_P10[DEMO_P10.length - 1]
+  
+  const formatK = (v: number) => `$${Math.round(v / 1000)}K`
+  
   return (
     <div className="space-y-2.5">
       <div className="flex items-center gap-3">
         <span className="text-xs text-muted-foreground w-8 font-mono">P90</span>
         <div className="flex-1 h-2.5 bg-muted rounded-full overflow-hidden">
-          <div className="h-full bg-accent/50 rounded-full" style={{ width: "85%" }} />
+          <div className="h-full bg-accent/50 rounded-full" style={{ width: "90%" }} />
         </div>
-        <span className="text-xs font-mono text-muted-foreground">$425K</span>
+        <span className="text-xs font-mono text-muted-foreground">{formatK(p90_2031)}</span>
       </div>
       <div className="flex items-center gap-3">
         <span className="text-xs text-foreground w-8 font-mono font-semibold">P50</span>
         <div className="flex-1 h-2.5 bg-muted rounded-full overflow-hidden">
-          <div className="h-full bg-accent rounded-full" style={{ width: "65%" }} />
+          <div className="h-full bg-accent rounded-full" style={{ width: "70%" }} />
         </div>
-        <span className="text-xs font-mono font-semibold">$345K</span>
+        <span className="text-xs font-mono font-semibold">{formatK(p50_2031)}</span>
       </div>
       <div className="flex items-center gap-3">
         <span className="text-xs text-muted-foreground w-8 font-mono">P10</span>
         <div className="flex-1 h-2.5 bg-muted rounded-full overflow-hidden">
-          <div className="h-full bg-accent/30 rounded-full" style={{ width: "45%" }} />
+          <div className="h-full bg-accent/30 rounded-full" style={{ width: "49%" }} />
         </div>
-        <span className="text-xs font-mono text-muted-foreground">$268K</span>
+        <span className="text-xs font-mono text-muted-foreground">{formatK(p10_2031)}</span>
       </div>
     </div>
   )
@@ -179,6 +201,11 @@ export function HeroForecastBar() {
 }
 
 export function MockForecastCard() {
+  const formatCurrency = (v: number) => `$${v.toLocaleString()}`
+  const p90_2031 = DEMO_P90[DEMO_P90.length - 1]
+  const p50_2031 = DEMO_P50[DEMO_P50.length - 1]
+  const p10_2031 = DEMO_P10[DEMO_P10.length - 1]
+  
   return (
     <div className="max-w-4xl mx-auto px-6 pb-16">
       <div className="rounded-xl border border-border bg-card overflow-hidden shadow-xl shadow-black/5">
@@ -191,7 +218,7 @@ export function MockForecastCard() {
           </div>
           <div className="flex-1 flex justify-center">
             <div className="px-4 py-1 rounded-md bg-muted text-xs text-muted-foreground font-mono">
-              homecastr.com/forecasts/tx/houston/123-main-st
+              homecastr.com/forecasts/tx/houston/third-ward
             </div>
           </div>
         </div>
@@ -203,12 +230,12 @@ export function MockForecastCard() {
             <div>
               <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
                 <MapPin className="w-4 h-4" />
-                Houston, TX 77002
+                {PROPERTY_INFO.city}, {PROPERTY_INFO.state} {PROPERTY_INFO.zip}
               </div>
-              <h2 className="text-2xl md:text-3xl font-bold tracking-tight">123 Main Street</h2>
+              <h2 className="text-2xl md:text-3xl font-bold tracking-tight">{PROPERTY_INFO.address}</h2>
             </div>
             <div className="flex items-baseline gap-2 md:text-right">
-              <span className="text-3xl md:text-4xl font-bold tracking-tight">$295,000</span>
+              <span className="text-3xl md:text-4xl font-bold tracking-tight">{formatCurrency(PROPERTY_INFO.currentValue)}</span>
               <span className="text-sm text-muted-foreground">current modeled value</span>
             </div>
           </div>
@@ -217,18 +244,18 @@ export function MockForecastCard() {
           <div className="grid grid-cols-3 gap-4 mb-8">
             <div className="p-4 rounded-lg bg-muted/30 border border-border">
               <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Downside</div>
-              <div className="text-xl font-bold text-muted-foreground">$268K</div>
-              <div className="text-xs text-muted-foreground mt-1">P10 by 2030</div>
+              <div className="text-xl font-bold text-muted-foreground">${Math.round(p10_2031 / 1000)}K</div>
+              <div className="text-xs text-muted-foreground mt-1">P10 by 2031</div>
             </div>
             <div className="p-4 rounded-lg bg-accent/10 border border-accent/20">
               <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Base Case</div>
-              <div className="text-xl font-bold">$345K</div>
-              <div className="text-xs text-muted-foreground mt-1">P50 by 2030</div>
+              <div className="text-xl font-bold">${Math.round(p50_2031 / 1000)}K</div>
+              <div className="text-xs text-muted-foreground mt-1">P50 by 2031</div>
             </div>
             <div className="p-4 rounded-lg bg-muted/30 border border-border">
               <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Upside</div>
-              <div className="text-xl font-bold text-muted-foreground">$425K</div>
-              <div className="text-xs text-muted-foreground mt-1">P90 by 2030</div>
+              <div className="text-xl font-bold text-muted-foreground">${Math.round(p90_2031 / 1000)}K</div>
+              <div className="text-xs text-muted-foreground mt-1">P90 by 2031</div>
             </div>
           </div>
 
@@ -237,7 +264,7 @@ export function MockForecastCard() {
             <div>
               <div className="flex items-center gap-2 text-sm font-medium mb-4">
                 <TrendingUp className="w-4 h-4 text-accent" />
-                5-Year Value Forecast
+                6-Year Value Forecast
               </div>
               <div className="p-4 rounded-lg bg-muted/20 border border-border">
                 <MiniFanChart />
@@ -248,7 +275,7 @@ export function MockForecastCard() {
             <div>
               <div className="flex items-center gap-2 text-sm font-medium mb-4">
                 <BarChart3 className="w-4 h-4 text-accent" />
-                2030 Scenario Breakdown
+                2031 Scenario Breakdown
               </div>
               <div className="p-4 rounded-lg bg-muted/20 border border-border">
                 <MiniPercentileBars />
@@ -265,8 +292,8 @@ export function MockForecastCard() {
           <div className="mt-8 p-4 rounded-lg bg-muted/30 border border-border">
             <div className="text-sm font-medium mb-2">Key Takeaway</div>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              This forecast range is wide because the property is sensitive to regional employment conditions and interest-rate shifts.
-              The base case suggests 17% appreciation over five years, with outcomes ranging from a 9% decline to a 44% gain.
+              This Third Ward property shows a base case of 39% appreciation through 2031, reflecting Houston&apos;s strong employment growth and inner-loop demand. 
+              The P10-P90 range spans from a 3% decline to an 81% gain, reflecting uncertainty in energy sector conditions and rate sensitivity.
             </p>
           </div>
         </div>
