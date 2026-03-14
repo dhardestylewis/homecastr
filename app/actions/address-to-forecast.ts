@@ -1,7 +1,7 @@
 "use server"
 
 import { getSupabaseServerClient } from "@/lib/supabase/server"
-import { parseTractGeoid, slugify, getGeographyFromTract } from "@/lib/publishing/geo-crosswalk"
+import { parseTractGeoid, slugify, enrichWithNeighborhood } from "@/lib/publishing/geo-crosswalk"
 
 const FORECAST_SCHEMA = "forecast_queue"
 
@@ -33,7 +33,6 @@ export async function addressToForecast(lat: number, lng: number): Promise<Addre
       })
     
     if (rpcError || !nearest || nearest.length === 0) {
-      // Fallback: try to get tract from geo_crosswalk lookup based on reverse geocode
       console.error("[addressToForecast] RPC failed or no results:", rpcError)
       return {
         success: false,
@@ -50,31 +49,10 @@ export async function addressToForecast(lat: number, lng: number): Promise<Addre
     }
     
     // Parse the tract geoid to get geography info
-    const geoInfo = await getGeographyFromTract(tractGeoid)
-    if (!geoInfo) {
-      // Fallback to parsing just the tract geoid
-      try {
-        const parsed = parseTractGeoid(tractGeoid.substring(0, 11))
-        const stateSlug = slugify(parsed.stateAbbr)
-        const citySlug = slugify(parsed.city)
-        const tractSuffix = tractGeoid.substring(5, 11)
-        const neighborhoodSlug = `${slugify(parsed.city)}-tr-${tractSuffix}`
-        
-        return {
-          success: true,
-          forecastUrl: `/forecasts/${stateSlug}/${citySlug}/${neighborhoodSlug}/home-price-forecast`,
-          tractGeoid,
-          neighborhoodName: parsed.city,
-          city: parsed.city,
-          state: parsed.stateAbbr,
-        }
-      } catch {
-        return {
-          success: false,
-          error: "Could not parse location data",
-        }
-      }
-    }
+    const baseGeo = parseTractGeoid(tractGeoid.substring(0, 11))
+    
+    // Enrich with neighborhood name from database
+    const geoInfo = await enrichWithNeighborhood(baseGeo)
     
     // Build the forecast URL
     const stateSlug = slugify(geoInfo.stateAbbr)
@@ -96,12 +74,4 @@ export async function addressToForecast(lat: number, lng: number): Promise<Addre
       error: "An error occurred while looking up this address",
     }
   }
-}
-
-// Helper to slugify strings for URLs
-function slugify(str: string): string {
-  return str
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
 }
