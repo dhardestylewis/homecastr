@@ -4,13 +4,20 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Search, ArrowRight } from "lucide-react"
 
-// Animated placeholder examples that rotate
-const EXAMPLE_ADDRESSES = [
+// Animated placeholder examples - mix of addresses and questions
+const EXAMPLE_PROMPTS = [
   "123 Main St, Austin TX",
+  "What could my house be worth in 2030?",
   "456 Oak Ave, Brooklyn NY", 
+  "Show me downside vs upside scenarios",
   "789 Pine St, Seattle WA",
-  "1010 Elm Blvd, Denver CO",
-  "555 Maple Dr, Portland OR",
+]
+
+// Quick action chips
+const PROMPT_CHIPS = [
+  { label: "Find my forecast", isAddress: true },
+  { label: "Worth in 2030?", query: "What could my house be worth in 2030?" },
+  { label: "Downside vs upside", query: "Show me downside vs upside scenarios" },
 ]
 
 export function HeroForecastBar() {
@@ -24,11 +31,23 @@ export function HeroForecastBar() {
     if (isTyping || query) return
     
     const interval = setInterval(() => {
-      setPlaceholderIndex((prev) => (prev + 1) % EXAMPLE_ADDRESSES.length)
+      setPlaceholderIndex((prev) => (prev + 1) % EXAMPLE_PROMPTS.length)
     }, 3000)
     
     return () => clearInterval(interval)
   }, [isTyping, query])
+
+  const handleChipClick = (chip: typeof PROMPT_CHIPS[0]) => {
+    if (chip.isAddress) {
+      // Focus input for address entry
+      const input = document.getElementById("forecast-input") as HTMLInputElement
+      input?.focus()
+    } else if (chip.query) {
+      // Prefill with the question
+      setQuery(chip.query)
+      router.push(`/app?q=${encodeURIComponent(chip.query)}`)
+    }
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -49,15 +68,14 @@ export function HeroForecastBar() {
         <div className="relative flex items-center">
           <Search className="absolute left-4 w-5 h-5 text-muted-foreground pointer-events-none" />
           
-          {/* Custom placeholder that animates */}
+          {/* Custom placeholder that animates - shows both addresses and questions */}
           {!query && (
-            <div className="absolute left-12 pointer-events-none flex items-center gap-1 text-muted-foreground/60">
-              <span className="text-muted-foreground">Enter address:</span>
+            <div className="absolute left-12 pointer-events-none">
               <span 
                 key={placeholderIndex}
                 className="animate-fade-in text-muted-foreground/50 italic"
               >
-                {EXAMPLE_ADDRESSES[placeholderIndex]}
+                {EXAMPLE_PROMPTS[placeholderIndex]}
               </span>
             </div>
           )}
@@ -81,6 +99,18 @@ export function HeroForecastBar() {
         </div>
       </form>
 
+      {/* Quick action chips */}
+      <div className="flex flex-wrap items-center justify-center gap-2 mt-4">
+        {PROMPT_CHIPS.map((chip) => (
+          <button
+            key={chip.label}
+            onClick={() => handleChipClick(chip)}
+            className="px-3 py-1.5 text-xs font-medium text-muted-foreground bg-muted/50 border border-border rounded-full hover:bg-muted hover:text-foreground transition-colors"
+          >
+            {chip.label}
+          </button>
+        ))}
+      </div>
     </div>
   )
 }
