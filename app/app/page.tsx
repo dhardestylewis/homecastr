@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useCallback, Suspense, useEffect, useRef, useMemo } from "react"
+import React, { useState, useCallback, Suspense, useEffect, useRef, useMemo, startTransition } from "react"
 import { ForecastMap } from "@/components/forecast-map"
 import { Legend } from "@/components/legend"
 import { cn } from "@/lib/utils"
@@ -383,7 +383,7 @@ function DashboardContent() {
   }, [isUsingMockData, toast])
 
   const handleColorModeChange = useCallback((mode: "growth" | "value" | "growth_dollar") => {
-    setFilters({ colorMode: mode })
+    startTransition(() => setFilters({ colorMode: mode }))
     // First time the user clicks Growth and hasn't touched the timeline — animate to 2027
     if (mode === "growth" && !hasManuallySetYear && currentYear < 2027) {
       try {
