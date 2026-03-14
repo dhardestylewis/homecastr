@@ -11,11 +11,11 @@ export function DatadogInit() {
     if (typeof window === "undefined" || initialized.current) return
     
     // Using existing RUM variables for client token if dedicated ones aren't set
-    const appId = process.env.NEXT_PUBLIC_DD_APPLICATION_ID
-    const clientToken = process.env.NEXT_PUBLIC_DD_CLIENT_TOKEN || process.env.NEXT_PUBLIC_DD_LOGS_CLIENT_TOKEN
-    const site = process.env.NEXT_PUBLIC_DD_SITE || "datadoghq.com"
-    const env = process.env.NEXT_PUBLIC_DD_ENV || process.env.NODE_ENV || "development"
-    const service = process.env.NEXT_PUBLIC_DD_SERVICE || "homecastr-ui"
+    const appId = process.env.NEXT_PUBLIC_DD_APPLICATION_ID?.trim()
+    const clientToken = (process.env.NEXT_PUBLIC_DD_CLIENT_TOKEN || process.env.NEXT_PUBLIC_DD_LOGS_CLIENT_TOKEN)?.trim()
+    const site = (process.env.NEXT_PUBLIC_DD_SITE || "datadoghq.com").trim()
+    const env = (process.env.NEXT_PUBLIC_DD_ENV || process.env.NODE_ENV || "development").trim()
+    const service = (process.env.NEXT_PUBLIC_DD_SERVICE || "homecastr-ui").trim()
     
     if (!clientToken) {
         console.warn("Datadog: Missing client token, initialization skipped.")
