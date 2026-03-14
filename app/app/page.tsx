@@ -1,12 +1,9 @@
 "use client"
 
 import React, { useState, useCallback, Suspense, useEffect, useRef, useMemo } from "react"
-import { MapView } from "@/components/map-view"
-import { VectorMap } from "@/components/vector-map"
 import { ForecastMap } from "@/components/forecast-map"
-import H3Map from "@/components/h3-map"
 import { Legend } from "@/components/legend"
-import { cn, getZoomForRes } from "@/lib/utils"
+import { cn } from "@/lib/utils"
 
 import { SearchBox } from "@/components/search-box"
 import { useFilters } from "@/hooks/use-filters"
@@ -19,8 +16,7 @@ import { AlertCircle, Plus, Minus, RotateCcw, ArrowLeftRight, Copy, Terminal, Ac
 import { useSearchParams, useRouter } from "next/navigation"
 import { geocodeAddress, reverseGeocode } from "@/app/actions/geocode"
 
-import { cellToLatLng, latLngToCell } from "h3-js"
-import { getH3CellDetails } from "@/app/actions/h3-details"
+// H3 imports removed — forecast-map uses geo levels (state/zcta/tract/tabblock/parcel) instead
 // import { ExplainerPopup } from "@/components/explainer-popup"  // Deactivated — replaced by OnboardingIntro
 import { OnboardingIntro } from "@/components/onboarding-intro"
 import { ChatPanel, type MapAction, type ChatPanelHandle } from "@/components/chat-panel"

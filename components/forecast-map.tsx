@@ -1204,7 +1204,6 @@ export function ForecastMap({
                     enableHighAccuracy: true
                 },
                 trackUserLocation: true,
-                showUserHeading: true
             }),
             'bottom-right'
         )
