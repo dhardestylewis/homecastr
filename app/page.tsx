@@ -2,22 +2,28 @@ import Link from "next/link"
 import { ArrowRight } from "lucide-react"
 import { HomecastrLogo } from "@/components/homecastr-logo"
 import { HeroForecastBar } from "@/components/home/hero-product-preview"
+import { ForecastPreview } from "@/components/home/forecast-preview"
 import { ProofStrip } from "@/components/home/proof-strip"
 import { FeatureGrid } from "@/components/home/feature-grid"
 import { TrustSection } from "@/components/home/trust-section"
 import { EnterpriseSection } from "@/components/home/enterprise-section"
 import { FooterSection } from "@/components/home/footer-section"
+import { fetchForecastPageData } from "@/lib/publishing/forecast-data"
 
-// Featured forecast page to embed - Downtown Flushing, Queens (NYC metro)
-// High-demand market with unlocked forecast data
+// Featured forecast - Downtown Flushing, Queens (NYC metro)
+// High-demand market with real unlocked forecast data
 const FEATURED_FORECAST = {
+  tractGeoid: "36081086500",
   path: "/forecasts/ny/queens/downtown-flushing-tr-086500/home-price-forecast",
   neighborhood: "Downtown Flushing",
   city: "Queens",
   state: "NY"
 }
 
-export default function HomePage() {
+export default async function HomePage() {
+  // Fetch real forecast data for the preview
+  const forecastData = await fetchForecastPageData(FEATURED_FORECAST.tractGeoid)
+  
   return (
     <div className="min-h-screen bg-background text-foreground overflow-auto">
       {/* Navigation - minimal, sticky */}
@@ -81,53 +87,35 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Real forecast page embed - shows the actual product */}
+          {/* Real forecast preview - shows actual data */}
           <div className="mt-4">
             <div className="text-center mb-6">
               <span className="text-sm font-medium text-muted-foreground">A property forecast, not just a number</span>
             </div>
             
-            <div className="max-w-5xl mx-auto px-6 pb-16">
-              {/* Browser chrome wrapper */}
-              <div className="rounded-xl border border-border bg-card overflow-hidden shadow-xl shadow-black/5">
-                {/* Browser chrome */}
-                <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-muted/30">
-                  <div className="flex gap-1.5">
-                    <div className="w-3 h-3 rounded-full bg-border" />
-                    <div className="w-3 h-3 rounded-full bg-border" />
-                    <div className="w-3 h-3 rounded-full bg-border" />
-                  </div>
-                  <div className="flex-1 flex justify-center">
-                    <div className="px-4 py-1 rounded-md bg-muted text-xs text-muted-foreground font-mono">
-                      homecastr.com{FEATURED_FORECAST.path}
-                    </div>
-                  </div>
-                </div>
-                
-                {/* Embedded forecast page */}
-                <div className="relative bg-background">
-                  <iframe
-                    src={FEATURED_FORECAST.path}
-                    title={`${FEATURED_FORECAST.neighborhood} Forecast - ${FEATURED_FORECAST.city}, ${FEATURED_FORECAST.state}`}
-                    className="w-full h-[600px] md:h-[700px] border-0"
-                    loading="lazy"
-                  />
-                  
-                  {/* Gradient fade at bottom to hint there's more */}
-                  <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-card to-transparent pointer-events-none" />
-                </div>
-                
-                {/* CTA to view full page */}
-                <div className="p-4 border-t border-border bg-muted/30 text-center">
+            <div className="max-w-3xl mx-auto px-6 pb-16">
+              {forecastData ? (
+                <ForecastPreview
+                  neighborhoodName={FEATURED_FORECAST.neighborhood}
+                  city={FEATURED_FORECAST.city}
+                  stateAbbr={FEATURED_FORECAST.state}
+                  horizons={forecastData.forecast.horizons}
+                  baselineP50={forecastData.forecast.baselineP50}
+                  forecastUrl={FEATURED_FORECAST.path}
+                />
+              ) : (
+                // Fallback if data fetch fails
+                <div className="rounded-xl border border-border bg-card p-8 text-center">
+                  <p className="text-muted-foreground mb-4">Forecast preview temporarily unavailable</p>
                   <Link
                     href={FEATURED_FORECAST.path}
                     className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline underline-offset-4"
                   >
-                    View full forecast for {FEATURED_FORECAST.neighborhood}
+                    View {FEATURED_FORECAST.neighborhood} forecast
                     <ArrowRight className="w-3.5 h-3.5" />
                   </Link>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         </section>
