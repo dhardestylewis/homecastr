@@ -19,6 +19,7 @@ import { FanChart } from "./fan-chart"
 import { MapTooltip } from "./map-tooltip"
 import { aggregateProperties, aggregateDetails } from "@/lib/utils/aggregation"
 import { useRouter } from "next/navigation"
+import { usePostHog } from 'posthog-js/react'
 
 // Helper to get trend icon
 const getTrendIcon = (trend: "up" | "down" | "stable" | undefined) => {
@@ -375,6 +376,7 @@ export function MapView({
     onConsultAI,
     isEmbedded
 }: MapViewProps) {
+    const posthog = usePostHog()
     // --- STATE & REFS ---
     const basemapCenter = useMemo(() => ({ lng: -73.9857, lat: 40.7484 }), [])
     const [h3Resolution, setH3Resolution] = useState<number>(0)
@@ -1776,6 +1778,14 @@ export function MapView({
             }
 
             setSelectedHexes(newSet)
+
+            if (posthog && hoveredHex) {
+                posthog.capture('map_hex_clicked', {
+                    cell_id: hoveredHex,
+                    selection_mode: isShift ? 'range' : (isMulti ? 'add' : 'replace'),
+                    num_selected: newSet.length
+                })
+            }
 
             // Update Primary & Tooltip Pos
             if (newSet.length > 0) {
