@@ -56,5 +56,13 @@ local_scratch/
 mcp-server/node_modules
 mcp-server/dist
 
-.vercel
-.env*.local
+# Temp debug/diff dumps (prevent root clutter)
+diff*.txt
+git-status*.txt
+autocannon*
+tsc_*.log
+tsc_*.txt
+ts_errors*
+build_output*
+nal_columns.txt
+*.patch
