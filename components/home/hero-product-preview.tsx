@@ -1,23 +1,44 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Search, ArrowRight } from "lucide-react"
 
-// Chips focus the input and pre-fill with a suggested query
-const EXAMPLE_CHIPS = [
-  { label: "What could my house be worth in 2030?", placeholder: "123 Main St, Austin TX" },
-  { label: "Show downside vs upside", placeholder: "456 Oak Ave, Denver CO" },
-  { label: "How is my neighborhood expected to perform?", placeholder: "789 Pine St, Seattle WA" },
+// Prompt chips prefill with the question text
+const PROMPT_CHIPS = [
+  "What could my house be worth in 2030?",
+  "Show me downside vs upside scenarios",
+  "How is my neighborhood expected to perform?",
+]
+
+// Animated placeholder examples that rotate
+const EXAMPLE_ADDRESSES = [
+  "123 Main St, Austin TX",
+  "456 Oak Ave, Brooklyn NY", 
+  "789 Pine St, Seattle WA",
+  "1010 Elm Blvd, Denver CO",
+  "555 Maple Dr, Portland OR",
 ]
 
 export function HeroForecastBar() {
   const [query, setQuery] = useState("")
+  const [placeholderIndex, setPlaceholderIndex] = useState(0)
+  const [isTyping, setIsTyping] = useState(false)
   const router = useRouter()
+
+  // Rotate placeholder every 3 seconds when not typing
+  useEffect(() => {
+    if (isTyping || query) return
+    
+    const interval = setInterval(() => {
+      setPlaceholderIndex((prev) => (prev + 1) % EXAMPLE_ADDRESSES.length)
+    }, 3000)
+    
+    return () => clearInterval(interval)
+  }, [isTyping, query])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    // Route to the app with the query as a search param
     if (query.trim()) {
       router.push(`/app?q=${encodeURIComponent(query.trim())}`)
     } else {
@@ -25,27 +46,44 @@ export function HeroForecastBar() {
     }
   }
 
-  const handleChipClick = (placeholder: string) => {
-    // Focus the input and set placeholder address as the query
-    setQuery(placeholder)
+  const handleChipClick = (promptText: string) => {
+    // Prefill with the prompt text and focus input
+    setQuery(promptText)
     const input = document.getElementById("forecast-input") as HTMLInputElement
     input?.focus()
-    input?.select()
   }
+
+  const handleFocus = () => setIsTyping(true)
+  const handleBlur = () => setIsTyping(false)
 
   return (
     <div className="max-w-2xl mx-auto w-full">
-      {/* Main input */}
+      {/* Main input with animated placeholder */}
       <form onSubmit={handleSubmit} className="relative">
         <div className="relative flex items-center">
           <Search className="absolute left-4 w-5 h-5 text-muted-foreground pointer-events-none" />
+          
+          {/* Custom placeholder that animates */}
+          {!query && (
+            <div className="absolute left-12 pointer-events-none flex items-center gap-1 text-muted-foreground/60">
+              <span className="text-muted-foreground">Enter address:</span>
+              <span 
+                key={placeholderIndex}
+                className="animate-fade-in text-muted-foreground/50 italic"
+              >
+                {EXAMPLE_ADDRESSES[placeholderIndex]}
+              </span>
+            </div>
+          )}
+          
           <input
             id="forecast-input"
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Enter an address to get a forecast"
-            className="w-full pl-12 pr-32 py-4 text-base bg-card border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition-all placeholder:text-muted-foreground"
+            onFocus={handleFocus}
+            onBlur={handleBlur}
+            className="w-full pl-12 pr-32 py-4 text-base bg-card border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition-all"
           />
           <button
             type="submit"
@@ -57,16 +95,16 @@ export function HeroForecastBar() {
         </div>
       </form>
 
-      {/* Example chips */}
+      {/* Prompt chips - prefill with the question text */}
       <div className="flex flex-wrap items-center gap-2 mt-4 justify-center">
         <span className="text-xs text-muted-foreground">Try:</span>
-        {EXAMPLE_CHIPS.map((chip) => (
+        {PROMPT_CHIPS.map((prompt) => (
           <button
-            key={chip.label}
-            onClick={() => handleChipClick(chip.placeholder)}
+            key={prompt}
+            onClick={() => handleChipClick(prompt)}
             className="px-3 py-1.5 text-xs font-medium text-muted-foreground bg-muted/50 border border-border rounded-full hover:bg-muted hover:text-foreground transition-colors"
           >
-            {chip.label}
+            {prompt}
           </button>
         ))}
       </div>
