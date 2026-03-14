@@ -27,15 +27,16 @@ const PROMPT_CHIPS = [
 // Featured forecast page for demo purposes - queries route here with assistant
 const FEATURED_FORECAST = "/forecasts/ny/queens/downtown-flushing-tr-086500/home-price-forecast"
 
-// Detect if input looks like an address vs a question
-function looksLikeAddress(text: string): boolean {
-  // Contains numbers + letters = likely address
+// Detect if input looks like an address/location vs a question
+function looksLikeLocation(text: string): boolean {
   // Contains "?" = definitely question
   // Starts with common question words = question
   if (text.includes("?")) return false
   if (/^(what|how|show|why|when|can|will|is|are|should)/i.test(text.trim())) return false
-  if (/\d+.*[a-zA-Z]/.test(text) || /[a-zA-Z].*\d+/.test(text)) return true
-  return false
+  
+  // If it's not explicitly a question, treat it as a location lookup
+  // This allows "Austin", "New York", "123 Main St", etc.
+  return true
 }
 
 export function HeroForecastBar() {
@@ -71,8 +72,8 @@ export function HeroForecastBar() {
         return
       }
       
-      // Only fetch address suggestions if it looks like an address
-      if (!looksLikeAddress(debouncedQuery)) {
+      // Only fetch address suggestions if it looks like a location/address
+      if (!looksLikeLocation(debouncedQuery)) {
         setSuggestions([])
         return
       }
@@ -150,8 +151,8 @@ export function HeroForecastBar() {
       return
     }
     
-    // If it looks like an address, try to geocode and find the forecast
-    if (looksLikeAddress(trimmedQuery)) {
+    // If it looks like a location, try to geocode and find the forecast
+    if (looksLikeLocation(trimmedQuery)) {
       setIsLoading(true)
       try {
         const geocodeResult = await geocodeAddress(trimmedQuery)
@@ -224,7 +225,7 @@ export function HeroForecastBar() {
     setTimeout(() => setShowSuggestions(false), 200)
   }
 
-  const isAddress = looksLikeAddress(query)
+  const isLocation = looksLikeLocation(query)
 
   return (
     <div className="max-w-2xl mx-auto w-full">

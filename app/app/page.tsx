@@ -49,7 +49,7 @@ function DashboardContent() {
   })
   const [hasManuallySetYear, setHasManuallySetYear] = useState(false)
   const [isUsingMockData, setIsUsingMockData] = useState(false)
-  const [searchBarValue, setSearchBarValue] = useState<string>("")
+  const [searchBarValue, setSearchBarValue] = useState<string>(searchParams.get("q") || "")
   const [mobileSelectionMode, setMobileSelectionMode] = useState<'replace' | 'add' | 'range'>('replace')
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const [mobileActionsOpen, setMobileActionsOpen] = useState(false)
