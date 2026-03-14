@@ -3,7 +3,8 @@
 import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Search, ArrowRight, MapPin, MessageSquare } from "lucide-react"
-import { getAutocompleteSuggestions, type AutocompleteResult } from "@/app/actions/geocode"
+import { getAutocompleteSuggestions, type AutocompleteResult, geocodeAddress } from "@/app/actions/geocode"
+import { addressToForecast } from "@/app/actions/address-to-forecast"
 import { useDebounce } from "@/hooks/use-debounce"
 
 // Animated placeholder examples - mix of addresses and questions
@@ -43,6 +44,7 @@ export function HeroForecastBar() {
   const [suggestions, setSuggestions] = useState<AutocompleteResult[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(-1)
+  const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
   const inputRef = useRef<HTMLInputElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -102,16 +104,32 @@ export function HeroForecastBar() {
     inputRef.current?.focus()
   }
 
-  const handleSelectSuggestion = (suggestion: AutocompleteResult) => {
+  const handleSelectSuggestion = async (suggestion: AutocompleteResult) => {
     setQuery(suggestion.displayName)
     setShowSuggestions(false)
     setSuggestions([])
-    // Route to featured forecast with the address
-    // TODO: Use lat/lng to look up the correct tract forecast
-    router.push(`${FEATURED_FORECAST}?q=${encodeURIComponent(suggestion.displayName)}`)
+    setIsLoading(true)
+    
+    try {
+      // Look up the tract from lat/lng and get the forecast URL
+      const result = await addressToForecast(suggestion.lat, suggestion.lng)
+      
+      if (result.success && result.forecastUrl) {
+        router.push(result.forecastUrl)
+      } else {
+        // Fallback to featured forecast with error message
+        console.error("[handleSelectSuggestion]", result.error)
+        router.push(`${FEATURED_FORECAST}?q=${encodeURIComponent(suggestion.displayName)}`)
+      }
+    } catch (error) {
+      console.error("[handleSelectSuggestion] Error:", error)
+      router.push(`${FEATURED_FORECAST}?q=${encodeURIComponent(suggestion.displayName)}`)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setShowSuggestions(false)
     
@@ -121,12 +139,33 @@ export function HeroForecastBar() {
       return
     }
     
-    // Route to featured forecast page with query param for the assistant
-    if (query.trim()) {
-      router.push(`${FEATURED_FORECAST}?q=${encodeURIComponent(query.trim())}`)
-    } else {
+    const trimmedQuery = query.trim()
+    if (!trimmedQuery) {
       router.push(FEATURED_FORECAST)
+      return
     }
+    
+    // If it looks like an address, try to geocode and find the forecast
+    if (looksLikeAddress(trimmedQuery)) {
+      setIsLoading(true)
+      try {
+        const geocodeResult = await geocodeAddress(trimmedQuery)
+        if (geocodeResult) {
+          const forecastResult = await addressToForecast(geocodeResult.lat, geocodeResult.lng)
+          if (forecastResult.success && forecastResult.forecastUrl) {
+            router.push(forecastResult.forecastUrl)
+            return
+          }
+        }
+      } catch (error) {
+        console.error("[handleSubmit] Geocode error:", error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    
+    // For questions or failed address lookups, route to featured forecast with query
+    router.push(`${FEATURED_FORECAST}?q=${encodeURIComponent(trimmedQuery)}`)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -197,10 +236,20 @@ export function HeroForecastBar() {
           />
           <button
             type="submit"
-            className="absolute right-2 inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+            disabled={isLoading}
+            className="absolute right-2 inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
           >
-            {isAddress ? "Get Forecast" : "Ask"}
-            <ArrowRight className="w-4 h-4" />
+            {isLoading ? (
+              <>
+                <span className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
+                Loading...
+              </>
+            ) : (
+              <>
+                {isAddress ? "Get Forecast" : "Ask"}
+                <ArrowRight className="w-4 h-4" />
+              </>
+            )}
           </button>
         </div>
 

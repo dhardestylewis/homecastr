@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server"
+import { getSupabaseServerClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
 
 // POST /api/threads - Create or update a thread
@@ -6,7 +6,7 @@ export async function POST(request: Request) {
   try {
     const { threadId, messages, forecastContext } = await request.json()
     
-    const supabase = await createClient()
+    const supabase = await getSupabaseServerClient()
     
     if (threadId) {
       // Update existing thread

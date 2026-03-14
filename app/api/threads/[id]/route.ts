@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server"
+import { getSupabaseServerClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
 
 // GET /api/threads/[id] - Load a thread by ID
@@ -9,7 +9,7 @@ export async function GET(
   try {
     const { id } = await params
     
-    const supabase = await createClient()
+    const supabase = await getSupabaseServerClient()
     
     const { data, error } = await supabase
       .from("chat_threads")
