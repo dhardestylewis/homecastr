@@ -520,14 +520,14 @@ export function ForecastMap({
     }, [selectedId, selectedCoords])
 
 
-    // Comparison hover coordinates (separate from tooltipCoords which stays pinned)
-    const [comparisonCoords, setComparisonCoords] = useState<[number, number] | null>(null)
+    // Hover coordinates (used for reverse geocoding the hovered feature)
+    const [hoverCoords, setHoverCoords] = useState<[number, number] | null>(null)
 
-    // Reverse geocode comparison feature when hovering — keyed on feature ID, not coords
+    // Reverse geocode hovered feature — keyed on feature ID, not coords
     useEffect(() => {
         const compId = tooltipData?.properties?.id
-        if (!compId || compId === selectedId || !comparisonCoords) {
-            setComparisonGeocodedName(null)
+        if (!compId || !hoverCoords) {
+            setHoverGeocodedName(null)
             return
         }
         const map = mapRef.current
@@ -537,24 +537,24 @@ export function ForecastMap({
         if (geoLevel === "state") {
             const fips = compId?.padStart(2, '0') || ''
             const name = STATE_FIPS_NAMES[fips]
-            setComparisonGeocodedName(name || `State ${fips}`)
+            setHoverGeocodedName(name || `State ${fips}`)
             return
         }
 
         if (geoLevel === "zcta") {
             const zip = compId?.length === 5 ? compId : compId?.slice(-5)
-            setComparisonGeocodedName(`ZIP ${zip}`)
+            setHoverGeocodedName(`ZIP ${zip}`)
             return
         }
 
         // Cache by feature ID — hovering within same feature never re-fetches
         const cacheKey = `${geoLevel}:${compId}`
         if (geocodeCacheRef.current[cacheKey]) {
-            setComparisonGeocodedName(geocodeCacheRef.current[cacheKey])
+            setHoverGeocodedName(geocodeCacheRef.current[cacheKey])
             return
         }
-        setComparisonGeocodedName(null)
-        const [lat, lng] = comparisonCoords
+        setHoverGeocodedName(null)
+        const [lat, lng] = hoverCoords
         fetch(`/api/geocode?lat=${lat}&lng=${lng}&level=${geoLevel}`)
             .then(r => r.ok ? r.json() : null)
             .then(data => {
@@ -579,7 +579,7 @@ export function ForecastMap({
                 }
                 if (name) {
                     geocodeCacheRef.current[cacheKey] = name
-                    setComparisonGeocodedName(name)
+                    setHoverGeocodedName(name)
                 }
             })
             .catch(() => { })
@@ -616,7 +616,7 @@ export function ForecastMap({
     // Comparison state: hover overlay when a feature is selected
     const [comparisonData, setComparisonData] = useState<FanChartData | null>(null)
     const [comparisonHistoricalValues, setComparisonHistoricalValues] = useState<number[] | undefined>(undefined)
-    const [comparisonGeocodedName, setComparisonGeocodedName] = useState<string | null>(null)
+    const [hoverGeocodedName, setHoverGeocodedName] = useState<string | null>(null)
     const comparisonFetchRef = useRef<string | null>(null)
     const comparisonTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const hoverDetailTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -1031,9 +1031,9 @@ export function ForecastMap({
             .catch(() => { /* fallback to hardcoded */ })
     }, [horizonM, originYear, schema])
 
-    // Color ramp: growth mode uses growth_pct (% change from baseline).
-    // Zero-centered: negative growth → blue, zero → neutral white, positive → amber/red.
-    // Breakpoints are data-driven from actual growth_pct distributions per geo level.
+    // Color ramp: growth modes use a ZERO-CENTERED diverging palette.
+    // Blue = declining, White = no change, Amber/Red = appreciating.
+    // 0 is ALWAYS white — data-driven p5/p95 only scale the extremes.
     // Value mode uses absolute p50 with fixed percentile breakpoints.
     const buildFillColor = (colorMode?: string): any => {
         if (colorMode === "growth") {
@@ -1048,50 +1048,42 @@ export function ForecastMap({
                 : null
 
             if (levelStats && levelStats.count > 10) {
-                // Data-driven breakpoints: median (p50) is neutral, deviations show color
-                // Nominal values mean median growth ≠ 0 (includes inflation)
-                // Must enforce strictly ascending for MapLibre (percentiles can be equal
-                // when distribution is tight, e.g. at state aggregation level)
+                // ZERO-CENTERED: 0% is always white. p5/p95 set the range of
+                // the blue/red extremes. Symmetric extent = max(|p5|, |p95|)
+                // so the scale never makes positive growth look blue.
                 const eps = 0.01
-                const raw = [
-                    levelStats.p5 ?? -5,
-                    levelStats.p25 ?? -2,
-                    levelStats.p50 ?? 0,
-                    levelStats.p75 ?? 5,
-                    levelStats.p95 ?? 20
-                ]
-                // Walk forward ensuring each value is strictly greater than previous
-                for (let i = 1; i < raw.length; i++) {
-                    if (raw[i] <= raw[i - 1]) raw[i] = raw[i - 1] + eps
-                }
+                const absMax = Math.max(Math.abs(levelStats.p5 ?? -5), Math.abs(levelStats.p95 ?? 20), eps)
+                // Build symmetric 5-stop scale around 0
+                const negDeep = -absMax
+                const negMid  = -absMax * 0.4
+                const posMid  =  absMax * 0.4
+                const posDeep =  absMax
                 return [
                     "interpolate",
                     ["linear"],
                     ["coalesce", ["to-number", ["get", "growth_pct"], 0], 0],
-                    raw[0], "#3b82f6",     // bottom 5% → deep blue
-                    raw[1], "#93c5fd",     // below avg → light blue
-                    raw[2], "#f8f8f8",     // median → neutral white
-                    raw[3], "#f59e0b",     // above avg → amber
-                    raw[4], "#ef4444",     // top 5% → deep red
+                    negDeep, "#2563eb",     // deep blue  (depreciation)
+                    negMid,  "#93c5fd",     // light blue
+                    0,       "#f8f8f8",     // zero = neutral white (ALWAYS)
+                    posMid,  "#f59e0b",     // amber      (appreciation)
+                    posDeep, "#dc2626",     // deep red   (strong appreciation)
                 ]
             }
 
             // Fallback: hardcoded formula if stats haven't loaded yet
+            // ALSO zero-centered — matches data-driven path semantics
             const yrsFromPresent = Math.max(Math.abs(year - presentYear), 1)
             const zoomScale = zoom <= 7 ? 0.3 : zoom <= 11 ? 0.5 : zoom <= 14 ? 0.8 : 1.0
-            const deepNeg = (-5 - 4 * yrsFromPresent) * zoomScale
-            const slightNeg = -2 * yrsFromPresent * zoomScale
-            const slightPos = 5 * yrsFromPresent * zoomScale
-            const hotPos = 20 * yrsFromPresent * zoomScale
+            const extent = (5 + 4 * yrsFromPresent) * zoomScale
             return [
                 "interpolate",
                 ["linear"],
                 ["coalesce", ["to-number", ["get", "growth_pct"], 0], 0],
-                deepNeg, "#3b82f6",
-                slightNeg, "#93c5fd",
-                0, "#f8f8f8",
-                slightPos, "#f59e0b",
-                hotPos, "#ef4444",
+                -extent,       "#2563eb",
+                -extent * 0.4, "#93c5fd",
+                0,             "#f8f8f8",
+                extent * 0.4,  "#f59e0b",
+                extent,        "#dc2626",
             ]
         }
         if (colorMode === "growth_dollar") {
@@ -1102,13 +1094,21 @@ export function ForecastMap({
                 ["coalesce", ["get", "p50"], ["get", "value"], 0],
                 ["coalesce", ["get", "baseline_value"], ["get", "value"], 0]
             ]
+            // 5-stop scale with asymmetric positive range (appreciation is
+            // typically larger in $ than depreciation for US real estate).
+            // +$30k is light amber; +$80k+ is deep red.
+            const negDeep = -10000 * yrsFromPresent
+            const posLight = 10000 * yrsFromPresent
+            const posDeep  = 50000 * yrsFromPresent
             return [
                 "interpolate",
                 ["linear"],
                 diff,
-                -10000 * yrsFromPresent, "#3b82f6", // Deep Blue
-                0, "#f8f8f8",      // Whiteish
-                30000 * yrsFromPresent, "#ef4444"  // Redish
+                negDeep,  "#2563eb",     // deep blue  (losing value)
+                negDeep * 0.3, "#93c5fd", // light blue
+                0,        "#f8f8f8",     // zero = neutral white
+                posLight, "#f59e0b",     // amber (moderate gain)
+                posDeep,  "#dc2626",     // deep red   (strong gain)
             ]
         }
         return [
@@ -1602,7 +1602,7 @@ export function ForecastMap({
                     // Locked mode: DON'T move tooltip (it stays pinned), but DO update
                     // tooltipData.properties with the hovered feature so comparison works.
                     setTooltipData(prev => prev ? { ...prev, properties: feature.properties } : prev)
-                    setComparisonCoords([e.lngLat.lat, e.lngLat.lng])
+                    setHoverCoords([e.lngLat.lat, e.lngLat.lng])
                     return
                 }
 
@@ -1621,6 +1621,7 @@ export function ForecastMap({
                 // Only update coords (used for StreetView) when the feature changes, not every pixel
                 if (isNewFeature) {
                     setTooltipCoords([e.lngLat.lat, e.lngLat.lng])
+                    setHoverCoords([e.lngLat.lat, e.lngLat.lng])
                 }
             })
 
@@ -2448,10 +2449,16 @@ export function ForecastMap({
     useEffect(() => {
         if (!isLoaded || !mapRef.current) return
         const map = mapRef.current
+        
+        let rafId: number
+        
         const applyColor = () => {
             const newColor = buildFillColor(filters.colorMode)
+            const activeSuffix = (map as any)._activeSuffix || "a"
             for (const lvl of GEO_LEVELS) {
-                for (const suffix of ["a", "b"]) {
+                // Only repaint the active source suffix to halve the work.
+                // The hidden source gets repainted when it becomes visible in the year-swap effect.
+                for (const suffix of [activeSuffix]) {
                     const layerId = `forecast-fill-${lvl.name}-${suffix}`
                     if (map.getLayer(layerId)) {
                         map.setPaintProperty(layerId, "fill-color", newColor)
@@ -2459,13 +2466,20 @@ export function ForecastMap({
                 }
             }
         }
-        applyColor()
+        
+        // Defer paint to next frame so the browser can paint the button's active state first (INP fix)
+        rafId = requestAnimationFrame(applyColor)
 
         // Re-apply when zoom changes (zoom-dependent scaling)
         if (filters.colorMode === "growth") {
             map.on("moveend", applyColor)
-            return () => { map.off("moveend", applyColor) }
+            return () => { 
+                cancelAnimationFrame(rafId)
+                map.off("moveend", applyColor) 
+            }
         }
+        
+        return () => cancelAnimationFrame(rafId)
     }, [filters.colorMode, isLoaded, growthStats])
 
     // UPDATE YEAR — Seamless A/B swap (same pattern as vector-map.tsx)
@@ -2484,14 +2498,17 @@ export function ForecastMap({
         // Apply color logic to all fill layers
         const fillColor = buildFillColor(filters.colorMode)
 
-        for (const lvl of GEO_LEVELS) {
-            ;["a", "b"].forEach((s) => {
-                const layerId = `forecast-fill-${lvl.name}-${s}`
-                if (map.getLayer(layerId)) {
-                    map.setPaintProperty(layerId, "fill-color", fillColor)
-                }
-            })
-        }
+        // Defer paint to next frame so the browser doesn't block (INP fix)
+        const rafId = requestAnimationFrame(() => {
+            for (const lvl of GEO_LEVELS) {
+                ;["a", "b"].forEach((s) => {
+                    const layerId = `forecast-fill-${lvl.name}-${s}`
+                    if (map.getLayer(layerId)) {
+                        map.setPaintProperty(layerId, "fill-color", fillColor)
+                    }
+                })
+            }
+        })
 
         // Seamless swap
         let swapCompleted = false
@@ -2565,6 +2582,7 @@ export function ForecastMap({
         map.on("sourcedata", onSourceData)
 
         return () => {
+            cancelAnimationFrame(rafId)
             map.off("sourcedata", onSourceData)
         }
     }, [year, isLoaded, filters.colorMode])
@@ -2602,6 +2620,7 @@ export function ForecastMap({
     const displayPos = selectedId && fixedTooltipPos ? fixedTooltipPos : tooltipData
     // When locked, show the SELECTED feature's properties (not hover)
     const displayProps = selectedId && selectedProps ? selectedProps : tooltipData?.properties
+    const displayGeocodedName = selectedId ? geocodedName : hoverGeocodedName
 
     // Effective y-domain: extend viewport range ONLY when selected/hovered
     // feature's P50 median or historical values fall outside. P10/P90 uncertainty
@@ -2907,8 +2926,8 @@ export function ForecastMap({
                             {/* Mobile Location Header */}
                             <div className="px-3 flex flex-col justify-center">
                                 <div className="font-semibold text-[11px] text-foreground truncate flex items-center gap-1.5">
-                                    {geocodedName || displayProps.id}
-                                    {geocodedName && !geocodedName.startsWith('ZIP') && (
+                                    {displayGeocodedName || displayProps.id}
+                                    {displayGeocodedName && !displayGeocodedName.startsWith('ZIP') && (
                                         <span className="font-mono text-[9px] text-muted-foreground/60 font-normal">
                                             {displayProps.id}
                                         </span>
@@ -2918,7 +2937,7 @@ export function ForecastMap({
                                     <div className="mt-0.5 flex flex-wrap items-center gap-1">
                                         {comparisonData && tooltipData?.properties?.id && tooltipData.properties.id !== selectedId && (
                                             <span className="px-1 py-0.5 bg-lime-500/20 text-lime-400 text-[8px] font-semibold uppercase tracking-wider rounded inline-flex">
-                                                vs {comparisonGeocodedName && comparisonGeocodedName !== geocodedName ? comparisonGeocodedName : tooltipData.properties.id}
+                                                vs {hoverGeocodedName && hoverGeocodedName !== geocodedName ? hoverGeocodedName : tooltipData.properties.id}
                                             </span>
                                         )}
                                         {pinnedComparisons.map((pc) => {
@@ -3003,9 +3022,9 @@ export function ForecastMap({
                                     </div>
                                 </div>
                                 <div className="font-semibold text-xs text-foreground truncate">
-                                    {geocodedName || displayProps.id}
+                                    {displayGeocodedName || displayProps.id}
                                 </div>
-                                {geocodedName && !geocodedName.startsWith('ZIP') && (
+                                {displayGeocodedName && !displayGeocodedName.startsWith('ZIP') && (
                                     <div className="font-mono text-[9px] text-muted-foreground/60 truncate">
                                         {displayProps.id}
                                     </div>
@@ -3013,7 +3032,7 @@ export function ForecastMap({
                                 {comparisonData && tooltipData?.properties?.id && tooltipData.properties.id !== selectedId && (
                                     <div className="mt-1 flex items-center gap-1">
                                         <span className="px-1.5 py-0.5 bg-lime-500/20 text-lime-400 text-[8px] font-semibold uppercase tracking-wider rounded">
-                                            vs {comparisonGeocodedName && comparisonGeocodedName !== geocodedName ? comparisonGeocodedName : tooltipData.properties.id}
+                                            vs {hoverGeocodedName && hoverGeocodedName !== geocodedName ? hoverGeocodedName : tooltipData.properties.id}
                                         </span>
                                     </div>
                                 )}
