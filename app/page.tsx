@@ -35,13 +35,12 @@ const FALLBACK_DATA: FeaturedForecastData = {
 }
 
 export default async function HomePage() {
-  // Fetch real forecast data from Supabase
+  // Fetch real forecast data from Supabase - use fallback if fetch fails
   let forecastData: FeaturedForecastData
   try {
     const data = await fetchFeaturedForecast()
     forecastData = data || FALLBACK_DATA
-  } catch (error) {
-    console.error("Failed to fetch featured forecast:", error)
+  } catch {
     forecastData = FALLBACK_DATA
   }
 

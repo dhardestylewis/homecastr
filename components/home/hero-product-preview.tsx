@@ -206,6 +206,11 @@ interface MockForecastCardProps {
 export function MockForecastCard({ data }: MockForecastCardProps) {
   const formatCurrency = (v: number) => `$${v.toLocaleString()}`
   
+  // Guard against missing or empty data
+  if (!data || !data.horizons || data.horizons.length === 0) {
+    return null
+  }
+  
   const lastHorizon = data.horizons[data.horizons.length - 1]
   const horizonYear = lastHorizon.year
   const p90 = lastHorizon.p90

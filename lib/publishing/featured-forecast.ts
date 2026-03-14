@@ -59,14 +59,28 @@ export async function fetchFeaturedForecast(): Promise<FeaturedForecastData | nu
 
         if (!tractInfo) continue
 
-        // Get forecast data with all horizons
-        const { data: forecastData } = await supabase
+        // Get forecast data with all horizons - try 2025 first, fall back to 2024
+        let { data: forecastData } = await supabase
           .schema(SCHEMA as any)
           .from("metrics_tract_forecast")
           .select("horizon_m, p10, p25, p50, p75, p90, origin_year")
           .eq("tract_geoid20", featured.geoid)
           .eq("series_kind", "forecast")
+          .eq("origin_year", 2025)
           .order("horizon_m", { ascending: true })
+        
+        // Fallback to 2024 origin year
+        if (!forecastData || forecastData.length === 0) {
+          const fallback = await supabase
+            .schema(SCHEMA as any)
+            .from("metrics_tract_forecast")
+            .select("horizon_m, p10, p25, p50, p75, p90, origin_year")
+            .eq("tract_geoid20", featured.geoid)
+            .eq("series_kind", "forecast")
+            .eq("origin_year", 2024)
+            .order("horizon_m", { ascending: true })
+          forecastData = fallback.data
+        }
 
         if (!forecastData || forecastData.length === 0) continue
 
@@ -141,13 +155,27 @@ export async function fetchRandomFeaturedForecast(): Promise<FeaturedForecastDat
 
       if (!tractInfo) continue
 
-      const { data: forecastData } = await supabase
+      let { data: forecastData } = await supabase
         .schema(SCHEMA as any)
         .from("metrics_tract_forecast")
         .select("horizon_m, p10, p25, p50, p75, p90, origin_year")
         .eq("tract_geoid20", featured.geoid)
         .eq("series_kind", "forecast")
+        .eq("origin_year", 2025)
         .order("horizon_m", { ascending: true })
+      
+      // Fallback to 2024
+      if (!forecastData || forecastData.length === 0) {
+        const fallback = await supabase
+          .schema(SCHEMA as any)
+          .from("metrics_tract_forecast")
+          .select("horizon_m, p10, p25, p50, p75, p90, origin_year")
+          .eq("tract_geoid20", featured.geoid)
+          .eq("series_kind", "forecast")
+          .eq("origin_year", 2024)
+          .order("horizon_m", { ascending: true })
+        forecastData = fallback.data
+      }
 
       if (!forecastData || forecastData.length === 0) continue
 
