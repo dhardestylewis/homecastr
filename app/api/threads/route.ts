@@ -1,7 +1,7 @@
 import { getSupabaseServerClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
 
-// POST /api/threads - Create or update a thread
+// POST /api/threads - Create or update a chat thread
 export async function POST(request: Request) {
   try {
     const { threadId, messages, forecastContext } = await request.json()
