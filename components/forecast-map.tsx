@@ -2138,7 +2138,6 @@ export function ForecastMap({
             if (moveEndTimerRef.current) { clearTimeout(moveEndTimerRef.current); moveEndTimerRef.current = null }
             if (studentFetchRef.current) { clearTimeout(studentFetchRef.current); studentFetchRef.current = null }
             if (studentAbortRef.current) { studentAbortRef.current.abort(); studentAbortRef.current = null }
-            if (animationFrameRef.current) { cancelAnimationFrame(animationFrameRef.current); animationFrameRef.current = null }
             map.remove()
         }
     }, []) // Init once
