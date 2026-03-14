@@ -3,7 +3,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin"
 
 const TILE_HEADERS = {
     "Content-Type": "application/vnd.mapbox-vector-tile",
-    "Cache-Control": "public, max-age=300",  // 5 min cache for successful tiles
+    "Cache-Control": "public, max-age=300, s-maxage=86400, stale-while-revalidate=86400",  // 5 min browser cache, 24 hr CDN cache
     "Access-Control-Allow-Origin": "*",
 } as const
 

@@ -147,7 +147,7 @@ export async function GET(request: Request) {
 
             return NextResponse.json(
                 { levels: result, originYear, horizonM, mode: "growth" },
-                { headers: { "Cache-Control": "public, max-age=86400" } }
+                { headers: { "Cache-Control": "public, max-age=86400, s-maxage=86400, stale-while-revalidate=43200" } }
             )
         }
 
@@ -197,7 +197,7 @@ export async function GET(request: Request) {
         }
 
         return NextResponse.json(stats, {
-            headers: { "Cache-Control": "public, max-age=86400" },
+            headers: { "Cache-Control": "public, max-age=86400, s-maxage=86400, stale-while-revalidate=43200" },
         })
     } catch (e: any) {
         console.error("[FORECAST-STATS] Error:", e)
