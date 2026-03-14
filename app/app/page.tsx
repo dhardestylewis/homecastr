@@ -822,25 +822,25 @@ function DashboardContent() {
           </div>
         )}
 
+        {/* ═══ MOBILE TOP LEGEND ═══ */}
+        {!searchParams.has("embedded") && isMobileViewport && !mobileFiltersOpen && (
+          <div className="fixed top-4 right-3 z-[60] flex flex-col gap-2 pointer-events-none">
+            <Legend
+              className="w-[260px] max-w-[calc(100vw-24px)] pointer-events-auto bg-background/90 backdrop-blur-md border border-border/50 shadow-md opacity-95"
+              colorMode={filters.colorMode}
+              year={currentYear}
+              originYear={pageOriginYear}
+              zoom={mapState.zoom}
+            />
+          </div>
+        )}
+
         {/* ═══ MOBILE BOTTOM BAR — always fixed at bottom, ONE element ═══ */}
         {!searchParams.has("embedded") && isMobileViewport && (
           <div 
             className="fixed left-0 right-0 z-[10000] flex flex-col pointer-events-none transition-all duration-150 ease-out"
             style={{ bottom: `${keyboardHeight}px` }}
           >
-            {/* Always visible minimal legend (no toggles) if filters are closed */}
-            {!mobileFiltersOpen && (
-              <div className="px-3 pb-2 w-full flex justify-end pointer-events-none">
-                <Legend
-                  className="w-full max-w-[280px] bg-background/90 backdrop-blur-md border border-border/50 shadow-md pointer-events-auto opacity-95"
-                  colorMode={filters.colorMode}
-                  year={currentYear}
-                  originYear={pageOriginYear}
-                  zoom={mapState.zoom}
-                />
-              </div>
-            )}
-
             {/* Filters sheet — slides up above the bar */}
             {mobileFiltersOpen && (
               <div className="glass-panel border-t border-border/50 px-4 py-3 space-y-3 animate-in slide-in-from-bottom-4 duration-200 pointer-events-auto shadow-[0_-8px_30px_rgba(0,0,0,0.12)] bg-background/95 backdrop-blur-xl">
