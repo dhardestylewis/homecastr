@@ -76,7 +76,7 @@ function MiniFanChart({ horizons }: MiniFanChartProps) {
       {/* Year labels */}
       {years.map((year, i) => (
         <text
-          key={year}
+          key={`year-${i}`}
           x={xScale(i)}
           y={height - 5}
           textAnchor="middle"
@@ -206,8 +206,16 @@ interface MockForecastCardProps {
 export function MockForecastCard({ data }: MockForecastCardProps) {
   const formatCurrency = (v: number) => `$${v.toLocaleString()}`
   
+  console.log("[v0] MockForecastCard received data:", JSON.stringify({
+    location: data?.location,
+    horizonCount: data?.horizons?.length,
+    firstHorizon: data?.horizons?.[0],
+    lastHorizon: data?.horizons?.[data?.horizons?.length - 1]
+  }, null, 2))
+  
   // Guard against missing or empty data
   if (!data || !data.horizons || data.horizons.length === 0) {
+    console.log("[v0] MockForecastCard: no valid data, returning null")
     return null
   }
   
