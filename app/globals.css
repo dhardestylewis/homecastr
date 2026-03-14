@@ -3,88 +3,123 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* Premium forecast terminal theme - dark mode first, Vercel/Linear inspired */
+/* Premium forecast theme - light mode as "research report with live instrumentation" */
 :root {
-  --background: oklch(0.98 0.005 250);
-  --foreground: oklch(0.15 0.01 250);
-  --card: oklch(0.96 0.005 250);
-  --card-foreground: oklch(0.15 0.01 250);
-  --popover: oklch(0.98 0.005 250);
-  --popover-foreground: oklch(0.15 0.01 250);
-  --primary: oklch(0.25 0.01 250);
-  --primary-foreground: oklch(0.98 0.005 250);
-  --secondary: oklch(0.94 0.005 250);
-  --secondary-foreground: oklch(0.15 0.01 250);
-  --muted: oklch(0.94 0.005 250);
-  --muted-foreground: oklch(0.45 0.01 250);
-  --accent: oklch(0.55 0.18 145);
-  --accent-foreground: oklch(0.98 0.005 250);
-  --destructive: oklch(0.55 0.2 25);
-  --destructive-foreground: oklch(0.98 0.005 250);
-  --border: oklch(0.88 0.005 250);
-  --input: oklch(0.94 0.005 250);
-  --ring: oklch(0.25 0.01 250);
+  /* Neutrals - cool paper feel */
+  --background: oklch(0.975 0.008 240);    /* #F6F9FD - canvas */
+  --foreground: oklch(0.15 0.02 260);      /* #0F172A - primary text */
+  --card: oklch(1 0 0);                     /* #FFFFFF - primary surface */
+  --card-foreground: oklch(0.15 0.02 260);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.15 0.02 260);
+  
+  /* Primary brand - indigo */
+  --primary: oklch(0.52 0.18 265);          /* #4C5FE8 - primary brand indigo */
+  --primary-foreground: oklch(1 0 0);
+  
+  /* Secondary surfaces */
+  --secondary: oklch(0.94 0.01 240);        /* #EEF4FB - secondary surface */
+  --secondary-foreground: oklch(0.15 0.02 260);
+  --muted: oklch(0.91 0.015 240);           /* #E3ECF7 - tertiary surface */
+  --muted-foreground: oklch(0.45 0.02 240); /* #516174 - secondary text */
+  
+  /* Accent - restrained cyan for charts/highlights */
+  --accent: oklch(0.55 0.12 220);           /* #007FAF - secondary accent cyan */
+  --accent-foreground: oklch(1 0 0);
+  
+  /* Destructive/negative */
+  --destructive: oklch(0.55 0.15 10);       /* #C2415D - negative/risk */
+  --destructive-foreground: oklch(1 0 0);
+  
+  /* Borders */
+  --border: oklch(0.87 0.01 240);           /* #D6E0EE - border */
+  --input: oklch(0.82 0.015 240);           /* #B8C8DD - strong border/input */
+  --ring: oklch(0.52 0.18 265);             /* indigo for focus */
 
-  /* Chart colors - quantitative, professional */
-  --chart-negative: oklch(0.55 0.18 25);
-  --chart-low: oklch(0.6 0.12 60);
-  --chart-mid: oklch(0.55 0.08 90);
-  --chart-high: oklch(0.5 0.18 145);
-  --chart-very-high: oklch(0.45 0.2 165);
+  /* Chart colors - analytical, not emotional (P10/P50/P90) */
+  --chart-p10: oklch(0.65 0.04 250);        /* #8A9BB3 - slate for downside */
+  --chart-p50: oklch(0.52 0.18 265);        /* #4C5FE8 - indigo for base case */
+  --chart-p90: oklch(0.55 0.12 220);        /* #007FAF - cyan for upside */
+  
+  /* Legacy chart colors for compatibility */
+  --chart-negative: oklch(0.55 0.15 10);    /* #C2415D */
+  --chart-low: oklch(0.65 0.04 250);
+  --chart-mid: oklch(0.52 0.18 265);
+  --chart-high: oklch(0.55 0.12 220);
+  --chart-very-high: oklch(0.55 0.12 220);
 
-  --warning: oklch(0.75 0.15 85);
-  --warning-foreground: oklch(0.2 0.02 85);
+  /* Semantic - used sparingly */
+  --warning: oklch(0.7 0.14 80);            /* #B97807 - warning/uncertainty */
+  --warning-foreground: oklch(0.2 0.02 80);
+  --success: oklch(0.55 0.14 155);          /* #1C9B63 - positive/success */
+  --success-foreground: oklch(1 0 0);
 
   --radius: 0.5rem;
-  --sidebar: oklch(0.96 0.005 250);
-  --sidebar-foreground: oklch(0.15 0.01 250);
-  --sidebar-primary: oklch(0.25 0.01 250);
-  --sidebar-primary-foreground: oklch(0.98 0.005 250);
-  --sidebar-accent: oklch(0.94 0.005 250);
-  --sidebar-accent-foreground: oklch(0.15 0.01 250);
-  --sidebar-border: oklch(0.88 0.005 250);
-  --sidebar-ring: oklch(0.25 0.01 250);
+  
+  /* Sidebar */
+  --sidebar: oklch(0.94 0.01 240);
+  --sidebar-foreground: oklch(0.15 0.02 260);
+  --sidebar-primary: oklch(0.52 0.18 265);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.91 0.015 240);
+  --sidebar-accent-foreground: oklch(0.15 0.02 260);
+  --sidebar-border: oklch(0.87 0.01 240);
+  --sidebar-ring: oklch(0.52 0.18 265);
 }
 
+/* Dark mode - "forecast terminal" feel */
 .dark {
-  --background: oklch(0.1 0.01 250);
+  --background: oklch(0.12 0.015 250);      /* Deep navy */
   --foreground: oklch(0.95 0.005 250);
-  --card: oklch(0.14 0.01 250);
+  --card: oklch(0.16 0.015 250);
   --card-foreground: oklch(0.95 0.005 250);
-  --popover: oklch(0.14 0.01 250);
+  --popover: oklch(0.16 0.015 250);
   --popover-foreground: oklch(0.95 0.005 250);
-  --primary: oklch(0.98 0.005 250);
-  --primary-foreground: oklch(0.1 0.01 250);
-  --secondary: oklch(0.18 0.01 250);
+  
+  /* Primary stays indigo for brand continuity */
+  --primary: oklch(0.62 0.18 265);          /* Lighter indigo for dark bg */
+  --primary-foreground: oklch(0.12 0.015 250);
+  
+  --secondary: oklch(0.2 0.015 250);
   --secondary-foreground: oklch(0.95 0.005 250);
-  --muted: oklch(0.18 0.01 250);
-  --muted-foreground: oklch(0.6 0.01 250);
-  --accent: oklch(0.65 0.2 145);
-  --accent-foreground: oklch(0.1 0.01 250);
-  --destructive: oklch(0.6 0.2 25);
+  --muted: oklch(0.2 0.015 250);
+  --muted-foreground: oklch(0.65 0.01 250);
+  
+  /* Cyan more prominent in dark mode for charts/accents */
+  --accent: oklch(0.7 0.15 195);            /* Electric cyan */
+  --accent-foreground: oklch(0.12 0.015 250);
+  
+  --destructive: oklch(0.6 0.18 15);
   --destructive-foreground: oklch(0.95 0.005 250);
-  --border: oklch(0.22 0.01 250);
-  --input: oklch(0.18 0.01 250);
-  --ring: oklch(0.98 0.005 250);
+  
+  --border: oklch(0.25 0.015 250);
+  --input: oklch(0.2 0.015 250);
+  --ring: oklch(0.62 0.18 265);
 
-  /* Chart colors for dark mode */
-  --chart-negative: oklch(0.6 0.2 25);
-  --chart-low: oklch(0.65 0.12 60);
-  --chart-mid: oklch(0.6 0.08 90);
-  --chart-high: oklch(0.6 0.2 145);
-  --chart-very-high: oklch(0.55 0.22 165);
+  /* Chart colors for dark mode - more vibrant */
+  --chart-p10: oklch(0.65 0.06 250);
+  --chart-p50: oklch(0.62 0.18 265);
+  --chart-p90: oklch(0.7 0.15 195);
+  
+  --chart-negative: oklch(0.6 0.18 15);
+  --chart-low: oklch(0.65 0.06 250);
+  --chart-mid: oklch(0.62 0.18 265);
+  --chart-high: oklch(0.7 0.15 195);
+  --chart-very-high: oklch(0.7 0.15 195);
 
-  --warning: oklch(0.7 0.15 85);
-  --warning-foreground: oklch(0.15 0.02 85);
+  --warning: oklch(0.72 0.14 80);
+  --warning-foreground: oklch(0.15 0.02 80);
+  --success: oklch(0.6 0.14 155);
+  --success-foreground: oklch(0.12 0.015 250);
 
-  --sidebar: oklch(0.12 0.01 250);
+  --sidebar: oklch(0.14 0.015 250);
   --sidebar-foreground: oklch(0.95 0.005 250);
-  --sidebar-primary: oklch(0.98 0.005 250);
-  --sidebar-primary-foreground: oklch(0.1 0.01 250);
-  --sidebar-accent: oklch(0.18 0.01 250);
+  --sidebar-primary: oklch(0.62 0.18 265);
+  --sidebar-primary-foreground: oklch(0.12 0.015 250);
+  --sidebar-accent: oklch(0.2 0.015 250);
   --sidebar-accent-foreground: oklch(0.95 0.005 250);
-  --sidebar-border: oklch(0.22 0.01 250);
-  --sidebar-ring: oklch(0.98 0.005 250);
+  --sidebar-border: oklch(0.25 0.015 250);
+  --sidebar-ring: oklch(0.62 0.18 265);
 }
 
 @theme inline {
@@ -109,6 +144,9 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-chart-p10: var(--chart-p10);
+  --color-chart-p50: var(--chart-p50);
+  --color-chart-p90: var(--chart-p90);
   --color-chart-negative: var(--chart-negative);
   --color-chart-low: var(--chart-low);
   --color-chart-mid: var(--chart-mid);
@@ -116,6 +154,8 @@
   --color-chart-very-high: var(--chart-very-high);
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
   --radius-sm: calc(var(--radius) - 2px);
   --radius-md: var(--radius);
   --radius-lg: calc(var(--radius) + 2px);
