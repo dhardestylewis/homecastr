@@ -140,32 +140,32 @@ export default function AboutPage() {
               </div>
             </div>
             
-            {/* Institutional logos - grayscale, compact */}
+            {/* Institutional logos - seals/crests for academic credibility */}
             <div className="mt-6 pt-6 border-t border-border">
               <p className="text-xs text-muted-foreground uppercase tracking-wider mb-4">Previous affiliations</p>
-              <div className="flex items-center gap-6 sm:gap-8">
-                {/* TACC */}
-                <div className="flex items-center gap-2">
+              <div className="flex items-center gap-8 sm:gap-10">
+                {/* Columbia - crown/crest */}
+                <div className="flex items-center gap-2" title="Columbia University">
+                  <img 
+                    src="/logos/columbia_crown.svg" 
+                    alt="Columbia University"
+                    className="h-10 w-auto opacity-60 hover:opacity-100 transition-opacity"
+                  />
+                </div>
+                {/* UT Austin - seal */}
+                <div className="flex items-center gap-2" title="University of Texas at Austin">
+                  <img 
+                    src="/logos/ut_austin_seal.svg" 
+                    alt="UT Austin"
+                    className="h-10 w-auto opacity-60 hover:opacity-100 transition-opacity"
+                  />
+                </div>
+                {/* TACC - logo (no seal available) */}
+                <div className="flex items-center gap-2" title="Texas Advanced Computing Center">
                   <img 
                     src="/logos/logo_tacc.png" 
                     alt="Texas Advanced Computing Center"
-                    className="h-8 w-auto grayscale opacity-70 hover:grayscale-0 hover:opacity-100 transition-all"
-                  />
-                </div>
-                {/* Columbia */}
-                <div className="flex items-center gap-2">
-                  <img 
-                    src="/logos/logo_columbia.png" 
-                    alt="Columbia University"
-                    className="h-8 w-auto grayscale opacity-70 hover:grayscale-0 hover:opacity-100 transition-all"
-                  />
-                </div>
-                {/* UT Austin */}
-                <div className="flex items-center gap-2">
-                  <img 
-                    src="/logos/logo_utaustin.png" 
-                    alt="UT Austin"
-                    className="h-8 w-auto grayscale opacity-70 hover:grayscale-0 hover:opacity-100 transition-all"
+                    className="h-8 w-auto grayscale opacity-60 hover:grayscale-0 hover:opacity-100 transition-all"
                   />
                 </div>
               </div>
