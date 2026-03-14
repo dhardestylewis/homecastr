@@ -62,6 +62,8 @@ export interface AutocompleteResult {
     lat: number
     lng: number
     displayName: string
+    resultType: string
+    resultClass: string
     address: {
         road?: string
         suburb?: string
@@ -114,6 +116,8 @@ export async function getAutocompleteSuggestions(query: string): Promise<Autocom
                     lat: Number.parseFloat(item.lat),
                     lng: Number.parseFloat(item.lon),
                     displayName: displayName,
+                    resultType: item.type || "",
+                    resultClass: item.class || "",
                     address: addr
                 }
             })

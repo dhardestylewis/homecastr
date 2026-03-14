@@ -114,7 +114,11 @@ export function HeroForecastBar() {
     
     try {
       // Look up the tract from lat/lng and get the forecast URL
-      const result = await addressToForecast(suggestion.lat, suggestion.lng)
+      const result = await addressToForecast(
+        suggestion.lat,
+        suggestion.lng,
+        { resultType: suggestion.resultType, resultClass: suggestion.resultClass, displayName: suggestion.displayName }
+      )
       
       if (result.success) {
         if (result.routeType === "city_hub" && result.cityHubUrl) {
@@ -292,7 +296,10 @@ export function HeroForecastBar() {
                     ? "bg-muted" 
                     : "hover:bg-muted/50"
                 }`}
-                onClick={() => handleSelectSuggestion(suggestion)}
+                onMouseDown={(e) => {
+                  e.preventDefault() // prevent input blur
+                  handleSelectSuggestion(suggestion)
+                }}
                 onMouseEnter={() => setSelectedIndex(index)}
               >
                 <MapPin className="w-4 h-4 mt-0.5 text-muted-foreground shrink-0" />
