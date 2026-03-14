@@ -13,11 +13,11 @@ const EXAMPLE_PROMPTS = [
   "789 Pine St, Seattle WA",
 ]
 
-// Quick action chips
+// Quick action chips - full questions that prefill the input
 const PROMPT_CHIPS = [
-  { label: "Find my forecast", isAddress: true },
-  { label: "Worth in 2030?", query: "What could my house be worth in 2030?" },
-  { label: "Downside vs upside", query: "Show me downside vs upside scenarios" },
+  "What could my house be worth in 2030?",
+  "Show downside vs upside",
+  "How is my neighborhood expected to perform?",
 ]
 
 export function HeroForecastBar() {
@@ -37,16 +37,10 @@ export function HeroForecastBar() {
     return () => clearInterval(interval)
   }, [isTyping, query])
 
-  const handleChipClick = (chip: typeof PROMPT_CHIPS[0]) => {
-    if (chip.isAddress) {
-      // Focus input for address entry
-      const input = document.getElementById("forecast-input") as HTMLInputElement
-      input?.focus()
-    } else if (chip.query) {
-      // Prefill with the question
-      setQuery(chip.query)
-      router.push(`/app?q=${encodeURIComponent(chip.query)}`)
-    }
+  const handleChipClick = (prompt: string) => {
+    setQuery(prompt)
+    const input = document.getElementById("forecast-input") as HTMLInputElement
+    input?.focus()
   }
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -101,13 +95,14 @@ export function HeroForecastBar() {
 
       {/* Quick action chips */}
       <div className="flex flex-wrap items-center justify-center gap-2 mt-4">
-        {PROMPT_CHIPS.map((chip) => (
+        <span className="text-xs text-muted-foreground">Try:</span>
+        {PROMPT_CHIPS.map((prompt) => (
           <button
-            key={chip.label}
-            onClick={() => handleChipClick(chip)}
+            key={prompt}
+            onClick={() => handleChipClick(prompt)}
             className="px-3 py-1.5 text-xs font-medium text-muted-foreground bg-muted/50 border border-border rounded-full hover:bg-muted hover:text-foreground transition-colors"
           >
-            {chip.label}
+            {prompt}
           </button>
         ))}
       </div>
