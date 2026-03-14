@@ -3,9 +3,10 @@ Fix HCAD aggregation gaps + schema fixes:
 1. Add jurisdiction column to metrics_tabblock_forecast (missing)
 2. Rebuild metrics_zcta_history for HCAD (empty — was never aggregated)
 """
+import os
 import psycopg2
 
-CONN_STR = "postgres://postgres.earrhbknfjnhbudsucch:Every1sentence!@aws-1-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require&options=-c%20statement_timeout%3D600000"
+CONN_STR = os.environ["SUPABASE_DB_URL"]
 SCHEMA = "forecast_20260220_7f31c6e4"
 
 def main():

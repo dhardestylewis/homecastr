@@ -1,0 +1,38 @@
+title = "gitleaks config"
+
+# Detect Supabase connection strings with passwords
+[[rules]]
+id = "supabase-connection-string"
+description = "Supabase connection string with password"
+regex = '''postgres(?:ql)?://[^:]+:[^@]+@[^/]*(?:pooler\.)?supabase\.com'''
+tags = ["supabase", "database"]
+
+# Detect Cloudflare R2 / AWS secret access keys (64-char hex)
+[[rules]]
+id = "cloudflare-r2-secret-key"
+description = "Cloudflare R2 or AWS secret access key"
+regex = '''(?i)(?:secret[_-]?access[_-]?key|R2_SECRET)\s*[=:]\s*["']?[0-9a-f]{64}["']?'''
+tags = ["cloudflare", "r2", "aws"]
+
+# Detect Cloudflare R2 access key IDs (32-char hex)
+[[rules]]
+id = "cloudflare-r2-access-key-id"
+description = "Cloudflare R2 access key ID"
+regex = '''(?i)(?:access[_-]?key[_-]?id|R2_ACCESS)\s*[=:]\s*["']?[0-9a-f]{32}["']?'''
+tags = ["cloudflare", "r2"]
+
+# Detect Supabase JWTs (anon/service role keys)
+[[rules]]
+id = "supabase-jwt-key"
+description = "Supabase JWT key (anon or service role)"
+regex = '''eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.eyJpc3MiOiJzdXBhYmFzZSI[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+'''
+tags = ["supabase", "jwt"]
+
+[allowlist]
+paths = [
+    '''\.env\..*''',
+    '''\.env''',
+    '''node_modules''',
+    '''\.next''',
+    '''\.git''',
+]

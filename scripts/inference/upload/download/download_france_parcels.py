@@ -5,7 +5,7 @@ import os, requests, gzip, json, time
 import geopandas as gpd
 from sqlalchemy import create_engine, text
 
-DB_URL = "postgresql://postgres.earrhbknfjnhbudsucch:Every1sentence!@aws-1-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require"
+DB_URL = os.environ["SUPABASE_DB_URL"]
 
 # Top 10 most populated départements (covers Paris, Lyon, Marseille, etc.)
 DEPTS = ["75", "13", "69", "59", "33", "31", "44", "34", "06", "67"]

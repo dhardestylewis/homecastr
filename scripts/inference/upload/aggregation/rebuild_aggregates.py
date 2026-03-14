@@ -1,8 +1,9 @@
 """Rebuild tract and tabblock history — use direct DB endpoint to avoid pooler timeout."""
+import os
 import psycopg2
 
 # Direct connection (port 5432, no pooler restrictions)
-CONN_STR = "postgres://postgres.earrhbknfjnhbudsucch:Every1sentence!@aws-1-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require&options=-c%20statement_timeout%3D600000"
+CONN_STR = os.environ["SUPABASE_DB_URL"]
 SCHEMA = "forecast_20260220_7f31c6e4"
 
 def main():

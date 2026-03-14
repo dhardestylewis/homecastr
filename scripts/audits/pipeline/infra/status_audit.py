@@ -3,7 +3,7 @@ import yaml, psycopg2
 from google.cloud import storage
 from datetime import datetime
 
-DB_URL = "postgres://postgres.earrhbknfjnhbudsucch:Every1sentence!@aws-1-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require"
+DB_URL = os.environ["SUPABASE_DB_URL"]
 SCHEMA = "forecast_20260220_7f31c6e4"
 GCS_BUCKET = "properlytic-raw-data"
 

@@ -12,8 +12,8 @@ export const revalidate = 3600
 const SCHEMA = process.env.FORECAST_SCHEMA || "forecast_queue"
 
 export const metadata: Metadata = {
-    title: "Homecastr Forecasts",
-    description: "Home price forecasts for neighborhoods across the United States. Data-driven outlook powered by the Homecastr World Model.",
+    title: "Homecastr Home Price Forecasts",
+    description: "Home price and housing outlook forecasts for neighborhoods across the United States. Data-driven outlook powered by the Homecastr World Model.",
 }
 
 // State slug → FIPS mapping

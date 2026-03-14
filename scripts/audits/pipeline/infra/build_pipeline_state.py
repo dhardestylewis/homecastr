@@ -2,12 +2,13 @@
 Master Pipeline State Builder
 Queries GCS, Supabase, W&B, and local logs to build a single verified YAML.
 """
+import os
 import json, yaml, os, re, psycopg2
 from datetime import datetime
 from google.cloud import storage
 import wandb
 
-DB_URL = "postgres://postgres.earrhbknfjnhbudsucch:Every1sentence!@aws-1-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require"
+DB_URL = os.environ["SUPABASE_DB_URL"]
 SCHEMA = "forecast_20260220_7f31c6e4"
 GCS_BUCKET = "properlytic-raw-data"
 SCRIPTS = os.path.dirname(os.path.abspath(__file__))  # scripts/audits/

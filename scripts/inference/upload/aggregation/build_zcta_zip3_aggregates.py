@@ -9,13 +9,14 @@ Steps:
 5. Create ZIP3 GIS geometries (dissolve ZIP5 by 3-digit prefix)
 6. Aggregate ZCTA → ZIP3
 """
+import os
 import psycopg2
 import urllib.request
 import csv
 import io
 import time
 
-CONN_STR = "postgres://postgres.earrhbknfjnhbudsucch:Every1sentence!@aws-1-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require&options=-c%20statement_timeout%3D600000"
+CONN_STR = os.environ["SUPABASE_DB_URL"]
 SCHEMA = "forecast_20260220_7f31c6e4"
 
 def ts():

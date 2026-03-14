@@ -2,19 +2,21 @@
 migrate_gcs_to_r2.py — Copy properlytic-raw-data from GCS → Cloudflare R2
 Uses google-cloud-storage (gcloud ADC) for reads, boto3 for R2 writes.
 Run: python scripts/infra/migrate_gcs_to_r2.py [--prefix geo/] [--dry-run]
+
+Required env vars: R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY
 """
-import argparse, sys, time
+import argparse, os, sys, time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from google.cloud import storage as gcs
 import boto3
 from botocore.config import Config
 
-# ── R2 configuration ─────────────────────────────────────────────────────────
-R2_ACCOUNT_ID      = "7f58e07bff423d2120acf10aa6bf7a32"
-R2_ACCESS_KEY_ID   = "e6e1afa63a6e7adab7b028f56ed93ef5"
-R2_SECRET_KEY      = "ebbfa6c05be0947bd54b81dee66bc44c569ed3fadf82f85ce9c58bcc97e09e88"
+# ── R2 configuration (from environment) ──────────────────────────────────────
+R2_ACCOUNT_ID      = os.environ["R2_ACCOUNT_ID"]
+R2_ACCESS_KEY_ID   = os.environ["R2_ACCESS_KEY_ID"]
+R2_SECRET_KEY      = os.environ["R2_SECRET_ACCESS_KEY"]
 R2_ENDPOINT        = f"https://{R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
-R2_BUCKET          = "properlytic-raw-data"
+R2_BUCKET          = os.environ.get("R2_BUCKET", "properlytic-raw-data")
 GCS_BUCKET         = "properlytic-raw-data"
 
 # ── Clients ───────────────────────────────────────────────────────────────────

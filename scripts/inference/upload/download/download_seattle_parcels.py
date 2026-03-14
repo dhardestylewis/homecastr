@@ -3,7 +3,7 @@ import os, tempfile, requests, zipfile, io
 import geopandas as gpd
 from sqlalchemy import create_engine, text
 
-DB_URL = "postgresql://postgres.earrhbknfjnhbudsucch:Every1sentence!@aws-1-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require"
+DB_URL = os.environ["SUPABASE_DB_URL"]
 
 # King County parcels - ArcGIS Hub GeoJSON download
 KC_GEOJSON_URL = "https://gisdata.kingcounty.gov/arcgis/rest/services/OpenDataPortal/property__parcel_area/MapServer/2370/query"

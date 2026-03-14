@@ -975,6 +975,25 @@ export async function resolveSlugToTract(
     neighborhoodSlug: string,
     schema = "forecast_queue"
 ): Promise<string | null> {
+    // ── Fast-path: persistent slug lookup table ──────────────────────────
+    try {
+        const supabase = getSupabaseAdmin()
+        const { data: cached } = await supabase
+            .from("tract_slug_lookup")
+            .select("tract_geoid")
+            .eq("state_slug", stateSlug)
+            .eq("city_slug", citySlug)
+            .eq("neighborhood_slug", neighborhoodSlug)
+            .eq("schema_name", schema)
+            .limit(1)
+            .maybeSingle()
+        if (cached?.tract_geoid) {
+            console.log(`[slug-lookup] HIT ${stateSlug}/${citySlug}/${neighborhoodSlug} → ${cached.tract_geoid}`)
+            return cached.tract_geoid
+        }
+    } catch {
+        // Non-fatal — table may not exist yet
+    }
     // Find state FIPS from slug
     const stateEntry = Object.entries(STATE_FIPS).find(
         ([, v]) => v.abbr.toLowerCase() === stateSlug.toLowerCase()
@@ -1100,6 +1119,28 @@ export async function resolveSlugToTract(
                         slugToTract.push([`${baseSlug}-tr-${tractSuffix}`, tractId])
                     }
                 }
+            }
+
+            // Bulk write-back to persistent slug lookup table
+            try {
+                const supabase = getSupabaseAdmin()
+                const rows = slugToTract.map(([slug, tractId]) => ({
+                    state_slug: stateSlug.toLowerCase(),
+                    city_slug: citySlug,
+                    neighborhood_slug: slug,
+                    tract_geoid: tractId,
+                    schema_name: schema,
+                }))
+                // Upsert in chunks to stay under Supabase payload limits
+                const CHUNK = 500
+                for (let i = 0; i < rows.length; i += CHUNK) {
+                    await supabase
+                        .from("tract_slug_lookup")
+                        .upsert(rows.slice(i, i + CHUNK), { onConflict: "state_slug,city_slug,neighborhood_slug,schema_name", ignoreDuplicates: true })
+                }
+                console.log(`[slug-lookup] WROTE ${rows.length} entries for county ${countyEntry[0]}`)
+            } catch {
+                // Non-fatal — write failures don't block resolution
             }
 
             return slugToTract

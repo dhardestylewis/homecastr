@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
+import { logApiUsage, type ApiUsageEntry } from "@/lib/api-usage"
 
 // ── Demo key: allows zero-signup API testing ──
 const DEMO_KEY = "hc_demo_public_readonly"
@@ -85,4 +86,73 @@ export async function requireApiKey(req: NextRequest) {
         )
     }
     return null // Valid — proceed
+}
+
+// ── Determine source + keyId from request headers ──
+function resolveIdentity(req: NextRequest): { keyId: string | null; source: ApiUsageEntry["source"] } {
+    if (RAPIDAPI_PROXY_SECRET && req.headers.get("x-rapidapi-proxy-secret") === RAPIDAPI_PROXY_SECRET) {
+        return { keyId: "rapidapi", source: "rapidapi" }
+    }
+    const apiKey = req.headers.get("x-api-key")
+    if (apiKey === DEMO_KEY) return { keyId: "demo", source: "demo" }
+    return { keyId: apiKey, source: "direct" }
+}
+
+type RouteHandler = (req: NextRequest) => Promise<NextResponse>
+
+/**
+ * Higher-order wrapper that adds auth + usage logging to an API route.
+ *
+ *   export const GET = withApiLogging(async (req) => { ... })
+ *
+ * - Calls requireApiKey first; returns early on auth failure (still logged).
+ * - Measures wall-clock latency.
+ * - Fire-and-forget logs every request to the api_usage table.
+ */
+export function withApiLogging(handler: RouteHandler): RouteHandler {
+    return async (req: NextRequest) => {
+        const start = Date.now()
+        const { pathname } = new URL(req.url)
+        const ip = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "unknown"
+        const { keyId, source } = resolveIdentity(req)
+
+        // Auth check
+        const authError = await requireApiKey(req)
+        if (authError) {
+            logApiUsage({
+                endpoint: pathname,
+                method: req.method,
+                keyId,
+                status: authError.status,
+                latencyMs: Date.now() - start,
+                ip,
+                source,
+            })
+            return authError
+        }
+
+        // Run the actual handler
+        let response: NextResponse
+        try {
+            response = await handler(req)
+        } catch (err: any) {
+            response = NextResponse.json(
+                { error: err.message || "Internal server error" },
+                { status: 500 }
+            )
+        }
+
+        // Fire-and-forget log
+        logApiUsage({
+            endpoint: pathname,
+            method: req.method,
+            keyId,
+            status: response.status,
+            latencyMs: Date.now() - start,
+            ip,
+            source,
+        })
+
+        return response
+    }
 }

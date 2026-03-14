@@ -18,7 +18,7 @@ import geopandas as gpd
 import psycopg2
 from sqlalchemy import create_engine, text
 
-DB_URL = "postgresql://postgres.earrhbknfjnhbudsucch:Every1sentence!@aws-1-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require"
+DB_URL = os.environ["SUPABASE_DB_URL"]
 SCHEMA = "forecast_20260220_7f31c6e4"
 
 # IGN AdminExpress — COG (communes geo). Simplified boundaries.

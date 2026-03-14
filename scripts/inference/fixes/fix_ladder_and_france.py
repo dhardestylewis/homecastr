@@ -1,7 +1,8 @@
 """Populate France parcel_ladder in batches to avoid timeout."""
+import os
 import psycopg2
 
-DB_URL = "postgres://postgres.earrhbknfjnhbudsucch:Every1sentence!@aws-1-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require"
+DB_URL = os.environ["SUPABASE_DB_URL"]
 SCHEMA = "forecast_20260220_7f31c6e4"
 
 conn = psycopg2.connect(DB_URL)

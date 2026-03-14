@@ -15,7 +15,7 @@ import geopandas as gpd
 import pandas as pd
 import psycopg2
 
-DB_URL = "postgres://postgres.earrhbknfjnhbudsucch:Every1sentence!@aws-1-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require"
+DB_URL = os.environ["SUPABASE_DB_URL"]
 
 # King County Parcels Open Data - point centroids
 # https://gis-kingcounty.opendata.arcgis.com/datasets/king-county-parcels/

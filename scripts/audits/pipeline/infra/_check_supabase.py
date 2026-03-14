@@ -1,9 +1,10 @@
 """Create jurisdiction index on metrics_parcel_forecast. 
 Uses direct connection (not pooler) with long timeout."""
+import os
 import psycopg2
 
 # Use direct connection URL for DDL operations (not the pooler)
-CONN = "postgres://postgres.earrhbknfjnhbudsucch:Every1sentence!@aws-1-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require"
+CONN = os.environ["SUPABASE_DB_URL"]
 SCHEMA = "forecast_20260220_7f31c6e4"
 
 conn = psycopg2.connect(CONN)

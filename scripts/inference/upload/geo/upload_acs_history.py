@@ -10,7 +10,7 @@ BUCKET_NAME = "properlytic-raw-data"
 PREFIX = "inference/jurisdiction=acs_nationwide/"
 SCHEMA = "forecast_20260220_7f31c6e4"
 
-DB_DSN = "postgres://postgres.earrhbknfjnhbudsucch:Every1sentence!@aws-1-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require"
+DB_DSN = os.environ["SUPABASE_DB_URL"]
 
 def ts():
     return time.strftime("%H:%M:%S")

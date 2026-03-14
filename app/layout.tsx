@@ -11,10 +11,10 @@ const _geistMono = Geist_Mono({ subsets: ["latin"] })
 
 const APP_URL = "https://homecastr.com"
 const OG_DESCRIPTION =
-  "Know where home prices are headed. Built for buyers, agents, and investors."
+  "Know where home prices are headed with our data-driven housing market forecasts. Built for buyers, agents, and investors."
 
 export const metadata: Metadata = {
-  title: "Homecastr Home Forecasts",
+  title: "Homecastr Home Price Forecasts",
   description: OG_DESCRIPTION,
   metadataBase: new URL(APP_URL),
   icons: {
@@ -28,7 +28,7 @@ export const metadata: Metadata = {
     type: "website",
     url: APP_URL,
     siteName: "Homecastr",
-    title: "Homecastr Home Forecasts",
+    title: "Homecastr Home Price Forecasts",
     description: OG_DESCRIPTION,
     images: [
       {
@@ -41,7 +41,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Homecastr Home Forecasts",
+    title: "Homecastr Home Price Forecasts",
     description: OG_DESCRIPTION,
     images: ["/og-image.png"],
   },

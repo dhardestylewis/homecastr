@@ -1,4 +1,5 @@
 """Check TxGIO transfer progress and parcel_ladder for Seattle."""
+import os
 import psycopg2
 from google.cloud import storage
 
@@ -37,10 +38,7 @@ for prefix in ['checkpoints/seattle_wa/', 'panel/jurisdiction=seattle_wa/']:
         print(f"    {b.name} ({b.size/1e6:.1f}MB)")
 
 # === Check parcel_ladder_v1 for WA ===
-print("\n=== Parcel Ladder for WA ===")
-conn = psycopg2.connect('postgres://postgres.earrhbknfjnhbudsucch:Every1sentence!@aws-1-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require')
-cur = conn.cursor()
-cur.execute("SET statement_timeout = 15000")
+print("\n=== Parcel Ladder for WA ===os.environ["SUPABASE_DB_URL"]SET statement_timeout = 15000")
 cur.execute("SELECT count(1) FROM forecast_20260220_7f31c6e4.parcel_ladder_v1 WHERE geoid_tract20 LIKE '53%' LIMIT 1")
 wa_count = cur.fetchone()[0]
 print(f"  WA tracts in parcel_ladder_v1: {wa_count}")

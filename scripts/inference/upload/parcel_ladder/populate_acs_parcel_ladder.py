@@ -16,9 +16,10 @@ overwrite existing HCAD entries.
 Usage:
     python scripts/inference/upload/populate_acs_parcel_ladder.py
 """
+import os
 import psycopg2
 
-CONN = "postgres://postgres.earrhbknfjnhbudsucch:Every1sentence!@aws-1-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require"
+CONN = os.environ["SUPABASE_DB_URL"]
 SCHEMA = "forecast_20260220_7f31c6e4"
 
 

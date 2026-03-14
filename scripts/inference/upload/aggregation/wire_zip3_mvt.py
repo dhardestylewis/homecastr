@@ -6,9 +6,10 @@ Wire up ZIP3 into the MVT tile pipeline and frontend.
 3. Update GEO_LEVELS in forecast-map.tsx
 4. Add zip3 to forecast-detail API route
 """
+import os
 import psycopg2
 
-CONN_STR = "postgres://postgres.earrhbknfjnhbudsucch:Every1sentence!@aws-1-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require&options=-c%20statement_timeout%3D600000"
+CONN_STR = os.environ["SUPABASE_DB_URL"]
 SCHEMA = "forecast_20260220_7f31c6e4"
 
 def main():

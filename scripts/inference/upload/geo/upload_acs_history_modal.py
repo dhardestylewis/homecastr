@@ -18,7 +18,7 @@ def upload_history():
     import pandas as pd
     
     print(f"[{ts()}] Connecting to Supabase...")
-    db_url = os.environ.get("SUPABASE_DB_URL", "postgres://postgres.earrhbknfjnhbudsucch:Every1sentence!@aws-1-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require")
+    db_url = os.environ["SUPABASE_DB_URL"]
     conn = psycopg2.connect(db_url)
     conn.autocommit = True
     

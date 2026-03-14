@@ -63,8 +63,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     const stateName = STATE_NAMES[state] || state.toUpperCase()
 
     return {
-        title: `${cityName} Neighborhood Forecasts`,
-        description: `Home price forecasts for neighborhoods in ${cityName}, ${stateName}. See which areas have the strongest upside and lowest risk.`,
+        title: `${cityName} Neighborhood Home Price Forecasts`,
+        description: `Home price forecasts for neighborhoods in ${cityName}, ${stateName}. See which areas have the strongest upside and lowest housing market risk.`,
     }
 }
 

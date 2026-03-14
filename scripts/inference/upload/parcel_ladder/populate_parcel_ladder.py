@@ -1,8 +1,9 @@
 """Populate parcel_ladder_v1 for France DVF and Seattle WA.
 Handles statement timeouts by working in batches."""
+import os
 import psycopg2
 
-CONN = "postgres://postgres.earrhbknfjnhbudsucch:Every1sentence!@aws-1-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require"
+CONN = os.environ["SUPABASE_DB_URL"]
 SCHEMA = "forecast_20260220_7f31c6e4"
 
 def populate_france(cur):

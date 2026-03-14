@@ -25,7 +25,7 @@ import pandas as pd
 import psycopg2
 from scipy.stats import spearmanr
 
-DB_URL = "postgres://postgres.earrhbknfjnhbudsucch:Every1sentence!@aws-1-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require"
+DB_URL = os.environ["SUPABASE_DB_URL"]
 SCHEMA = "forecast_20260220_7f31c6e4"
 GCS_BUCKET = "properlytic-raw-data"
 PANEL_BLOB = "hcad/hcad_master_panel_2005_2025_leakage_strict_FIXEDYR_WITHGIS.parquet"

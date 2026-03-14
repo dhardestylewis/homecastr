@@ -1,6 +1,7 @@
 """Check parcel_ladder_v1 schema and HCAD sample for structure."""
+import os
 import psycopg2
-CONN = "postgres://postgres.earrhbknfjnhbudsucch:Every1sentence!@aws-1-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require"
+CONN = os.environ["SUPABASE_DB_URL"]
 conn = psycopg2.connect(CONN)
 cur = conn.cursor()
 cur.execute("SET statement_timeout = 15000")

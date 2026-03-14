@@ -49,8 +49,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     const maxForecastYear = 2030
     const title = `${geo.neighborhoodName} Home Price Forecast, ${minForecastYear}–${maxForecastYear}`
     const description = isOutlier
-        ? `Detailed modeling and market outlook for ${geo.neighborhoodName} (${geo.city}, ${geo.stateAbbr}). Data access available by request.`
-        : `Homecastr forecasts ${geo.neighborhoodName} (${geo.city}, ${geo.stateAbbr}) home values ${appreciation ? `to change ${appreciation}` : ""} by ${maxForecastYear} (p50). See upside, downside, comparables, and uncertainty.`
+        ? `Detailed housing market modeling and outlook for ${geo.neighborhoodName} (${geo.city}, ${geo.stateAbbr}). Data access available by request.`
+        : `Homecastr forecasts ${geo.neighborhoodName} (${geo.city}, ${geo.stateAbbr}) home prices ${appreciation ? `to change ${appreciation}` : ""} by ${maxForecastYear} (p50). See upside, downside, comparables, and housing market uncertainty.`
     return {
         title,
         description,

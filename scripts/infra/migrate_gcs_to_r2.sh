@@ -4,15 +4,19 @@
 #
 # Run this from a GCP Cloud Shell or VM to avoid egress charges.
 # Prerequisites: rclone installed (curl https://rclone.org/install.sh | sudo bash)
+#
+# Required env vars: R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
-# ── Configuration ─────────────────────────────────────────────────────────────
+# ── Configuration (from environment) ──────────────────────────────────────────
 GCS_BUCKET="properlytic-raw-data"
-R2_BUCKET="properlytic-raw-data"
-R2_ACCOUNT_ID="7f58e07bff423d2120acf10aa6bf7a32"
-R2_ACCESS_KEY_ID="e6e1afa63a6e7adab7b028f56ed93ef5"
-R2_SECRET_ACCESS_KEY="ebbfa6c05be0947bd54b81dee66bc44c569ed3fadf82f85ce9c58bcc97e09e88"
+R2_BUCKET="${R2_BUCKET:-properlytic-raw-data}"
+
+# Validate required env vars
+: "${R2_ACCOUNT_ID:?R2_ACCOUNT_ID env var is required}"
+: "${R2_ACCESS_KEY_ID:?R2_ACCESS_KEY_ID env var is required}"
+: "${R2_SECRET_ACCESS_KEY:?R2_SECRET_ACCESS_KEY env var is required}"
 
 # ── Set up rclone remotes ─────────────────────────────────────────────────────
 echo "📋 Configuring rclone remotes..."

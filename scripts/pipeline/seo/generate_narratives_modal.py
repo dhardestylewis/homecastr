@@ -21,6 +21,7 @@ Usage:
     python -m modal run scripts/pipeline/seo/generate_narratives_modal.py \
         --state-fips 48 --dry-run
 """
+import os
 
 from __future__ import annotations
 import modal, os, json, time
@@ -479,10 +480,7 @@ def main(
     print()
 
     # Get list of tracts locally
-    db_url = os.environ.get(
-        "SUPABASE_DB_URL",
-        "postgres://postgres.earrhbknfjnhbudsucch:Every1sentence!@aws-1-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require"
-    )
+    db_url = os.environ["SUPABASE_DB_URL"]
     conn = psycopg2.connect(db_url)
     cur = conn.cursor()
 

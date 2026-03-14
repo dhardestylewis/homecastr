@@ -21,7 +21,7 @@ from sqlalchemy import create_engine, text
 
 # ── Supabase connection ──
 DB_URL = os.environ.get("DATABASE_URL",
-    "postgresql://postgres.earrhbknfjnhbudsucch:Every1sentence!@aws-1-us-east-1.pooler.supabase.com:5432/postgres?sslmode=require"
+    os.environ["SUPABASE_DB_URL"]
 )
 
 # ── Census Boundary URLs ──
