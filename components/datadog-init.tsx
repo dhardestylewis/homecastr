@@ -32,6 +32,7 @@ export function DatadogInit() {
         site,
         service,
         env,
+        proxy: '/api/dd',
         sessionSampleRate: 100,
         sessionReplaySampleRate: 20,
         trackUserInteractions: true,
@@ -50,6 +51,7 @@ export function DatadogInit() {
       sessionSampleRate: 100,
       env,
       service,
+      proxy: '/api/dd',
     })
     
   }, [])

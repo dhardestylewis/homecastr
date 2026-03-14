@@ -5,7 +5,7 @@ import { PostHogProvider } from 'posthog-js/react'
 
 if (typeof window !== 'undefined' && process.env.NEXT_PUBLIC_POSTHOG_KEY && !posthog.__loaded) {
     posthog.init(process.env.NEXT_PUBLIC_POSTHOG_KEY, {
-        api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://t.homecastr.com',
+        api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST || '/ingest',
         ui_host: 'https://us.posthog.com',
         person_profiles: 'identified_only',
     })
