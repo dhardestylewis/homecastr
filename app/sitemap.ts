@@ -6,22 +6,32 @@ const BASE_URL = 'https://www.homecastr.com'
 const SCHEMA = process.env.FORECAST_SCHEMA || "forecast_queue"
 
 /**
- * Next.js 16 generateSitemaps — returns an array of { id } objects.
- * Next.js will automatically create a sitemap index at /sitemap.xml
- * and individual sitemaps at /sitemap/0.xml, /sitemap/1.xml, etc.
+ * Tract segments: each fetches ~10k tracts to avoid Vercel function timeouts.
+ * With ~66k tracts total, we need 7 tract segments (IDs 3–9).
+ *
+ * Segment layout:
+ *   0 = core pages
+ *   1 = state pages
+ *   2 = county pages
+ *   3–9 = tract pages (10k each)
  */
+const TRACTS_PER_SEGMENT = 10000
+const TRACT_SEGMENT_COUNT = 7 // ceil(66388 / 10000)
+
 export async function generateSitemaps() {
-    return [
-        { id: 0 }, // core pages
+    const segments = [
+        { id: 0 }, // core
         { id: 1 }, // states
         { id: 2 }, // counties
-        { id: 3 }, // tracts (part 1: rows 0–39999)
-        { id: 4 }, // tracts (part 2: rows 40000+)
     ]
+    for (let i = 0; i < TRACT_SEGMENT_COUNT; i++) {
+        segments.push({ id: 3 + i })
+    }
+    return segments
 }
 
 /** Paginated Supabase fetch for tract geoids */
-async function fetchTracts(offset: number, limit: number) {
+async function fetchTractsPage(offset: number, limit: number) {
     const supabase = getSupabaseAdmin()
     const { data } = await supabase
         .schema(SCHEMA as any)
@@ -37,7 +47,7 @@ async function fetchTracts(offset: number, limit: number) {
     return data || []
 }
 
-/** Paginated helper to stream all tracts from offset..offset+maxCount */
+/** Collect tracts from startOffset up to maxCount rows */
 async function collectTracts(startOffset: number, maxCount: number) {
     const pageSize = 1000
     const results: string[] = []
@@ -45,7 +55,7 @@ async function collectTracts(startOffset: number, maxCount: number) {
 
     while (results.length < maxCount) {
         const fetchLimit = Math.min(pageSize, maxCount - results.length)
-        const data = await fetchTracts(offset, fetchLimit)
+        const data = await fetchTractsPage(offset, fetchLimit)
         if (data.length === 0) break
         for (const row of data) results.push(row.tract_geoid20)
         if (data.length < fetchLimit) break
@@ -105,23 +115,11 @@ export default async function sitemap(
         }
     }
 
-    // ── Segment 3: Tract pages (first 40,000) ──
-    if (id === 3) {
-        const tracts = await collectTracts(0, 40000)
-        for (const geoid of tracts) {
-            const geo = parseTractGeoid(geoid)
-            entries.push({
-                url: `${BASE_URL}/forecasts/${geo.stateSlug}/${geo.citySlug}/${geo.neighborhoodSlug}/home-price-forecast`,
-                lastModified: new Date(),
-                changeFrequency: 'monthly',
-                priority: 0.6,
-            })
-        }
-    }
-
-    // ── Segment 4: Tract pages (40,000+) ──
-    if (id === 4) {
-        const tracts = await collectTracts(40000, 40000)
+    // ── Segments 3–9: Tract pages (~10k each) ──
+    if (id >= 3 && id <= 3 + TRACT_SEGMENT_COUNT - 1) {
+        const segIdx = id - 3
+        const startOffset = segIdx * TRACTS_PER_SEGMENT
+        const tracts = await collectTracts(startOffset, TRACTS_PER_SEGMENT)
         for (const geoid of tracts) {
             const geo = parseTractGeoid(geoid)
             entries.push({

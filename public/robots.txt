@@ -6,3 +6,8 @@ Sitemap: https://www.homecastr.com/sitemap/1.xml
 Sitemap: https://www.homecastr.com/sitemap/2.xml
 Sitemap: https://www.homecastr.com/sitemap/3.xml
 Sitemap: https://www.homecastr.com/sitemap/4.xml
+Sitemap: https://www.homecastr.com/sitemap/5.xml
+Sitemap: https://www.homecastr.com/sitemap/6.xml
+Sitemap: https://www.homecastr.com/sitemap/7.xml
+Sitemap: https://www.homecastr.com/sitemap/8.xml
+Sitemap: https://www.homecastr.com/sitemap/9.xml
