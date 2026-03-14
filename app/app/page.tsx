@@ -161,7 +161,16 @@ function DashboardContent() {
           handleSearch(text)
         } else {
           setIsChatOpen(true)
-          setTimeout(() => chatPanelRef.current?.sendExternalMessage(text), 300)
+          let attempts = 0
+          const trySend = () => {
+            if (chatPanelRef.current && !chatPanelRef.current.isLoading) {
+              chatPanelRef.current.sendExternalMessage(text)
+            } else if (attempts < 20) {
+              attempts++
+              setTimeout(trySend, 100)
+            }
+          }
+          setTimeout(trySend, 100)
         }
       }, 500) // Wait for map to initialize
     }
@@ -540,7 +549,16 @@ function DashboardContent() {
                   handleSearch(text)
                 } else {
                   if (!isChatOpen) setIsChatOpen(true)
-                  setTimeout(() => chatPanelRef.current?.sendExternalMessage(text), isChatOpen ? 0 : 100)
+                  let attempts = 0
+                  const trySend = () => {
+                    if (chatPanelRef.current && !chatPanelRef.current.isLoading) {
+                      chatPanelRef.current.sendExternalMessage(text)
+                    } else if (attempts < 20) {
+                      attempts++
+                      setTimeout(trySend, 100)
+                    }
+                  }
+                  setTimeout(trySend, 100)
                 }
                 setChatInput('')
                 e.currentTarget.blur()
@@ -740,7 +758,16 @@ function DashboardContent() {
                     handleSearch(text)
                   } else {
                     if (!isChatOpen) setIsChatOpen(true)
-                    setTimeout(() => chatPanelRef.current?.sendExternalMessage(text), isChatOpen ? 0 : 300)
+                    let attempts = 0
+                    const trySend = () => {
+                      if (chatPanelRef.current && !chatPanelRef.current.isLoading) {
+                        chatPanelRef.current.sendExternalMessage(text)
+                      } else if (attempts < 20) {
+                        attempts++
+                        setTimeout(trySend, 100)
+                      }
+                    }
+                    setTimeout(trySend, 100)
                   }
                 }}
                 placeholder="Search or ask a question..."
