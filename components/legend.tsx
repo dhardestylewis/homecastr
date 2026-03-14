@@ -18,58 +18,93 @@ interface LegendProps {
   compareMode?: boolean
   onCompareModeChange?: (compare: boolean) => void
   pinnedCount?: number
+  zoom?: number
 }
 
-export function Legend({ className, colorMode = "growth", onColorModeChange, year = 2026, originYear = 2024, compareMode, onCompareModeChange, pinnedCount }: LegendProps) {
-  // Data-driven growth labels + gradient stops from API
-  const [growthLabels, setGrowthLabels] = useState<[string, string, string]>(["-20%", "0%", "+100%+"])
-  const [growthGradient, setGrowthGradient] = useState<string>(
-    "linear-gradient(to right, #3b82f6, #93c5fd 30%, #f8f8f8 50%, #f59e0b 70%, #ef4444)"
-  )
+export function Legend({ className, colorMode = "growth", onColorModeChange, year = 2026, originYear = 2024, compareMode, onCompareModeChange, pinnedCount, zoom = 10 }: LegendProps) {
   const presentYear = originYear + 2
   const yrsFromPresent = Math.max(Math.abs(year - presentYear), 1)
+  
+  // Default values
+  const defaultGrowthLabels: [string, string, string] = ["-20%", "0%", "+100%+"]
+  const defaultGrowthGradient = "linear-gradient(to right, #3b82f6, #93c5fd 30%, #f8f8f8 50%, #f59e0b 70%, #ef4444)"
+  
   const growthDollarMin = -10000 * yrsFromPresent
   const growthDollarMax = 30000 * yrsFromPresent
   const growthDollarRange = growthDollarMax - growthDollarMin
   const zeroPct = growthDollarRange > 0 ? Math.round((0 - growthDollarMin) / growthDollarRange * 100) : 50
-
-  const GROWTH_DOLLAR_GRADIENT = `linear-gradient(to right, #3b82f6, #f8f8f8 ${zeroPct}%, #ef4444)`
-  const GROWTH_DOLLAR_LABELS = [
+  
+  const defaultGrowthDollarGradient = `linear-gradient(to right, #3b82f6, #f8f8f8 ${zeroPct}%, #ef4444)`
+  const defaultGrowthDollarLabels: [string, string, string] = [
     `-$${Math.abs(growthDollarMin) / 1000}k`,
     "$0",
     `+$${growthDollarMax / 1000}k+`
   ]
+
+  // Data-driven state
+  const [apiGrowthLabels, setApiGrowthLabels] = useState<[string, string, string] | null>(null)
+  const [apiGrowthGradient, setApiGrowthGradient] = useState<string | null>(null)
+  
+  const [apiGrowthDollarLabels, setApiGrowthDollarLabels] = useState<[string, string, string] | null>(null)
+  const [apiGrowthDollarGradient, setApiGrowthDollarGradient] = useState<string | null>(null)
+
   const horizonM = (year - originYear) * 12
+  const aggregationLevel = zoom < 5 ? "state" : zoom < 8 ? "zcta" : zoom < 12 ? "tract" : "tabblock"
 
   useEffect(() => {
-    if (colorMode !== "growth" || horizonM === 0) return
-    fetch(`/api/forecast-stats?mode=growth&originYear=${originYear}&horizonM=${horizonM}`)
+    // Note: Do not clear old data explicitly to prevent flashing; let the new data override when fetched.
+    if ((colorMode !== "growth" && colorMode !== "growth_dollar") || horizonM === 0) return
+    fetch(`/api/forecast-stats?mode=${colorMode}&originYear=${originYear}&horizonM=${horizonM}`)
       .then(r => r.ok ? r.json() : null)
       .then(json => {
-        if (json?.levels?.tract) {
-          const s = json.levels.tract
-          const fmt = (n: number) => {
-            const v = Math.round(n)
-            return v >= 0 ? `+${v}%` : `${v}%`
-          }
-          setGrowthLabels([
-            fmt(s.p5),
-            fmt(s.p50),
-            fmt(s.p95),
-          ])
-          // Compute proportional CSS gradient stops matching map's interpolation
-          // Map uses: p5 → blue, p25 → light blue, p50 → white, p75 → amber, p95 → red
+        if (json?.levels && json.levels[aggregationLevel]) {
+          const s = json.levels[aggregationLevel]
           const range = s.p95 - s.p5
-          if (range > 0) {
-            const pct = (v: number) => Math.round(((v - s.p5) / range) * 100)
-            setGrowthGradient(
-              `linear-gradient(to right, #3b82f6 ${pct(s.p5)}%, #93c5fd ${pct(s.p25)}%, #f8f8f8 ${pct(s.p50)}%, #f59e0b ${pct(s.p75)}%, #ef4444 ${pct(s.p95)}%)`
-            )
+
+          if (colorMode === "growth") {
+            const fmt = (n: number) => {
+              const v = Math.round(n)
+              return v >= 0 ? `+${v}%` : `${v}%`
+            }
+            setApiGrowthLabels([
+              fmt(s.p5),
+              fmt(s.p50),
+              fmt(s.p95),
+            ])
+            if (range > 0) {
+              const pct = (v: number) => Math.round(((v - s.p5) / range) * 100)
+              setApiGrowthGradient(
+                `linear-gradient(to right, #3b82f6 ${pct(s.p5)}%, #93c5fd ${pct(s.p25)}%, #f8f8f8 ${pct(s.p50)}%, #f59e0b ${pct(s.p75)}%, #ef4444 ${pct(s.p95)}%)`
+              )
+            }
+          } else if (colorMode === "growth_dollar") {
+            const fmt = (n: number) => {
+              const v = Math.round(n / 1000)
+              return v >= 0 ? `+$${v}k` : `-$${Math.abs(v)}k`
+            }
+            setApiGrowthDollarLabels([
+              fmt(s.p5),
+              "$0",
+              fmt(s.p95),
+            ])
+            if (range > 0) {
+              // Map uses blue -> white -> red with 0 at white
+              // Determine where 0 falls on this scale
+              const zeroPctCalc = s.p5 < 0 && s.p95 > 0 ? Math.round(((0 - s.p5) / range) * 100) : (s.p95 <= 0 ? 100 : 0)
+              setApiGrowthDollarGradient(
+                `linear-gradient(to right, #3b82f6, #f8f8f8 ${zeroPctCalc}%, #ef4444)`
+              )
+            }
           }
         }
       })
       .catch(() => { /* keep defaults */ })
-  }, [colorMode, horizonM, originYear])
+  }, [colorMode, horizonM, originYear, aggregationLevel])
+  
+  const currentGrowthLabels = apiGrowthLabels || defaultGrowthLabels
+  const currentGrowthGradient = apiGrowthGradient || defaultGrowthGradient
+  const currentGrowthDollarLabels = apiGrowthDollarLabels || defaultGrowthDollarLabels
+  const currentGrowthDollarGradient = apiGrowthDollarGradient || defaultGrowthDollarGradient
 
   return (
     <div className={cn("glass-panel rounded-lg p-3 space-y-1 text-xs", className)}>
@@ -169,7 +204,7 @@ export function Legend({ className, colorMode = "growth", onColorModeChange, yea
         <div className="flex flex-col gap-1">
           <div
             className="h-3 w-full rounded-sm"
-            style={{ background: colorMode === "value" ? VALUE_GRADIENT : colorMode === "growth_dollar" ? GROWTH_DOLLAR_GRADIENT : growthGradient }}
+            style={{ background: colorMode === "value" ? VALUE_GRADIENT : colorMode === "growth_dollar" ? currentGrowthDollarGradient : currentGrowthGradient }}
           />
           <div className="flex justify-between text-[9px] text-muted-foreground font-mono px-0.5">
             {colorMode === "value" ? (
@@ -180,15 +215,15 @@ export function Legend({ className, colorMode = "growth", onColorModeChange, yea
               </>
             ) : colorMode === "growth_dollar" ? (
               <>
-                <span>{GROWTH_DOLLAR_LABELS[0]}</span>
-                <span>{GROWTH_DOLLAR_LABELS[1]}</span>
-                <span>{GROWTH_DOLLAR_LABELS[2]}</span>
+                <span>{currentGrowthDollarLabels[0]}</span>
+                <span>{currentGrowthDollarLabels[1]}</span>
+                <span>{currentGrowthDollarLabels[2]}</span>
               </>
             ) : (
               <>
-                <span>{growthLabels[0]}</span>
-                <span>{growthLabels[1]}</span>
-                <span>{growthLabels[2]}</span>
+                <span>{currentGrowthLabels[0]}</span>
+                <span>{currentGrowthLabels[1]}</span>
+                <span>{currentGrowthLabels[2]}</span>
               </>
             )}
           </div>

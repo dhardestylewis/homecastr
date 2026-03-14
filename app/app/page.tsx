@@ -901,6 +901,7 @@ function DashboardContent() {
                 onColorModeChange={handleColorModeChange}
                 year={currentYear}
                 originYear={pageOriginYear}
+                zoom={mapState.zoom}
               />
 
               {/* Controls: 2x2 Grid */}
@@ -1014,6 +1015,7 @@ function DashboardContent() {
                   compareMode={compareMode}
                   onCompareModeChange={(c) => { setCompareMode(c); if (!c) setMobileSelectionMode('replace') }}
                   pinnedCount={pinnedCount}
+                  zoom={mapState.zoom}
                 />
               </div>
             )}
