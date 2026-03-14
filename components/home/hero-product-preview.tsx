@@ -20,6 +20,9 @@ const PROMPT_CHIPS = [
   "How is my neighborhood expected to perform?",
 ]
 
+// Featured forecast page for demo purposes - queries route here with assistant
+const FEATURED_FORECAST = "/forecasts/ny/queens/downtown-flushing-tr-086500/home-price-forecast"
+
 export function HeroForecastBar() {
   const [query, setQuery] = useState("")
   const [placeholderIndex, setPlaceholderIndex] = useState(0)
@@ -45,10 +48,12 @@ export function HeroForecastBar() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    // Route to featured forecast page with query param for the assistant
+    // Later: implement address geocoding to route to the correct forecast
     if (query.trim()) {
-      router.push(`/app?q=${encodeURIComponent(query.trim())}`)
+      router.push(`${FEATURED_FORECAST}?q=${encodeURIComponent(query.trim())}`)
     } else {
-      router.push("/app")
+      router.push(FEATURED_FORECAST)
     }
   }
 

@@ -1,7 +1,7 @@
 "use client"
 
-import { createContext, useContext, useState, useCallback, type ReactNode } from "react"
-import { useRouter } from "next/navigation"
+import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 
 export interface ForecastContext {
   tractGeoid?: string
@@ -27,6 +27,7 @@ interface AssistantContextValue {
   messages: Message[]
   isOpen: boolean
   isLoading: boolean
+  threadId: string | null
   
   // Page context
   forecastContext: ForecastContext | null
@@ -51,17 +52,107 @@ export function useAssistant() {
 
 export function AssistantProvider({ children }: { children: ReactNode }) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   
   const [messages, setMessages] = useState<Message[]>([])
   const [isOpen, setIsOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [forecastContext, setForecastContext] = useState<ForecastContext | null>(null)
+  const [threadId, setThreadId] = useState<string | null>(null)
+  const [hasInitialized, setHasInitialized] = useState(false)
+
+  // Load thread from URL param on mount
+  useEffect(() => {
+    if (hasInitialized) return
+    
+    const threadParam = searchParams.get("thread")
+    const queryParam = searchParams.get("q")
+    
+    if (threadParam) {
+      // Load existing thread
+      loadThread(threadParam)
+      setIsOpen(true)
+    } else if (queryParam) {
+      // Auto-send query and create new thread
+      setIsOpen(true)
+      // Wait for context to be set, then send
+      const timeout = setTimeout(() => {
+        sendMessageInternal(queryParam, true)
+      }, 500)
+      return () => clearTimeout(timeout)
+    }
+    
+    setHasInitialized(true)
+  }, [searchParams, hasInitialized])
+
+  // Save thread to database when messages change
+  useEffect(() => {
+    if (messages.length === 0) return
+    if (messages.length === 1 && messages[0].id === "greeting") return
+    
+    saveThread()
+  }, [messages])
+
+  const loadThread = async (id: string) => {
+    try {
+      const response = await fetch(`/api/threads/${id}`)
+      if (!response.ok) return
+      
+      const data = await response.json()
+      setThreadId(id)
+      setMessages(data.messages || [])
+      if (data.forecastContext) {
+        setForecastContext(data.forecastContext)
+      }
+    } catch (error) {
+      console.error("Failed to load thread:", error)
+    }
+  }
+
+  const saveThread = async () => {
+    try {
+      const body = {
+        threadId,
+        messages,
+        forecastContext,
+      }
+      
+      const response = await fetch("/api/threads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+      
+      if (!response.ok) return
+      
+      const data = await response.json()
+      
+      // Update thread ID if this was a new thread
+      if (data.id && data.id !== threadId) {
+        setThreadId(data.id)
+        // Update URL with thread ID (without full page reload)
+        const url = new URL(window.location.href)
+        url.searchParams.set("thread", data.id)
+        url.searchParams.delete("q") // Remove query param after processing
+        window.history.replaceState({}, "", url.toString())
+      }
+    } catch (error) {
+      console.error("Failed to save thread:", error)
+    }
+  }
 
   const navigateTo = useCallback((url: string) => {
-    router.push(url)
-  }, [router])
+    // Preserve thread ID when navigating
+    if (threadId) {
+      const urlObj = new URL(url, window.location.origin)
+      urlObj.searchParams.set("thread", threadId)
+      router.push(urlObj.toString())
+    } else {
+      router.push(url)
+    }
+  }, [router, threadId])
 
-  const sendMessage = useCallback(async (content: string) => {
+  const sendMessageInternal = async (content: string, isInitialQuery = false) => {
     const userMessage: Message = {
       id: `user-${Date.now()}`,
       role: "user",
@@ -78,9 +169,10 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
         : ""
       
       // Build messages array with context
+      const currentMessages = isInitialQuery ? [] : messages
       const chatMessages = [
         ...(contextMessage ? [{ role: "system" as const, content: contextMessage }] : []),
-        ...messages.filter(m => m.id !== "greeting").map(m => ({
+        ...currentMessages.filter(m => m.id !== "greeting").map(m => ({
           role: m.role as "user" | "assistant",
           content: m.content,
         })),
@@ -130,10 +222,20 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const sendMessage = useCallback(async (content: string) => {
+    await sendMessageInternal(content, false)
   }, [messages, forecastContext])
 
   const clearChat = useCallback(() => {
     setMessages([])
+    setThreadId(null)
+    // Remove thread param from URL
+    const url = new URL(window.location.href)
+    url.searchParams.delete("thread")
+    url.searchParams.delete("q")
+    window.history.replaceState({}, "", url.toString())
   }, [])
 
   const setOpen = useCallback((open: boolean) => {
@@ -154,6 +256,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
         messages,
         isOpen,
         isLoading,
+        threadId,
         forecastContext,
         setOpen,
         sendMessage,
