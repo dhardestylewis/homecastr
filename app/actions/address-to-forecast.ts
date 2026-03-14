@@ -17,7 +17,7 @@ interface AddressToForecastResult {
 
 /**
  * Takes lat/lng coordinates and returns the forecast page URL for that location.
- * Uses the nearest_geography RPC to find the census tract, then builds the URL.
+ * Uses the nearest_geography RPC to find the census tract, then builds the URL slug.
  */
 export async function addressToForecast(lat: number, lng: number): Promise<AddressToForecastResult> {
   try {
