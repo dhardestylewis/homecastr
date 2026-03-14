@@ -4,13 +4,11 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Search, ArrowRight } from "lucide-react"
 
-// Chips route directly to the featured forecast page with assistant prompts
-const FEATURED_FORECAST_PATH = "/forecasts/ny/queens/downtown-flushing-tr-086500/home-price-forecast"
-
+// Chips focus the input and pre-fill with a suggested query
 const EXAMPLE_CHIPS = [
-  { label: "What could my house be worth in 2030?", anchor: "key-takeaway" },
-  { label: "Show downside vs upside", anchor: "uncertainty" },
-  { label: "How is my neighborhood expected to perform?", anchor: "interpretation" },
+  { label: "What could my house be worth in 2030?", placeholder: "123 Main St, Austin TX" },
+  { label: "Show downside vs upside", placeholder: "456 Oak Ave, Denver CO" },
+  { label: "How is my neighborhood expected to perform?", placeholder: "789 Pine St, Seattle WA" },
 ]
 
 export function HeroForecastBar() {
@@ -27,9 +25,12 @@ export function HeroForecastBar() {
     }
   }
 
-  const handleChipClick = (anchor: string) => {
-    // Route directly to the featured forecast page with the relevant section
-    router.push(`${FEATURED_FORECAST_PATH}#${anchor}`)
+  const handleChipClick = (placeholder: string) => {
+    // Focus the input and set placeholder address as the query
+    setQuery(placeholder)
+    const input = document.getElementById("forecast-input") as HTMLInputElement
+    input?.focus()
+    input?.select()
   }
 
   return (
@@ -62,7 +63,7 @@ export function HeroForecastBar() {
         {EXAMPLE_CHIPS.map((chip) => (
           <button
             key={chip.label}
-            onClick={() => handleChipClick(chip.anchor)}
+            onClick={() => handleChipClick(chip.placeholder)}
             className="px-3 py-1.5 text-xs font-medium text-muted-foreground bg-muted/50 border border-border rounded-full hover:bg-muted hover:text-foreground transition-colors"
           >
             {chip.label}
