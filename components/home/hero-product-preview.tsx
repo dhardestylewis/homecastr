@@ -4,13 +4,6 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Search, ArrowRight } from "lucide-react"
 
-// Prompt chips prefill with the question text
-const PROMPT_CHIPS = [
-  "What could my house be worth in 2030?",
-  "Show me downside vs upside scenarios",
-  "How is my neighborhood expected to perform?",
-]
-
 // Animated placeholder examples that rotate
 const EXAMPLE_ADDRESSES = [
   "123 Main St, Austin TX",
@@ -44,13 +37,6 @@ export function HeroForecastBar() {
     } else {
       router.push("/app")
     }
-  }
-
-  const handleChipClick = (promptText: string) => {
-    // Prefill with the prompt text and focus input
-    setQuery(promptText)
-    const input = document.getElementById("forecast-input") as HTMLInputElement
-    input?.focus()
   }
 
   const handleFocus = () => setIsTyping(true)
@@ -95,19 +81,6 @@ export function HeroForecastBar() {
         </div>
       </form>
 
-      {/* Prompt chips - prefill with the question text */}
-      <div className="flex flex-wrap items-center gap-2 mt-4 justify-center">
-        <span className="text-xs text-muted-foreground">Try:</span>
-        {PROMPT_CHIPS.map((prompt) => (
-          <button
-            key={prompt}
-            onClick={() => handleChipClick(prompt)}
-            className="px-3 py-1.5 text-xs font-medium text-muted-foreground bg-muted/50 border border-border rounded-full hover:bg-muted hover:text-foreground transition-colors"
-          >
-            {prompt}
-          </button>
-        ))}
-      </div>
     </div>
   )
 }
