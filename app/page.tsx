@@ -100,6 +100,8 @@ export default async function HomePage() {
                   city={FEATURED_FORECAST.city}
                   stateAbbr={FEATURED_FORECAST.state}
                   horizons={forecastData.forecast.horizons}
+                  history={forecastData.forecast.history}
+                  originYear={forecastData.forecast.originYear}
                   baselineP50={forecastData.forecast.baselineP50}
                   forecastUrl={FEATURED_FORECAST.path}
                 />
