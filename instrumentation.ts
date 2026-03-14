@@ -1,5 +1,11 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
+    // Sanitize DD_API_KEY to prevent ERR_INVALID_CHAR during HTTP requests
+    if (process.env.DD_API_KEY) {
+      process.env.DD_API_KEY = process.env.DD_API_KEY.trim()
+    }
+    
+    // Skip initialization during build if you want, or just let it initialize safely
     const tracer = await import("dd-trace")
     tracer.default.init({
       service: process.env.DD_SERVICE || "homecastr-next",
@@ -11,3 +17,4 @@ export async function register() {
     tracer.default.use("next-server")
   }
 }
+
