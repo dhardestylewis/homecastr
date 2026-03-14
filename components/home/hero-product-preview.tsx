@@ -171,8 +171,8 @@ export function HeroForecastBar() {
       }
     }
     
-    // For questions or failed address lookups, route to featured forecast with query
-    router.push(`${FEATURED_FORECAST}?q=${encodeURIComponent(trimmedQuery)}`)
+    // For questions or failed address lookups, route to the interactive map with query
+    router.push(`/app?q=${encodeURIComponent(trimmedQuery)}`)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

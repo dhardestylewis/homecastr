@@ -16,7 +16,7 @@ interface ForecastMapEmbedProps {
     height?: number
 }
 
-export function ForecastMapEmbed({ lat, lng, zoom = 11, bbox, label, height = 420 }: ForecastMapEmbedProps) {
+export function ForecastMapEmbed({ lat, lng, zoom = 11, bbox, selectedId, label, height = 420 }: ForecastMapEmbedProps) {
     let src = `/app?lat=${lat.toFixed(5)}&lng=${lng.toFixed(5)}&zoom=${zoom}&embedded=true`
     let fullUrl = `/app?lat=${lat.toFixed(5)}&lng=${lng.toFixed(5)}&zoom=${zoom}`
 
