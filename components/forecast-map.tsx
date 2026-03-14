@@ -12,6 +12,7 @@ import { Bot, AlertCircle } from "lucide-react"
 import { FanChart } from "@/components/fan-chart"
 import { StreetViewCarousel } from "@/components/street-view-carousel"
 import { useKeyboardOpen } from "@/hooks/use-keyboard-open"
+import { usePostHog } from 'posthog-js/react'
 
 // Tooltip positioning constants
 const SIDEBAR_WIDTH = 390
@@ -183,6 +184,7 @@ export function ForecastMap({
     const mapContainerRef = useRef<HTMLDivElement>(null)
     const mapRef = useRef<maplibregl.Map | null>(null)
     const [isLoaded, setIsLoaded] = useState(false)
+    const posthog = usePostHog()
 
     // Pinned comparisons: persistent multi-area comparison (up to 4)
     const MAX_PINNED = 4
@@ -2108,6 +2110,17 @@ export function ForecastMap({
                 })
                 setPinnedComparisons([])
                 onFeatureSelect(id)
+
+                // PostHog: track map area selection
+                try {
+                    posthog?.capture('map_area_clicked', {
+                        feature_id: id,
+                        geo_level: effectiveSourceLayer,
+                        lat: e.lngLat.lat,
+                        lng: e.lngLat.lng,
+                        zoom: map.getZoom(),
+                    })
+                } catch { }
 
                 // Fetch fan chart detail for newly selected area (critical on mobile where hover doesn't fire)
                 fetchForecastDetailRef.current(id, effectiveSourceLayer)
