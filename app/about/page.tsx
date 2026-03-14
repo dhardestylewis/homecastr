@@ -103,20 +103,10 @@ export default function AboutPage() {
           <h2 className="text-xl font-semibold mb-6">Founder</h2>
           <div className="p-6 rounded-xl border border-border bg-card">
             <div className="flex flex-col md:flex-row gap-6">
-              {/* Headshot */}
+              {/* Headshot placeholder - replace with actual image when available */}
               <div className="shrink-0">
-                <div className="w-20 h-20 rounded-full bg-muted border border-border overflow-hidden">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img 
-                    src="/images/founder-headshot.jpg" 
-                    alt="Daniel Hardesty Lewis"
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      // Fallback to initials if image doesn't load
-                      e.currentTarget.style.display = 'none'
-                      e.currentTarget.parentElement!.innerHTML = '<div class="w-full h-full flex items-center justify-center text-xl font-semibold text-muted-foreground">DHL</div>'
-                    }}
-                  />
+                <div className="w-20 h-20 rounded-full bg-muted border border-border overflow-hidden flex items-center justify-center">
+                  <span className="text-xl font-semibold text-muted-foreground">DHL</span>
                 </div>
               </div>
               
