@@ -64,3 +64,52 @@ export async function withRedisCache<T>(key: string, fetcher: () => Promise<T>, 
 
     return fresh
 }
+
+/**
+ * Binary-safe Redis cache for MVT tile buffers.
+ * Unlike withRedisCache (which JSON-serializes), this stores raw Buffer data.
+ * 
+ * Returns null on cache miss so the caller can distinguish "cached empty tile"
+ * (Buffer.byteLength === 0) from "not in cache" (null).
+ */
+const EMPTY_TILE_SENTINEL = Buffer.from('__EMPTY__')
+
+export async function withRedisBinaryCache(
+    key: string,
+    fetcher: () => Promise<Buffer | null>,
+    ttlSeconds = 14400,  // 4 hours default
+): Promise<{ data: Buffer | null; fromCache: boolean }> {
+    if (!redis) {
+        return { data: await fetcher(), fromCache: false }
+    }
+
+    // Try cache first
+    try {
+        const cached = await redis.getBuffer(key)
+        if (cached !== null) {
+            // Check for empty-tile sentinel
+            if (cached.equals(EMPTY_TILE_SENTINEL)) {
+                return { data: null, fromCache: true }
+            }
+            return { data: cached, fromCache: true }
+        }
+    } catch (e) {
+        console.warn(`[Redis Binary Cache] Error reading key ${key}:`, e)
+    }
+
+    // Cache miss — fetch from source
+    const fresh = await fetcher()
+
+    try {
+        if (fresh === null || fresh.length === 0) {
+            // Cache empty tiles with a short TTL (5 min) so new data appears quickly
+            await redis.set(key, EMPTY_TILE_SENTINEL, 'EX', Math.min(ttlSeconds, 300))
+        } else {
+            await redis.set(key, fresh, 'EX', ttlSeconds)
+        }
+    } catch (e) {
+        console.warn(`[Redis Binary Cache] Error setting key ${key}:`, e)
+    }
+
+    return { data: fresh, fromCache: false }
+}

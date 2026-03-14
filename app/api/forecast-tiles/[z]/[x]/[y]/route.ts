@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
+import { withRedisBinaryCache } from "@/lib/redis"
 
 const TILE_HEADERS = {
     "Content-Type": "application/vnd.mapbox-vector-tile",
@@ -29,8 +30,7 @@ function emptyTile() {
  *   z <= 16 → Tabblock
  *   z >= 17 → Parcel (capped at 3500)
  *
- * On transient Supabase errors we retry once, then return an empty tile (204)
- * rather than a 500 that would flood the browser console with AJAXErrors.
+ * Tiles are cached in Redis (4h TTL) to avoid repeated PostgreSQL RPC calls.
  *
  * Query params:
  *   originYear  (default 2025)
@@ -57,76 +57,95 @@ export async function GET(
     const levelOverride = searchParams.get("level") || null
     const schemaName = searchParams.get("schema") || "forecast_queue"
 
-    const rpcParams = {
-        z,
-        x,
-        y,
-        p_origin_year: originYear,
-        p_horizon_m: horizonM,
-        p_level_override: levelOverride,
-        p_series_kind: seriesKind,
-        p_variant_id: variantId,
-        p_run_id: null,
-        p_backtest_id: null,
-        p_parcel_limit: 3500,
+    // Redis cache key encodes all parameters that affect tile content
+    const cacheKey = `tile:forecast:${schemaName}:${z}:${x}:${y}:${originYear}:${horizonM}:${seriesKind}:${variantId}:${levelOverride || '_'}`
+
+    const { data: cachedBuffer, fromCache } = await withRedisBinaryCache(
+        cacheKey,
+        async () => {
+            const rpcParams = {
+                z,
+                x,
+                y,
+                p_origin_year: originYear,
+                p_horizon_m: horizonM,
+                p_level_override: levelOverride,
+                p_series_kind: seriesKind,
+                p_variant_id: variantId,
+                p_run_id: null,
+                p_backtest_id: null,
+                p_parcel_limit: 3500,
+            }
+
+            // Retry up to 3 times with exponential backoff on transient errors
+            for (let attempt = 0; attempt < 3; attempt++) {
+                try {
+                    const supabase = getSupabaseAdmin()
+
+                    const { data, error } = await supabase
+                        .schema(schemaName as any)
+                        .rpc("mvt_choropleth_forecast", rpcParams)
+
+                    if (error) {
+                        console.error(`[FORECAST-TILE] RPC error (attempt ${attempt + 1}/3):`, {
+                            message: error.message,
+                            code: error.code,
+                            tile: `${z}/${x}/${y}`,
+                        })
+                        if (attempt < 2) {
+                            await new Promise((r) => setTimeout(r, 200 * Math.pow(3, attempt)))
+                            continue
+                        }
+                        return null
+                    }
+
+                    if (!data) {
+                        return null
+                    }
+
+                    // Supabase bytea → Buffer
+                    let buffer: Buffer
+                    if (typeof data === "string") {
+                        if (data.startsWith("\\x")) {
+                            buffer = Buffer.from(data.substring(2), "hex")
+                        } else {
+                            buffer = Buffer.from(data, "base64")
+                        }
+                    } else {
+                        buffer = Buffer.from(data)
+                    }
+
+                    if (buffer.length === 0) {
+                        return null
+                    }
+
+                    return buffer
+                } catch (e: any) {
+                    console.error(`[FORECAST-TILE] Exception (attempt ${attempt + 1}/3):`, e.message, `tile=${z}/${x}/${y}`)
+                    if (attempt < 2) {
+                        await new Promise((r) => setTimeout(r, 200 * Math.pow(3, attempt)))
+                        continue
+                    }
+                    return null
+                }
+            }
+
+            return null
+        },
+        14400,  // 4 hour TTL
+    )
+
+    if (fromCache) {
+        console.log(`[TILE-CACHE] HIT ${z}/${x}/${y}`)
     }
 
-    // Retry up to 3 times with exponential backoff on transient errors
-    for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-            const supabase = getSupabaseAdmin()
-
-            const { data, error } = await supabase
-                .schema(schemaName as any)
-                .rpc("mvt_choropleth_forecast", rpcParams)
-
-            if (error) {
-                console.error(`[FORECAST-TILE] RPC error (attempt ${attempt + 1}/3):`, {
-                    message: error.message,
-                    code: error.code,
-                    tile: `${z}/${x}/${y}`,
-                })
-                if (attempt < 2) {
-                    await new Promise((r) => setTimeout(r, 200 * Math.pow(3, attempt)))
-                    continue
-                }
-                return emptyTile()
-            }
-
-            if (!data) {
-                return emptyTile()
-            }
-
-            // Supabase bytea → Buffer
-            let buffer: Buffer
-            if (typeof data === "string") {
-                if (data.startsWith("\\x")) {
-                    buffer = Buffer.from(data.substring(2), "hex")
-                } else {
-                    buffer = Buffer.from(data, "base64")
-                }
-            } else {
-                buffer = Buffer.from(data)
-            }
-
-            if (buffer.length === 0) {
-                return emptyTile()
-            }
-
-            return new NextResponse(new Uint8Array(buffer), {
-                status: 200,
-                headers: TILE_HEADERS,
-            })
-        } catch (e: any) {
-            console.error(`[FORECAST-TILE] Exception (attempt ${attempt + 1}/3):`, e.message, `tile=${z}/${x}/${y}`)
-            if (attempt < 2) {
-                await new Promise((r) => setTimeout(r, 200 * Math.pow(3, attempt)))
-                continue
-            }
-            return emptyTile()
-        }
+    if (!cachedBuffer) {
+        return emptyTile()
     }
 
-    // Shouldn't reach here, but safety net
-    return emptyTile()
+    return new NextResponse(new Uint8Array(cachedBuffer), {
+        status: 200,
+        headers: TILE_HEADERS,
+    })
 }
+

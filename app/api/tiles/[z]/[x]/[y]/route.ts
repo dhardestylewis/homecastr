@@ -1,6 +1,7 @@
 
 import { NextResponse } from "next/server"
 import { getSupabaseServerClient } from "@/lib/supabase/server"
+import { withRedisBinaryCache } from "@/lib/redis"
 
 // Type for route params
 interface RouteParams {
@@ -49,68 +50,71 @@ export async function GET(
     const year = parseInt(searchParams.get("year") || "2026")
 
     // Determine H3 Resolution
-    // Note: We used to use 'scale' but here we have 'z'. 
-    // We should strictly map z to res.
     const h3Res = getH3Res(z)
 
-    // Bounds for ST_MakeEnvelope (EPSG:3857)
-    const bbox = tileToEnvelope(z, x, y) // { minX, minY, maxX, maxY }
-
-    // SQL Logic:
-    // 1. Select grid cells in this tile envelope.
-    // 2. Join with details/rows for the requested year.
-    // 3. Convert geometry to MVT using ST_AsMVTGeom
-    // 4. Wrap result in ST_AsMVT
-
-    const supabase = await getSupabaseServerClient()
+    // Redis cache key
+    const cacheKey = `tile:h3:${z}:${x}:${y}:${year}:${h3Res}`
 
     try {
         console.log(`[TILE-API] z:${z} x:${x} y:${y} year:${year} res:${h3Res}`)
 
-        // Call the RPC function we just created
-        const { data, error } = await supabase.rpc('get_h3_tile_mvt', {
-            z,
-            x,
-            y,
-            query_year: year,
-            query_res: h3Res
-        })
+        const { data: cachedBuffer, fromCache } = await withRedisBinaryCache(
+            cacheKey,
+            async () => {
+                const supabase = await getSupabaseServerClient()
 
-        if (error) {
-            console.error("[TILE-API] RPC Error:", {
-                message: error.message,
-                details: error.details,
-                hint: error.hint,
-                code: error.code,
-                params: { z, x, y, year, h3Res }
-            })
-            return NextResponse.json({ error: error.message }, { status: 500 })
+                const { data, error } = await supabase.rpc('get_h3_tile_mvt', {
+                    z,
+                    x,
+                    y,
+                    query_year: year,
+                    query_res: h3Res
+                })
+
+                if (error) {
+                    console.error("[TILE-API] RPC Error:", {
+                        message: error.message,
+                        details: error.details,
+                        hint: error.hint,
+                        code: error.code,
+                        params: { z, x, y, year, h3Res }
+                    })
+                    throw error
+                }
+
+                if (!data) {
+                    return null
+                }
+
+                let buffer: Buffer
+                if (typeof data === 'string') {
+                    if (data.startsWith('\\x')) {
+                        buffer = Buffer.from(data.substring(2), 'hex')
+                    } else {
+                        buffer = Buffer.from(data, 'base64')
+                    }
+                } else {
+                    buffer = Buffer.from(data)
+                }
+
+                if (buffer.length === 0) {
+                    return null
+                }
+
+                return buffer
+            },
+            14400,  // 4 hour TTL
+        )
+
+        if (fromCache) {
+            console.log(`[TILE-CACHE] HIT ${z}/${x}/${y}`)
         }
 
-        if (!data) {
+        if (!cachedBuffer) {
             return new NextResponse(null, { status: 204 })
         }
 
-        // Supabase bytea returns a base64 string or hex string depending on config,
-        // but often it's just handled as binary if using the right client settings.
-        // If it's a string, we might need to convert it.
-        let buffer: Buffer
-        if (typeof data === 'string') {
-            // Check if it's hex (common for bytea) or base64
-            if (data.startsWith('\\x')) {
-                buffer = Buffer.from(data.substring(2), 'hex')
-            } else {
-                buffer = Buffer.from(data, 'base64')
-            }
-        } else {
-            buffer = Buffer.from(data)
-        }
-
-        if (buffer.length === 0) {
-            return new NextResponse(null, { status: 204 })
-        }
-
-        return new NextResponse(new Uint8Array(buffer), {
+        return new NextResponse(new Uint8Array(cachedBuffer), {
             status: 200,
             headers: {
                 "Content-Type": "application/vnd.mapbox-vector-tile",
