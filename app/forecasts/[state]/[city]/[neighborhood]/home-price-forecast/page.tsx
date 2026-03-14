@@ -14,6 +14,7 @@ import { ComparablesTable } from "@/components/publishing/ComparablesTable"
 import { MethodCaveat } from "@/components/publishing/MethodCaveat"
 import { ForecastMapEmbed } from "@/components/publishing/ForecastMapEmbed"
 import { RequestAnalysisModal } from "@/components/request-analysis-modal"
+import { ForecastContextSync } from "@/components/assistant/ForecastContextSync"
 import { getCenterForCity } from "@/lib/publishing/geo-centroids"
 import { getDynamicBounds } from "@/lib/publishing/geo-bounds"
 
@@ -158,6 +159,17 @@ export default async function NeighborhoodForecastPage({ params, searchParams }:
 
     return (
         <div className="relative max-w-4xl mx-auto">
+            {/* Sync context to assistant for grounded chat */}
+            <ForecastContextSync 
+                context={{
+                    tractGeoid,
+                    neighborhoodName: geo.neighborhoodName,
+                    city: geo.city,
+                    state: geo.stateAbbr,
+                    currentUrl: `/forecasts/${state}/${city}/${neighborhood}/home-price-forecast`,
+                }}
+            />
+            
             {isOutlier && <RequestAnalysisModal neighborhoodName={geo.neighborhoodName} />}
             <div className={`space-y-8 ${isOutlier ? "pointer-events-none blur-sm select-none opacity-80 overflow-hidden max-h-screen" : ""}`}>
                 {/* JSON-LD */}
@@ -188,6 +200,7 @@ export default async function NeighborhoodForecastPage({ params, searchParams }:
                 </header>
 
                 {/* ===== 2. KEY TAKEAWAY HERO - Forecast summary cards + one-paragraph insight ===== */}
+                <section id="key-takeaway">
                 <KeyTakeaway
                     horizons={data.forecast.horizons}
                     baselineP50={data.forecast.baselineP50}
@@ -195,6 +208,7 @@ export default async function NeighborhoodForecastPage({ params, searchParams }:
                     city={geo.city}
                     stateAbbr={geo.stateAbbr}
                 />
+                </section>
 
                 {/* ===== 3. FAN CHART - Visual forecast first ===== */}
                 <section className="space-y-3">
@@ -209,10 +223,13 @@ export default async function NeighborhoodForecastPage({ params, searchParams }:
 
                 {/* ===== 4. UNCERTAINTY - Why this range is wide/narrow ===== */}
                 {data.forecast.originYear < 2026 && (
+                    <section id="uncertainty">
                     <UncertaintyBand horizons={data.forecast.horizons} />
+                    </section>
                 )}
 
                 {/* ===== 5. INTERPRETATION - What this means ===== */}
+                <section id="interpretation">
                 <InterpretationSection
                     horizons={data.forecast.horizons}
                     neighborhoodName={geo.neighborhoodName}
@@ -220,6 +237,7 @@ export default async function NeighborhoodForecastPage({ params, searchParams }:
                     stateAbbr={geo.stateAbbr}
                     aiNarrative={isOutlier ? null : narrative}
                 />
+                </section>
 
                 {/* ===== 6. COMPARABLES - Nearby context ===== */}
                 <ComparablesTable

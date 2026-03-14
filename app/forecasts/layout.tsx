@@ -2,6 +2,8 @@ import type React from "react"
 import type { Metadata } from "next"
 import Link from "next/link"
 import { HomecastrLogo } from "@/components/homecastr-logo"
+import { AssistantProvider } from "@/components/assistant/AssistantProvider"
+import { ForecastAssistant } from "@/components/assistant/ForecastAssistant"
 
 export const metadata: Metadata = {
     title: {
@@ -17,6 +19,7 @@ export default function ForecastsLayout({
     children: React.ReactNode
 }) {
     return (
+        <AssistantProvider>
         <div className="h-screen overflow-auto bg-background text-foreground">
             {/* Header */}
             <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur-xl">
@@ -65,6 +68,10 @@ export default function ForecastsLayout({
                     </p>
                 </div>
             </footer>
+            
+            {/* Contextual Assistant - floats on forecast pages */}
+            <ForecastAssistant />
         </div>
+        </AssistantProvider>
     )
 }
