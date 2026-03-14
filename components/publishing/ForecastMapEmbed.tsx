@@ -11,6 +11,7 @@ interface ForecastMapEmbedProps {
     lng: number
     zoom?: number
     bbox?: [number, number, number, number] | null
+    selectedId?: string
     label?: string
     height?: number
 }
@@ -23,6 +24,11 @@ export function ForecastMapEmbed({ lat, lng, zoom = 11, bbox, label, height = 42
         const bboxStr = bbox.map(v => v.toFixed(5)).join(",")
         src += `&bbox=${bboxStr}`
         fullUrl += `&bbox=${bboxStr}`
+    }
+
+    if (selectedId) {
+        src += `&selectedId=${encodeURIComponent(selectedId)}`
+        fullUrl += `&selectedId=${encodeURIComponent(selectedId)}`
     }
 
     return (

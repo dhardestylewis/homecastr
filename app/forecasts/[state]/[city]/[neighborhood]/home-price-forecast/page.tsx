@@ -258,6 +258,7 @@ export default async function NeighborhoodForecastPage({ params, searchParams }:
                         lng={mapCenter.lng}
                         zoom={12}
                         bbox={tractBounds}
+                        selectedId={tractGeoid}
                         label={`${geo.neighborhoodName} on map`}
                         height={280}
                     />
