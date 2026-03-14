@@ -340,11 +340,12 @@
   }
 }
 
-/* ── Caption Sequence — positioned bottom-left, above Chat/Talk buttons ── */
+/* ── Caption Sequence — positioned center vertically and 1/3 from left ── */
 .onboarding-captions {
   position: absolute;
-  bottom: 90px;
-  left: 24px;
+  top: 50%;
+  left: 33.33%;
+  transform: translateY(-50%);
   text-align: left;
   z-index: 15;
   width: 90%;
@@ -437,8 +438,9 @@
   }
 
   .onboarding-captions {
-    bottom: 80px;
-    left: 16px;
+    top: 50%;
+    left: 33.33%;
+    transform: translateY(-50%);
     max-width: 85%;
   }
 }
