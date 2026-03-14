@@ -1,5 +1,6 @@
 # Python scripts & inference (not needed at runtime)
 scripts/
+!scripts/vercel-ignore.sh
 notebooks/
 _scratch/
 local_scratch/
