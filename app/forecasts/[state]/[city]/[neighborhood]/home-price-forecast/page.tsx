@@ -289,7 +289,7 @@ export default async function NeighborhoodForecastPage({ params, searchParams }:
                             All {geo.stateName} cities
                         </Link>
                         <Link
-                            href="/"
+                            href="/app"
                             className="text-xs px-3 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 transition-all"
                         >
                             Explore map

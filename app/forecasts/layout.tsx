@@ -34,7 +34,7 @@ export default function ForecastsLayout({
                             Forecasts
                         </Link>
                         <Link
-                            href="/"
+                            href="/app"
                             className="text-sm px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:opacity-90 transition-all"
                         >
                             Explore Map
