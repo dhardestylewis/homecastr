@@ -24,6 +24,7 @@ export async function geocodeAddress(query: string): Promise<GeocodeResult | nul
             q: query,
             format: "json",
             limit: "1",
+            countrycodes: "us",
         })
 
         const response = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`, {
