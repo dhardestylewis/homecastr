@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic"
 export async function GET(request: Request) {
     // Verify the request comes from Vercel Cron
     const authHeader = request.headers.get("authorization")
-    if (authHeader !== \`Bearer \${process.env.CRON_SECRET}\`) {
+    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
         // Return 401, but don't leak whether the secret is set
         return new NextResponse("Unauthorized", { status: 401 })
     }

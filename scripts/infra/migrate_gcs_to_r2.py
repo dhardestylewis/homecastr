@@ -12,9 +12,9 @@ import boto3
 from botocore.config import Config
 
 # ── R2 configuration (from environment) ──────────────────────────────────────
-R2_ACCOUNT_ID      = os.environ["R2_ACCOUNT_ID"]
-R2_ACCESS_KEY_ID   = os.environ["R2_ACCESS_KEY_ID"]
-R2_SECRET_KEY      = os.environ["R2_SECRET_ACCESS_KEY"]
+R2_ACCOUNT_ID      = os.environ.get("R2_ACCOUNT_ID", "7f58e07bff423d2120acf10aa6bf7a32")
+R2_ACCESS_KEY_ID   = os.environ.get("R2_ACCESS_KEY_ID", "1eb4758155929638e94e9202c0643c60")
+R2_SECRET_KEY      = os.environ.get("R2_SECRET_ACCESS_KEY", "d5f357875251b82ca2539a160fae6f79dc1f2d4d1951bb619ccc4c017475b887")
 R2_ENDPOINT        = f"https://{R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
 R2_BUCKET          = os.environ.get("R2_BUCKET", "properlytic-raw-data")
 GCS_BUCKET         = "properlytic-raw-data"
@@ -114,7 +114,7 @@ def main():
                 errors += 1
             if i % 50 == 0 or not ok:
                 elapsed = time.time() - t0
-                print(f"  [{i:,}/{len(blobs):,}] {elapsed:.0f}s — {msg}")
+                print(f"  [{i:,}/{len(blobs):,}] {elapsed:.0f}s -- {msg}")
 
     elapsed = time.time() - t0
     print(f"\n[DONE] {elapsed:.0f}s")
