@@ -1,0 +1,392 @@
+{
+  "raw_data": {
+    "gcs_files": 312,
+    "gcs_mb": 10660.9,
+    "prefixes": [
+      "ny_state",
+      "nyc",
+      "nyc_pluto"
+    ],
+    "detail": [
+      "ny_state/assessment_roll_chunk_0001.csv (19.5MB)",
+      "ny_state/assessment_roll_chunk_0002.csv (20.1MB)",
+      "ny_state/assessment_roll_chunk_0003.csv (19.5MB)",
+      "ny_state/assessment_roll_chunk_0004.csv (19.9MB)",
+      "ny_state/assessment_roll_chunk_0005.csv (19.5MB)"
+    ]
+  },
+  "panel": {
+    "exists": true,
+    "file": "panel/jurisdiction=nyc_pluto/part.parquet",
+    "size_mb": 32.1
+  },
+  "training": {
+    "runs": [
+      {
+        "name": "v11-nyc-SF500K-o2019",
+        "id": "b43z6bky",
+        "state": "finished",
+        "origin": 2019,
+        "n_metrics": 24,
+        "created": "2026-02-27T03:11:57Z",
+        "config": {
+          "origin": 2019,
+          "n_train": 141,
+          "variant": "SF500K",
+          "sample_size": 500000
+        },
+        "metrics": {
+          "tokens/alpha_entropy": 1.378326,
+          "tokens/alpha_mean_0": 0.262345,
+          "tokens/alpha_mean_1": 0.020395,
+          "tokens/alpha_mean_2": 0.246216,
+          "tokens/alpha_mean_3": 0,
+          "tokens/alpha_mean_4": 0.226711,
+          "tokens/alpha_mean_5": 0.027246,
+          "tokens/alpha_mean_6": 0.209286,
+          "tokens/alpha_mean_7": 0.007802,
+          "tokens/effective_k": 3.934288,
+          "tokens/phi_0": 0.802624,
+          "tokens/phi_1": 0.797077,
+          "tokens/phi_2": 0.80628,
+          "tokens/phi_3": 0.799997,
+          "tokens/phi_4": 0.797456,
+          "tokens/phi_5": 0.798107,
+          "tokens/phi_6": 0.799054,
+          "tokens/phi_7": 0.801832,
+          "tokens/sigma_u": 0.982307,
+          "train/epoch": 60,
+          "train/loss": 0.328168,
+          "train/loss_origin_2019": 0.328168,
+          "train/lr": 0.00004,
+          "train/origin": 2019
+        }
+      },
+      {
+        "name": "v11-nyc-SF500K-o2020",
+        "id": "3x8l8s7l",
+        "state": "finished",
+        "origin": 2020,
+        "n_metrics": 24,
+        "created": "2026-02-27T03:12:32Z",
+        "config": {
+          "origin": 2020,
+          "n_train": 145,
+          "variant": "SF500K",
+          "sample_size": 500000
+        },
+        "metrics": {
+          "tokens/alpha_entropy": 1.376927,
+          "tokens/alpha_mean_0": 0.260951,
+          "tokens/alpha_mean_1": 0.021657,
+          "tokens/alpha_mean_2": 0.256645,
+          "tokens/alpha_mean_3": 0,
+          "tokens/alpha_mean_4": 0.217767,
+          "tokens/alpha_mean_5": 0.034359,
+          "tokens/alpha_mean_6": 0.197676,
+          "tokens/alpha_mean_7": 0.010945,
+          "tokens/effective_k": 3.920698,
+          "tokens/phi_0": 0.801911,
+          "tokens/phi_1": 0.799538,
+          "tokens/phi_2": 0.80665,
+          "tokens/phi_3": 0.801388,
+          "tokens/phi_4": 0.797261,
+          "tokens/phi_5": 0.7973,
+          "tokens/phi_6": 0.798916,
+          "tokens/phi_7": 0.805091,
+          "tokens/sigma_u": 0.982119,
+          "train/epoch": 60,
+          "train/loss": 0.408783,
+          "train/loss_origin_2020": 0.408783,
+          "train/lr": 0.00004,
+          "train/origin": 2020
+        }
+      },
+      {
+        "name": "v11-nyc-SF500K-o2022",
+        "id": "3yz65ob1",
+        "state": "finished",
+        "origin": 2022,
+        "n_metrics": 24,
+        "created": "2026-02-27T03:13:03Z",
+        "config": {
+          "origin": 2022,
+          "n_train": 149,
+          "variant": "SF500K",
+          "sample_size": 500000
+        },
+        "metrics": {
+          "tokens/alpha_entropy": 1.375018,
+          "tokens/alpha_mean_0": 0.25406,
+          "tokens/alpha_mean_1": 0.013058,
+          "tokens/alpha_mean_2": 0.248948,
+          "tokens/alpha_mean_3": 0,
+          "tokens/alpha_mean_4": 0.212308,
+          "tokens/alpha_mean_5": 0.028272,
+          "tokens/alpha_mean_6": 0.23874,
+          "tokens/alpha_mean_7": 0.004614,
+          "tokens/effective_k": 3.904239,
+          "tokens/phi_0": 0.802548,
+          "tokens/phi_1": 0.805374,
+          "tokens/phi_2": 0.806868,
+          "tokens/phi_3": 0.802741,
+          "tokens/phi_4": 0.796507,
+          "tokens/phi_5": 0.795699,
+          "tokens/phi_6": 0.798742,
+          "tokens/phi_7": 0.802165,
+          "tokens/sigma_u": 0.98203,
+          "train/epoch": 60,
+          "train/loss": 0.379896,
+          "train/loss_origin_2022": 0.379896,
+          "train/lr": 0.00004,
+          "train/origin": 2022
+        }
+      },
+      {
+        "name": "v11-nyc-SF500K-o2021",
+        "id": "n432wloo",
+        "state": "finished",
+        "origin": 2021,
+        "n_metrics": 24,
+        "created": "2026-02-27T03:13:21Z",
+        "config": {
+          "origin": 2021,
+          "n_train": 148,
+          "variant": "SF500K",
+          "sample_size": 500000
+        },
+        "metrics": {
+          "tokens/alpha_entropy": 1.381017,
+          "tokens/alpha_mean_0": 0.260995,
+          "tokens/alpha_mean_1": 0.011867,
+          "tokens/alpha_mean_2": 0.246565,
+          "tokens/alpha_mean_3": 0,
+          "tokens/alpha_mean_4": 0.221652,
+          "tokens/alpha_mean_5": 0.032187,
+          "tokens/alpha_mean_6": 0.220949,
+          "tokens/alpha_mean_7": 0.005784,
+          "tokens/effective_k": 3.957112,
+          "tokens/phi_0": 0.801699,
+          "tokens/phi_1": 0.802486,
+          "tokens/phi_2": 0.806834,
+          "tokens/phi_3": 0.803165,
+          "tokens/phi_4": 0.796853,
+          "tokens/phi_5": 0.796078,
+          "tokens/phi_6": 0.798418,
+          "tokens/phi_7": 0.799067,
+          "tokens/sigma_u": 0.982955,
+          "train/epoch": 60,
+          "train/loss": 0.338573,
+          "train/loss_origin_2021": 0.338573,
+          "train/lr": 0.00004,
+          "train/origin": 2021
+        }
+      },
+      {
+        "name": "v11-nyc-SF500K-o2025",
+        "id": "1q9n7i23",
+        "state": "finished",
+        "origin": 2025,
+        "n_metrics": 24,
+        "created": "2026-02-27T03:13:32Z",
+        "config": {
+          "origin": 2025,
+          "n_train": 149,
+          "variant": "SF500K",
+          "sample_size": 500000
+        },
+        "metrics": {
+          "tokens/alpha_entropy": 1.374327,
+          "tokens/alpha_mean_0": 0.253992,
+          "tokens/alpha_mean_1": 0.013771,
+          "tokens/alpha_mean_2": 0.248975,
+          "tokens/alpha_mean_3": 0,
+          "tokens/alpha_mean_4": 0.214071,
+          "tokens/alpha_mean_5": 0.025933,
+          "tokens/alpha_mean_6": 0.239127,
+          "tokens/alpha_mean_7": 0.004132,
+          "tokens/effective_k": 3.898348,
+          "tokens/phi_0": 0.802602,
+          "tokens/phi_1": 0.805422,
+          "tokens/phi_2": 0.806916,
+          "tokens/phi_3": 0.80219,
+          "tokens/phi_4": 0.796472,
+          "tokens/phi_5": 0.79554,
+          "tokens/phi_6": 0.798724,
+          "tokens/phi_7": 0.802374,
+          "tokens/sigma_u": 0.982123,
+          "train/epoch": 60,
+          "train/loss": 0.379795,
+          "train/loss_origin_2025": 0.379795,
+          "train/lr": 0.00004,
+          "train/origin": 2025
+        }
+      }
+    ],
+    "total": 5,
+    "ok": 5,
+    "failed": 0
+  },
+  "checkpoint": {
+    "origins": [
+      2019,
+      2020,
+      2021,
+      2022,
+      2025
+    ],
+    "total": 5,
+    "files": [
+      {
+        "file": "checkpoints/nyc/ckpt_v11_origin_2019_SF500K.pt",
+        "size_mb": 26.5,
+        "origin": 2019
+      },
+      {
+        "file": "checkpoints/nyc/ckpt_v11_origin_2020_SF500K.pt",
+        "size_mb": 26.5,
+        "origin": 2020
+      },
+      {
+        "file": "checkpoints/nyc/ckpt_v11_origin_2021_SF500K.pt",
+        "size_mb": 26.5,
+        "origin": 2021
+      },
+      {
+        "file": "checkpoints/nyc/ckpt_v11_origin_2022_SF500K.pt",
+        "size_mb": 26.5,
+        "origin": 2022
+      },
+      {
+        "file": "checkpoints/nyc/ckpt_v11_origin_2025_SF500K.pt",
+        "size_mb": 26.5,
+        "origin": 2025
+      }
+    ]
+  },
+  "eval": {
+    "runs": [
+      {
+        "name": "eval_v11_nyc_2019",
+        "id": "910dfc1d",
+        "state": "finished",
+        "origin": 2019,
+        "n_metrics": 0,
+        "created": "2026-02-27T03:28:23Z",
+        "config": {
+          "origin": 2019,
+          "scenarios": 128,
+          "sample_size": 20000
+        },
+        "metrics": {}
+      },
+      {
+        "name": "eval_v11_nyc_2021",
+        "id": "gfj2glme",
+        "state": "crashed",
+        "origin": 2021,
+        "n_metrics": 0,
+        "created": "2026-02-27T03:28:26Z",
+        "config": {
+          "origin": 2021,
+          "scenarios": 128,
+          "sample_size": 20000
+        },
+        "metrics": {}
+      },
+      {
+        "name": "eval_v11_nyc_2019",
+        "id": "utvf68zk",
+        "state": "finished",
+        "origin": 2019,
+        "n_metrics": 0,
+        "created": "2026-02-27T03:30:56Z",
+        "config": {
+          "origin": 2019,
+          "scenarios": 128,
+          "sample_size": 20000
+        },
+        "metrics": {}
+      },
+      {
+        "name": "eval_v11_nyc_2020",
+        "id": "rp7vjelc",
+        "state": "crashed",
+        "origin": 2020,
+        "n_metrics": 0,
+        "created": "2026-02-27T03:30:57Z",
+        "config": {
+          "origin": 2020,
+          "scenarios": 128,
+          "sample_size": 20000
+        },
+        "metrics": {}
+      }
+    ],
+    "total": 4,
+    "with_metrics": 0,
+    "crashed": 2
+  },
+  "inference": {
+    "status": "unknown"
+  },
+  "supabase": {
+    "parcel_forecast": 0,
+    "tract_forecast": 0,
+    "zcta_forecast": 0,
+    "ladder": 0
+  },
+  "map_visible": false,
+  "local_logs": [
+    {
+      "file": "nyc_o2019.log",
+      "size": 4175,
+      "status": "ERROR",
+      "last_line": "AttributeError: 'NoneType' object has no attribute 'encode'"
+    },
+    {
+      "file": "nyc_o2020.log",
+      "size": 4175,
+      "status": "ERROR",
+      "last_line": "AttributeError: 'NoneType' object has no attribute 'encode'"
+    },
+    {
+      "file": "nyc_o2021.log",
+      "size": 4408,
+      "status": "ERROR",
+      "last_line": "Stopping app - uncaught exception raised locally: RefreshError('invalid_grant: Invalid JWT Signature.', {'error': 'inval"
+    },
+    {
+      "file": "nyc_o2022.log",
+      "size": 4175,
+      "status": "ERROR",
+      "last_line": "AttributeError: 'NoneType' object has no attribute 'encode'"
+    },
+    {
+      "file": "nyc_o2023.log",
+      "size": 4175,
+      "status": "ERROR",
+      "last_line": "Stopping app - uncaught exception raised locally: AttributeError(\"'NoneType' object has no attribute 'encode'\")."
+    },
+    {
+      "file": "nyc_o2024.log",
+      "size": 4175,
+      "status": "ERROR",
+      "last_line": "Stopping app - uncaught exception raised locally: AttributeError(\"'NoneType' object has no attribute 'encode'\")."
+    },
+    {
+      "file": "nyc_o2025.log",
+      "size": 4175,
+      "status": "ERROR",
+      "last_line": "AttributeError: 'NoneType' object has no attribute 'encode'"
+    }
+  ],
+  "pipeline_progress": [
+    "raw_data",
+    "panel",
+    "training",
+    "checkpoint"
+  ],
+  "furthest_stage": "checkpoint",
+  "completion_pct": 50
+}
