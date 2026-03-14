@@ -9,8 +9,8 @@ export async function POST(req: NextRequest) {
     return new Response("Missing ddforward parameter", { status: 400 });
   }
 
-  const site = (process.env.NEXT_PUBLIC_DD_SITE || "datadoghq.com").trim();
-  const intakeUrl = `https://browser-intake-${site}${ddforward}`;
+  const site = (process.env.NEXT_PUBLIC_DD_SITE || "datadoghq.com").replace(/\\r/g, "").trim();
+  const intakeUrl = `https://browser-intake-${site}${ddforward}`.replace(/ /g, "%20").replace(/\\r/g, "");
   
   const headers = new Headers();
   
