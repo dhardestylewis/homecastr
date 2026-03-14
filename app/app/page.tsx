@@ -701,8 +701,20 @@ function DashboardContent() {
             {/* Search Row */}
             <div className="flex items-center gap-2 w-full">
               <SearchBox
-                onSearch={handleSearch}
-                placeholder="Search address or ID..."
+                onSearch={(text) => {
+                  const isShortPhrase = text.split(/\s+/).length <= 4;
+                  const isConversational = /^(hi|hello|hey|what|why|how|who|where|when|can|could|would|please|show|tell|explain)\b/i.test(text);
+                  const isExplicitAddress = /^\d/.test(text) || /^\d{5}(-\d{4})?$/.test(text) || /,\s*[A-Z]{2}\b/i.test(text);
+                  const isSearch = isExplicitAddress || (isShortPhrase && !isConversational);
+
+                  if (!isChatOpen && isSearch) {
+                    handleSearch(text)
+                  } else {
+                    if (!isChatOpen) setIsChatOpen(true)
+                    setTimeout(() => chatPanelRef.current?.sendExternalMessage(text), isChatOpen ? 0 : 100)
+                  }
+                }}
+                placeholder="Search or ask a question..."
                 value={searchBarValue}
               />
             </div>

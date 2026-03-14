@@ -49,7 +49,7 @@ export function HeroForecastBar() {
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
   const inputRef = useRef<HTMLInputElement>(null)
-  const dropdownRef = useRef<HTMLDivElement>(null)
+  const dropdownRef = useRef<HTMLFormElement>(null)
   
   const debouncedQuery = useDebounce(query, 300)
 
@@ -273,7 +273,7 @@ export function HeroForecastBar() {
               </>
             ) : (
               <>
-                {isAddress ? "Get Forecast" : "Ask"}
+                {isLocation ? "Get Forecast" : "Ask"}
                 <ArrowRight className="w-4 h-4" />
               </>
             )}
