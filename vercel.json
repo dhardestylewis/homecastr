@@ -5,6 +5,10 @@
     {
       "path": "/api/cron/keepalive",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/warm-tiles",
+      "schedule": "0 */3 * * *"
     }
   ]
 }
