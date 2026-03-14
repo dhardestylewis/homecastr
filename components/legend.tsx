@@ -25,20 +25,22 @@ export function Legend({ className, colorMode = "growth", onColorModeChange, yea
   const presentYear = originYear + 2
   const yrsFromPresent = Math.max(Math.abs(year - presentYear), 1)
   
-  // Default values
+  // Default values — ZERO-CENTERED, matching buildFillColor
   const defaultGrowthLabels: [string, string, string] = ["-20%", "0%", "+100%+"]
-  const defaultGrowthGradient = "linear-gradient(to right, #3b82f6, #93c5fd 30%, #f8f8f8 50%, #f59e0b 70%, #ef4444)"
+  const defaultGrowthGradient = "linear-gradient(to right, #2563eb, #93c5fd 30%, #f8f8f8 50%, #f59e0b 70%, #dc2626)"
   
-  const growthDollarMin = -10000 * yrsFromPresent
-  const growthDollarMax = 30000 * yrsFromPresent
-  const growthDollarRange = growthDollarMax - growthDollarMin
-  const zeroPct = growthDollarRange > 0 ? Math.round((0 - growthDollarMin) / growthDollarRange * 100) : 50
+  const growthDollarNeg = 10000 * yrsFromPresent
+  const growthDollarPosLight = 10000 * yrsFromPresent
+  const growthDollarPosDeep  = 50000 * yrsFromPresent
+  const growthDollarRange = growthDollarNeg + growthDollarPosDeep
+  const zeroPct = growthDollarRange > 0 ? Math.round((growthDollarNeg / growthDollarRange) * 100) : 25
+  const posLightPct = growthDollarRange > 0 ? Math.round(((growthDollarNeg + growthDollarPosLight) / growthDollarRange) * 100) : 50
   
-  const defaultGrowthDollarGradient = `linear-gradient(to right, #3b82f6, #f8f8f8 ${zeroPct}%, #ef4444)`
+  const defaultGrowthDollarGradient = `linear-gradient(to right, #2563eb, #93c5fd ${Math.round(zeroPct * 0.6)}%, #f8f8f8 ${zeroPct}%, #f59e0b ${posLightPct}%, #dc2626)`
   const defaultGrowthDollarLabels: [string, string, string] = [
-    `-$${Math.abs(growthDollarMin) / 1000}k`,
+    `-$${growthDollarNeg / 1000}k`,
     "$0",
-    `+$${growthDollarMax / 1000}k+`
+    `+$${growthDollarPosDeep / 1000}k+`
   ]
 
   // Data-driven state
@@ -59,24 +61,24 @@ export function Legend({ className, colorMode = "growth", onColorModeChange, yea
       .then(json => {
         if (json?.levels && json.levels[aggregationLevel]) {
           const s = json.levels[aggregationLevel]
-          const range = s.p95 - s.p5
 
           if (colorMode === "growth") {
+            // ZERO-CENTERED legend: 0% is always the center label.
+            // Use p5/p95 to determine the range labels on the ends.
+            const absMax = Math.max(Math.abs(s.p5 ?? -5), Math.abs(s.p95 ?? 20), 0.01)
             const fmt = (n: number) => {
               const v = Math.round(n)
               return v >= 0 ? `+${v}%` : `${v}%`
             }
             setApiGrowthLabels([
-              fmt(s.p5),
-              fmt(s.p50),
-              fmt(s.p95),
+              fmt(-absMax),
+              "0%",
+              fmt(absMax),
             ])
-            if (range > 0) {
-              const pct = (v: number) => Math.round(((v - s.p5) / range) * 100)
-              setApiGrowthGradient(
-                `linear-gradient(to right, #3b82f6 ${pct(s.p5)}%, #93c5fd ${pct(s.p25)}%, #f8f8f8 ${pct(s.p50)}%, #f59e0b ${pct(s.p75)}%, #ef4444 ${pct(s.p95)}%)`
-              )
-            }
+            // Symmetric gradient around 0
+            setApiGrowthGradient(
+              `linear-gradient(to right, #2563eb 0%, #93c5fd 30%, #f8f8f8 50%, #f59e0b 70%, #dc2626 100%)`
+            )
           } else if (colorMode === "growth_dollar") {
             const fmt = (n: number) => {
               const v = Math.round(n / 1000)
@@ -87,12 +89,13 @@ export function Legend({ className, colorMode = "growth", onColorModeChange, yea
               "$0",
               fmt(s.p95),
             ])
+            const range = (s.p95 ?? 0) - (s.p5 ?? 0)
             if (range > 0) {
-              // Map uses blue -> white -> red with 0 at white
-              // Determine where 0 falls on this scale
+              // Map uses blue → white → amber → red with 0 at white
               const zeroPctCalc = s.p5 < 0 && s.p95 > 0 ? Math.round(((0 - s.p5) / range) * 100) : (s.p95 <= 0 ? 100 : 0)
+              const midPosPct = Math.round(zeroPctCalc + (100 - zeroPctCalc) * 0.4)
               setApiGrowthDollarGradient(
-                `linear-gradient(to right, #3b82f6, #f8f8f8 ${zeroPctCalc}%, #ef4444)`
+                `linear-gradient(to right, #2563eb, #93c5fd ${Math.round(zeroPctCalc * 0.6)}%, #f8f8f8 ${zeroPctCalc}%, #f59e0b ${midPosPct}%, #dc2626)`
               )
             }
           }
@@ -123,8 +126,8 @@ export function Legend({ className, colorMode = "growth", onColorModeChange, yea
                     {colorMode === "value"
                       ? "Estimated median property value ($)."
                       : colorMode === "growth_dollar"
-                        ? "Absolute 5-year dollar growth vs current value."
-                        : "Relative growth vs median. White = average."}
+                        ? "Dollar change from current value. White = no change."
+                        : "Percent growth from current value. White = no change."}
                   </p>
                 </TooltipContent>
               </Tooltip>

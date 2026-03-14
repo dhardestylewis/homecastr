@@ -66,3 +66,5 @@ ts_errors*
 build_output*
 nal_columns.txt
 *.patch
+
+.env*.local
