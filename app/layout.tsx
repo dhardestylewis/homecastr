@@ -98,7 +98,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className={`font-sans antialiased overflow-hidden`} suppressHydrationWarning>
+      <body className={`font-sans antialiased`} suppressHydrationWarning>
         <CSPostHogProvider>
           {children}
           <DatadogInit />
