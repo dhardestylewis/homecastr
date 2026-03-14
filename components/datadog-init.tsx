@@ -18,7 +18,8 @@ export function DatadogInit() {
     const service = (process.env.NEXT_PUBLIC_DD_SERVICE || "homecastr-ui").replace(/\\r/g, "")?.trim()
     
     if (!clientToken) {
-        console.warn("Datadog: Missing client token, initialization skipped.")
+        // Silently skip initialization if no client token is configured
+        // This is expected in development or when Datadog is not set up
         return
     }
 
