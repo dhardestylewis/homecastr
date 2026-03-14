@@ -7,8 +7,44 @@ import { FeatureGrid } from "@/components/home/feature-grid"
 import { TrustSection } from "@/components/home/trust-section"
 import { EnterpriseSection } from "@/components/home/enterprise-section"
 import { FooterSection } from "@/components/home/footer-section"
+import { fetchFeaturedForecast, type FeaturedForecastData } from "@/lib/publishing/featured-forecast"
 
-export default function HomePage() {
+// Fallback data in case DB fetch fails
+const FALLBACK_DATA: FeaturedForecastData = {
+  tract: {
+    geoid: "48201312300",
+    neighborhoodSlug: "third-ward",
+    citySlug: "houston",
+    stateSlug: "texas",
+  },
+  location: {
+    neighborhood: "Third Ward",
+    city: "Houston",
+    state: "TX",
+    zip: "77003",
+  },
+  currentValue: 455000,
+  horizons: [
+    { year: 2026, p10: 432250, p50: 480886, p90: 529574 },
+    { year: 2027, p10: 431999, p50: 507999, p90: 583999 },
+    { year: 2028, p10: 429566, p50: 536708, p90: 643850 },
+    { year: 2029, p10: 425325, p50: 567100, p90: 708875 },
+    { year: 2030, p10: 419388, p50: 599268, p90: 779148 },
+    { year: 2031, p10: 411503, p50: 633313, p90: 855073 },
+  ],
+}
+
+export default async function HomePage() {
+  // Fetch real forecast data from Supabase
+  let forecastData: FeaturedForecastData
+  try {
+    const data = await fetchFeaturedForecast()
+    forecastData = data || FALLBACK_DATA
+  } catch (error) {
+    console.error("Failed to fetch featured forecast:", error)
+    forecastData = FALLBACK_DATA
+  }
+
   return (
     <div className="min-h-screen bg-background text-foreground overflow-auto">
       {/* Navigation - minimal, sticky */}
@@ -75,12 +111,12 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Mock forecast card - shows what the user will get */}
+          {/* Mock forecast card - shows what the user will get, powered by real data */}
           <div className="mt-4">
             <div className="text-center mb-6">
               <span className="text-sm font-medium text-muted-foreground">A property forecast, not just a number</span>
             </div>
-            <MockForecastCard />
+            <MockForecastCard data={forecastData} />
           </div>
         </section>
 
