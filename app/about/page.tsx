@@ -103,12 +103,29 @@ export default function AboutPage() {
           <h2 className="text-xl font-semibold mb-6">Founder</h2>
           <div className="p-6 rounded-xl border border-border bg-card">
             <div className="flex flex-col md:flex-row gap-6">
+              {/* Headshot */}
+              <div className="shrink-0">
+                <div className="w-20 h-20 rounded-full bg-muted border border-border overflow-hidden">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img 
+                    src="/images/founder-headshot.jpg" 
+                    alt="Daniel Hardesty Lewis"
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      // Fallback to initials if image doesn't load
+                      e.currentTarget.style.display = 'none'
+                      e.currentTarget.parentElement!.innerHTML = '<div class="w-full h-full flex items-center justify-center text-xl font-semibold text-muted-foreground">DHL</div>'
+                    }}
+                  />
+                </div>
+              </div>
+              
               {/* Founder info */}
               <div className="flex-1">
                 <h3 className="text-lg font-semibold mb-1">Daniel Hardesty Lewis</h3>
                 <p className="text-sm text-muted-foreground mb-4">Founder, Homecastr</p>
                 <p className="text-sm text-muted-foreground leading-relaxed">
-                  Background in large-scale scientific computing and geospatial machine learning. Previously at the Texas Advanced Computing Center (TACC) and Columbia University, working on computational modeling and applied research. Started Homecastr to bring probability-aware forecasting to residential real estate decisions.
+                  Background in large-scale scientific computing and geospatial machine learning. Previously at the Texas Advanced Computing Center (TACC) and Columbia University, working on computational modeling and applied research.
                 </p>
                 <div className="flex items-center gap-4 mt-4">
                   <a
@@ -127,6 +144,34 @@ export default function AboutPage() {
                     <ExternalLink className="w-4 h-4" />
                     Publications
                   </Link>
+                </div>
+              </div>
+            </div>
+            
+            {/* Institutional logos - grayscale, compact */}
+            <div className="mt-6 pt-6 border-t border-border">
+              <p className="text-xs text-muted-foreground uppercase tracking-wider mb-4">Previous affiliations</p>
+              <div className="flex items-center gap-8 opacity-60 grayscale">
+                {/* TACC */}
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground">
+                    TACC
+                  </div>
+                  <span className="text-xs text-muted-foreground hidden sm:inline">Texas Advanced Computing Center</span>
+                </div>
+                {/* Columbia */}
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground">
+                    CU
+                  </div>
+                  <span className="text-xs text-muted-foreground hidden sm:inline">Columbia University</span>
+                </div>
+                {/* UT Austin */}
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground">
+                    UT
+                  </div>
+                  <span className="text-xs text-muted-foreground hidden sm:inline">UT Austin</span>
                 </div>
               </div>
             </div>
