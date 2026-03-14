@@ -828,6 +828,19 @@ function DashboardContent() {
             className="fixed left-0 right-0 z-[10000] flex flex-col pointer-events-none transition-all duration-150 ease-out"
             style={{ bottom: `${keyboardHeight}px` }}
           >
+            {/* Always visible minimal legend (no toggles) if filters are closed */}
+            {!mobileFiltersOpen && (
+              <div className="px-3 pb-2 w-full flex justify-end pointer-events-none">
+                <Legend
+                  className="w-full max-w-[280px] bg-background/90 backdrop-blur-md border border-border/50 shadow-md pointer-events-auto opacity-95"
+                  colorMode={filters.colorMode}
+                  year={currentYear}
+                  originYear={pageOriginYear}
+                  zoom={mapState.zoom}
+                />
+              </div>
+            )}
+
             {/* Filters sheet — slides up above the bar */}
             {mobileFiltersOpen && (
               <div className="glass-panel border-t border-border/50 px-4 py-3 space-y-3 animate-in slide-in-from-bottom-4 duration-200 pointer-events-auto shadow-[0_-8px_30px_rgba(0,0,0,0.12)] bg-background/95 backdrop-blur-xl">

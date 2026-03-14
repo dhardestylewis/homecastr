@@ -31,9 +31,9 @@ export function InterpretationSection({ horizons, neighborhoodName, city, stateA
     else outlook = "significant decline expected"
 
     let dispersion: string
-    if (spread5Pct < 15) dispersion = "tight"
-    else if (spread5Pct < 30) dispersion = "moderate"
-    else if (spread5Pct < 50) dispersion = "wide"
+    if (spread5Pct < 60) dispersion = "tight"
+    else if (spread5Pct < 120) dispersion = "moderate"
+    else if (spread5Pct < 150) dispersion = "wide"
     else dispersion = "very wide"
 
     let locationText = `${neighborhoodName} in ${city}`
@@ -59,9 +59,9 @@ export function InterpretationSection({ horizons, neighborhoodName, city, stateA
         sentences.push("Values may dip near-term, but the longer-term trend is positive — the model sees a potential rebound ahead.")
     }
 
-    if (spread5Pct > 40) {
+    if (spread5Pct > 150) {
         sentences.push("The forecast range is very wide, meaning outcomes could vary significantly. This can happen in areas with limited sales history or rapid neighborhood change.")
-    } else if (spread5Pct > 25) {
+    } else if (spread5Pct > 120) {
         sentences.push("There's more uncertainty than usual here. The gap between the optimistic and pessimistic scenarios is wider than average — consider both sides before deciding.")
     }
 

@@ -19,15 +19,15 @@ export function UncertaintyBand({ horizons }: Props) {
     let barColor: string
     let uncertaintyText: string
 
-    if (spreadPct < 15) {
+    if (spreadPct < 60) {
         barWidth = "w-[20%]"
         barColor = "bg-chart-high"
         uncertaintyText = "Low uncertainty. The model is relatively confident in this forecast range."
-    } else if (spreadPct < 30) {
+    } else if (spreadPct < 120) {
         barWidth = "w-[45%]"
         barColor = "bg-chart-mid"
         uncertaintyText = "Moderate uncertainty, typical for this area and time horizon."
-    } else if (spreadPct < 50) {
+    } else if (spreadPct < 150) {
         barWidth = "w-[70%]"
         barColor = "bg-warning"
         uncertaintyText = "Higher uncertainty than usual. The range of possible outcomes is wide — likely due to limited nearby sales data, recent market volatility, or ongoing neighborhood change."
