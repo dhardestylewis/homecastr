@@ -103,11 +103,13 @@ export default function AboutPage() {
           <h2 className="text-xl font-semibold mb-6">Founder</h2>
           <div className="p-6 rounded-xl border border-border bg-card">
             <div className="flex flex-col md:flex-row gap-6">
-              {/* Headshot placeholder - replace with actual image when available */}
+              {/* Headshot */}
               <div className="shrink-0">
-                <div className="w-20 h-20 rounded-full bg-muted border border-border overflow-hidden flex items-center justify-center">
-                  <span className="text-xl font-semibold text-muted-foreground">DHL</span>
-                </div>
+                <img 
+                  src="/dhl.jpg" 
+                  alt="Daniel Hardesty Lewis"
+                  className="w-20 h-20 rounded-full object-cover border border-border"
+                />
               </div>
               
               {/* Founder info */}
@@ -141,27 +143,30 @@ export default function AboutPage() {
             {/* Institutional logos - grayscale, compact */}
             <div className="mt-6 pt-6 border-t border-border">
               <p className="text-xs text-muted-foreground uppercase tracking-wider mb-4">Previous affiliations</p>
-              <div className="flex items-center gap-8 opacity-60 grayscale">
+              <div className="flex items-center gap-6 sm:gap-8">
                 {/* TACC */}
                 <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground">
-                    TACC
-                  </div>
-                  <span className="text-xs text-muted-foreground hidden sm:inline">Texas Advanced Computing Center</span>
+                  <img 
+                    src="/logos/logo_tacc.png" 
+                    alt="Texas Advanced Computing Center"
+                    className="h-8 w-auto grayscale opacity-70 hover:grayscale-0 hover:opacity-100 transition-all"
+                  />
                 </div>
                 {/* Columbia */}
                 <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground">
-                    CU
-                  </div>
-                  <span className="text-xs text-muted-foreground hidden sm:inline">Columbia University</span>
+                  <img 
+                    src="/logos/logo_columbia.png" 
+                    alt="Columbia University"
+                    className="h-8 w-auto grayscale opacity-70 hover:grayscale-0 hover:opacity-100 transition-all"
+                  />
                 </div>
                 {/* UT Austin */}
                 <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground">
-                    UT
-                  </div>
-                  <span className="text-xs text-muted-foreground hidden sm:inline">UT Austin</span>
+                  <img 
+                    src="/logos/logo_utaustin.png" 
+                    alt="UT Austin"
+                    className="h-8 w-auto grayscale opacity-70 hover:grayscale-0 hover:opacity-100 transition-all"
+                  />
                 </div>
               </div>
             </div>
