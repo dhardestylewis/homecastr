@@ -45,7 +45,7 @@ export function FooterSection() {
             <div className="md:col-span-1">
               <HomecastrLogo size={20} variant="horizontal" />
               <p className="text-sm text-muted-foreground mt-3 leading-relaxed">
-                Property-level forecasts with probability bands.
+                Forecast where a home is headed, not just what it is worth today.
               </p>
             </div>
 

@@ -4,12 +4,12 @@ const features = [
   {
     icon: TrendingUp,
     title: "Future value, not just today",
-    description: "Traditional estimates tell you current worth. We show 1-5 year forward projections."
+    description: "Traditional valuation tools estimate today's value. Homecastr shows how that value may evolve over the next one to five years."
   },
   {
     icon: Layers,
     title: "Range of outcomes",
-    description: "Conservative, expected, and upside scenarios. P10/P50/P90 bands calibrated from thousands of simulations."
+    description: "Conservative, base-case, and upside scenarios. P10/P50/P90 percentile bands designed to express uncertainty explicitly rather than hide it behind a single estimate."
   },
   {
     icon: Map,
@@ -19,7 +19,7 @@ const features = [
   {
     icon: BarChart3,
     title: "Explainable forecasts",
-    description: "See what drives the numbers. Rate expectations, local demand, supply dynamics, and more."
+    description: "See which macro and local drivers contribute most to the forecast range, including rate expectations, supply-demand conditions, and market regime shifts."
   }
 ]
 
@@ -146,7 +146,7 @@ export function FeatureGrid() {
       <div className="max-w-6xl mx-auto px-6">
         <div className="max-w-2xl mb-12">
           <h2 className="text-2xl md:text-3xl font-bold tracking-tight mb-4">
-            Property forecasts that actually help you plan.
+            Property forecasts built for real decisions.
           </h2>
           <p className="text-muted-foreground leading-relaxed">
             Traditional home valuation tools give you a single number for today. Homecastr gives you a range of outcomes for the future.

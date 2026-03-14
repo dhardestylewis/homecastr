@@ -56,10 +56,10 @@ export default function HomePage() {
               </h1>
               
               <p className="text-lg md:text-xl text-muted-foreground leading-relaxed max-w-2xl mb-10">
-                Property-level forecasts with probability bands. Not just what a home is worth today, but where it&apos;s going over the next five years.
+                Property-level home value forecasts with calibrated probability bands. View downside, base-case, and upside scenarios over the next five years.
               </p>
 
-              {/* Single primary CTA */}
+              {/* Primary CTA with secondary browse option */}
               <div className="flex flex-col sm:flex-row gap-4">
                 <Link
                   href="/app"
@@ -69,10 +69,10 @@ export default function HomePage() {
                   <ArrowRight className="w-4 h-4" />
                 </Link>
                 <Link
-                  href="/api-docs"
+                  href="/forecasts"
                   className="inline-flex items-center justify-center gap-2 px-6 py-3 text-base font-medium text-foreground border border-border rounded-md hover:bg-muted/50 transition-colors"
                 >
-                  View API Docs
+                  Browse Markets
                   <ChevronRight className="w-4 h-4" />
                 </Link>
               </div>

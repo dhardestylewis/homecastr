@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { ArrowRight, Terminal, Building2, Users, Briefcase } from "lucide-react"
+import { ArrowRight, Terminal, Building2, Users, Home, TrendingUp } from "lucide-react"
 
 export function EnterpriseSection() {
   return (
@@ -57,33 +57,33 @@ export function EnterpriseSection() {
             </div>
           </div>
 
-          {/* Right: Use cases */}
+          {/* Right: Use cases - broader audience */}
           <div>
             <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-6">
-              Built for
+              Built for people making housing decisions
             </h3>
             
             <div className="space-y-4">
               <div className="flex items-start gap-4 p-4 rounded-lg border border-border bg-card">
                 <div className="w-9 h-9 rounded-md bg-muted flex items-center justify-center shrink-0">
-                  <Building2 className="w-4.5 h-4.5 text-muted-foreground" />
+                  <Home className="w-4.5 h-4.5 text-muted-foreground" />
                 </div>
                 <div>
-                  <h4 className="font-semibold text-sm mb-1">SFR Acquisitions</h4>
+                  <h4 className="font-semibold text-sm mb-1">Homeowners</h4>
                   <p className="text-sm text-muted-foreground">
-                    Score buy/hold/sell across 50 to 5,000+ doors with forward-looking data.
+                    Understand the range of outcomes for your largest asset.
                   </p>
                 </div>
               </div>
 
               <div className="flex items-start gap-4 p-4 rounded-lg border border-border bg-card">
                 <div className="w-9 h-9 rounded-md bg-muted flex items-center justify-center shrink-0">
-                  <Briefcase className="w-4.5 h-4.5 text-muted-foreground" />
+                  <TrendingUp className="w-4.5 h-4.5 text-muted-foreground" />
                 </div>
                 <div>
-                  <h4 className="font-semibold text-sm mb-1">Investment Committees</h4>
+                  <h4 className="font-semibold text-sm mb-1">Investors</h4>
                   <p className="text-sm text-muted-foreground">
-                    Underwrite new deals with probabilistic market outlooks, not just current comps.
+                    Compare upside and downside across properties and neighborhoods.
                   </p>
                 </div>
               </div>
@@ -93,9 +93,21 @@ export function EnterpriseSection() {
                   <Users className="w-4.5 h-4.5 text-muted-foreground" />
                 </div>
                 <div>
-                  <h4 className="font-semibold text-sm mb-1">Mortgage Risk Desks</h4>
+                  <h4 className="font-semibold text-sm mb-1">Agents</h4>
                   <p className="text-sm text-muted-foreground">
-                    Stress-test collateral under rate scenarios with property-level forecasts.
+                    Bring forward-looking market intelligence into client conversations.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-4 p-4 rounded-lg border border-border bg-card">
+                <div className="w-9 h-9 rounded-md bg-muted flex items-center justify-center shrink-0">
+                  <Building2 className="w-4.5 h-4.5 text-muted-foreground" />
+                </div>
+                <div>
+                  <h4 className="font-semibold text-sm mb-1">Institutions</h4>
+                  <p className="text-sm text-muted-foreground">
+                    Access property and neighborhood forecasts through API and bulk workflows.
                   </p>
                 </div>
               </div>
