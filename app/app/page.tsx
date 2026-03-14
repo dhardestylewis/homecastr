@@ -31,6 +31,7 @@ import dynamic from "next/dynamic"
 import { HomecastrLogo } from "@/components/homecastr-logo"
 import { ContactModal } from "@/components/contact-modal"
 import { generateForecastPDF } from "@/lib/generate-pdf"
+import { FeedbackModal } from "@/components/feedback-modal"
 
 // Dynamic import with SSR disabled — daily-js needs browser APIs
 const TavusMiniWindow = dynamic(
@@ -72,6 +73,7 @@ function DashboardContent() {
   const [pinnedCount, setPinnedCount] = useState(0)
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [isContactOpen, setIsContactOpen] = useState(false)
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false)
   const [linkCopied, setLinkCopied] = useState(false)
   const { toast } = useToast()
 
@@ -718,6 +720,9 @@ function DashboardContent() {
             <button onClick={() => { setIsContactOpen(true); setMobileActionsOpen(false) }} className="h-10 px-3 rounded-full glass-panel flex items-center gap-2 text-foreground shadow-xl active:scale-95 transition-transform border border-[hsl(var(--primary))]/30" aria-label="Analysis">
               <CalendarDays size={16} className="text-[hsl(45,80%,45%)]" /><span className="text-xs font-medium">Analysis</span>
             </button>
+            <button onClick={() => { setIsFeedbackOpen(true); setMobileActionsOpen(false) }} className="h-10 px-3 rounded-full glass-panel flex items-center gap-2 text-foreground shadow-xl active:scale-95 transition-transform border border-border/50" aria-label="Feedback">
+              <MessageSquare size={16} className="text-muted-foreground" /><span className="text-xs font-medium">Feedback</span>
+            </button>
           </div>
         )}
         <button aria-label="Toggle actions menu" onClick={() => setMobileActionsOpen(!mobileActionsOpen)} className={cn("w-9 h-9 rounded-xl glass-panel flex items-center justify-center text-foreground shadow-lg active:scale-90 transition-all duration-200", mobileActionsOpen && "rotate-45 bg-primary text-primary-foreground")}><Plus size={18} /></button>
@@ -782,6 +787,7 @@ function DashboardContent() {
               if (isChatOpen) setIsChatOpen(false)
               else if (tavusConversationUrl) { setTavusConversationUrl(null); setIsTavusLoading(false) }
               else if (isContactOpen) setIsContactOpen(false)
+              else if (isFeedbackOpen) setIsFeedbackOpen(false)
               else selectFeature(null)
             }}
             mobileContentOverride={isMobileViewport && isChatOpen ? (
@@ -807,6 +813,11 @@ function DashboardContent() {
                 isOpen={true}
                 embedded={true}
                 onClose={() => setIsContactOpen(false)}
+              />
+            ) : isMobileViewport && isFeedbackOpen ? (
+              <FeedbackModal
+                isOpen={true}
+                onClose={() => setIsFeedbackOpen(false)}
               />
             ) : undefined}
           />
@@ -1167,6 +1178,21 @@ function DashboardContent() {
       {/* Cinematic onboarding intro — first-visit only */}
       <OnboardingIntro />
       {!isMobileViewport && <ContactModal isOpen={isContactOpen} onClose={() => setIsContactOpen(false)} />}
+      <FeedbackModal isOpen={isFeedbackOpen} onClose={() => setIsFeedbackOpen(false)} />
+      
+      {/* Desktop Top Right Actions */}
+      {!searchParams.has("embedded") && !isMobileViewport && (
+        <div className="absolute top-4 right-4 z-[60] flex flex-col gap-2">
+          <button
+            onClick={() => setIsFeedbackOpen(true)}
+            className="h-10 px-4 rounded-xl glass-panel shadow-sm hover:bg-accent/50 flex items-center gap-2 text-sm font-medium text-foreground transition-all duration-200"
+            aria-label="Feedback"
+          >
+            <MessageSquare size={16} className="text-muted-foreground" />
+            Feedback
+          </button>
+        </div>
+      )}
     </main >
   )
 }
