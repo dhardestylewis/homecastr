@@ -23,11 +23,11 @@ export function EnterpriseSection() {
 
             {/* Code sample */}
             <div className="terminal-block mb-8">
-              <div className="px-4 py-2 border-b border-white/10 text-xs text-white/50">
+              <div className="px-4 py-2 border-b border-border text-xs text-muted-foreground">
                 GET /api/v1/forecast
               </div>
               <pre className="p-4 text-xs leading-relaxed overflow-x-auto">
-                <code>{`{
+                <code className="text-foreground">{`{
   "address": "123 Main St, Houston, TX",
   "current_value": 295000,
   "forecasts": {

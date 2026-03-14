@@ -164,7 +164,11 @@
 
 /* Premium gradient for hero backgrounds */
 .hero-gradient {
-  background: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(120, 119, 198, 0.1), transparent);
+  background: radial-gradient(ellipse 80% 50% at 50% -20%, hsl(var(--accent) / 0.08), transparent);
+}
+
+.dark .hero-gradient {
+  background: radial-gradient(ellipse 80% 50% at 50% -20%, hsl(var(--accent) / 0.12), transparent);
 }
 
 /* Subtle grid pattern */
@@ -174,9 +178,9 @@
   background-size: 60px 60px;
 }
 
-/* Terminal-style code block */
+/* Terminal-style code block - themed for light and dark */
 .terminal-block {
-  @apply bg-[#0a0a0a] text-[#e5e5e5] font-mono text-sm rounded-lg overflow-hidden;
+  @apply bg-muted text-foreground font-mono text-sm rounded-lg overflow-hidden border border-border;
 }
 
 /* Stats counter animation */
